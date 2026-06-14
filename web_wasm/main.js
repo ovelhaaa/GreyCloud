@@ -39,7 +39,14 @@ if (typeof CloudGreyModule === 'function') {
     CloudGreyModule().then(Module => {
         wasmModule = Module;
         console.log("WASM Module Loaded!");
-        // We will initialize DSP when we know the file's sample rate (or default)
+        
+        // If an audio file was already loaded while we were waiting for WASM
+        if (originalAudioBuffer) {
+            initDSP(originalAudioBuffer.sampleRate);
+            if (btnProcess) btnProcess.disabled = false;
+        } else {
+            loadStatus.textContent = "WASM Ready. Waiting for file...";
+        }
     });
 } else {
     loadStatus.textContent = "Error: WASM module script not loaded. Run build.sh first.";
@@ -59,10 +66,14 @@ fileInput.addEventListener('change', async (e) => {
         
         loadStatus.textContent = `Loaded: ${originalAudioBuffer.duration.toFixed(1)}s @ ${originalAudioBuffer.sampleRate}Hz`;
         btnPlayOrig.disabled = false;
-        btnProcess.disabled = false;
         
-        // Ensure DSP is initialized for this sample rate
-        initDSP(originalAudioBuffer.sampleRate);
+        // Ensure DSP is initialized if WASM is already present
+        if (wasmModule) {
+            initDSP(originalAudioBuffer.sampleRate);
+            btnProcess.disabled = false;
+        } else {
+            loadStatus.textContent += " (Waiting for WASM to load before processing...)";
+        }
     } catch (err) {
         console.error(err);
         loadStatus.textContent = "Error decoding audio file.";
@@ -134,6 +145,13 @@ btnProcess.addEventListener('click', () => {
 });
 
 function processOffline() {
+    if (!wasmModule._cgv_is_initialized()) {
+        processStatus.textContent = "Error: DSP not initialized.";
+        processStatus.style.color = "red";
+        btnProcess.disabled = false;
+        return;
+    }
+
     const sr = originalAudioBuffer.sampleRate;
     const frames = originalAudioBuffer.length;
     const hasRight = originalAudioBuffer.numberOfChannels > 1;
@@ -155,14 +173,17 @@ function processOffline() {
     const wasmPtrL = wasmModule._malloc(BLOCK_SIZE * 4);
     const wasmPtrR = wasmModule._malloc(BLOCK_SIZE * 4);
     
+    const ptrL_f32 = wasmPtrL >>> 2;
+    const ptrR_f32 = wasmPtrR >>> 2;
+    
     let maxPeak = 0.0;
     
     for (let offset = 0; offset < frames; offset += BLOCK_SIZE) {
         const len = Math.min(BLOCK_SIZE, frames - offset);
         
-        // Copy to WASM heap
-        const heapL = new Float32Array(wasmModule.HEAPF32.buffer, wasmPtrL, len);
-        const heapR = new Float32Array(wasmModule.HEAPF32.buffer, wasmPtrR, len);
+        // Copy to WASM heap securely
+        const heapL = wasmModule.HEAPF32.subarray(ptrL_f32, ptrL_f32 + len);
+        const heapR = wasmModule.HEAPF32.subarray(ptrR_f32, ptrR_f32 + len);
         
         heapL.set(inL.subarray(offset, offset + len));
         heapR.set(inR.subarray(offset, offset + len));

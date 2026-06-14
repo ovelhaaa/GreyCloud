@@ -20,6 +20,7 @@ emcc cloud_grey_wasm.cpp ../src/dsp/cloud_grey_verb.cpp \
   -fno-rtti \
   -s WASM=1 \
   -s MODULARIZE=1 \
+  -s ALLOW_MEMORY_GROWTH=1 \
   -s EXPORT_NAME=CloudGreyModule \
   -s EXPORTED_FUNCTIONS='["_cgv_init","_cgv_reset","_cgv_set_param","_cgv_get_param","_cgv_set_preset","_cgv_process","_cgv_get_peak","_cgv_is_initialized","_malloc","_free"]' \
   -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap","HEAPF32"]' \
