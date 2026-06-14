@@ -18,6 +18,53 @@ const loadStatus = document.getElementById('loadStatus');
 const processStatus = document.getElementById('processStatus');
 const presetSelect = document.getElementById('presetSelect');
 const peakLevel = document.getElementById('peakLevel');
+const canvas = document.getElementById('visualizer');
+const canvasCtx = canvas ? canvas.getContext('2d') : null;
+
+let analyser = null;
+let animationFrameId = null;
+
+function drawVisualizer() {
+    if (!analyser || !canvasCtx || !canvas) return;
+
+    // Match internal resolution to CSS size
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+    }
+
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    analyser.getByteTimeDomainData(dataArray);
+
+    canvasCtx.fillStyle = '#0E1117';
+    canvasCtx.fillRect(0, 0, width, height);
+
+    canvasCtx.lineWidth = 2;
+    canvasCtx.strokeStyle = '#10B981';
+    canvasCtx.beginPath();
+
+    const sliceWidth = width * 1.0 / bufferLength;
+    let x = 0;
+
+    for (let i = 0; i < bufferLength; i++) {
+        const v = dataArray[i] / 128.0;
+        const y = v * height / 2;
+
+        if (i === 0) {
+            canvasCtx.moveTo(x, y);
+        } else {
+            canvasCtx.lineTo(x, y);
+        }
+        x += sliceWidth;
+    }
+    canvasCtx.lineTo(width, height / 2);
+    canvasCtx.stroke();
+
+    animationFrameId = requestAnimationFrame(drawVisualizer);
+}
 
 const paramInputs = [
     { el: document.getElementById('param_0'), val: document.getElementById('val_mix') },
@@ -226,14 +273,41 @@ function processOffline() {
 function playBuffer(buffer) {
     stopPlayback();
     if(audioCtx.state === 'suspended') audioCtx.resume();
+    
     currentSource = audioCtx.createBufferSource();
     currentSource.buffer = buffer;
-    currentSource.connect(audioCtx.destination);
+    
+    if (!analyser) {
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 2048;
+    }
+    
+    currentSource.connect(analyser);
+    analyser.connect(audioCtx.destination);
+    
     currentSource.start(0);
     currentSource.onended = () => stopPlayback();
+    
+    if (animationFrameId) cancelAnimationFrame(animationFrameId);
+    drawVisualizer();
 }
 
 function stopPlayback() {
+    if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+        if (canvasCtx && canvas) {
+            canvasCtx.fillStyle = '#0E1117';
+            canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+            canvasCtx.lineWidth = 2;
+            canvasCtx.strokeStyle = '#30363D';
+            canvasCtx.beginPath();
+            canvasCtx.moveTo(0, canvas.height / 2);
+            canvasCtx.lineTo(canvas.width, canvas.height / 2);
+            canvasCtx.stroke();
+        }
+    }
+    
     if (currentSource) {
         currentSource.stop();
         currentSource.disconnect();

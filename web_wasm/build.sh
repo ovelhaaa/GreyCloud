@@ -33,4 +33,5 @@ if [ $? -eq 0 ]; then
     echo "You can now run a local server (e.g., 'python3 -m http.server 8080') inside this folder."
 else
     echo "Build failed. ❌"
+    exit 1
 fi
