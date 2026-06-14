@@ -162,10 +162,10 @@ void CloudGreyVerb::setParams(const Params& p) {
     params_.inputGain = clampParam(params_.inputGain, 0.0f, 4.0f);
     params_.outputGain = clampParam(params_.outputGain, 0.0f, 4.0f);
     
-    // Pré-cálculo de Ganhos Mix (Equal Power)
-    float mixRadians = params_.mix * dsp::PI * 0.5f;
-    gainDry_ = std::cos(mixRadians);
-    gainWet_ = std::sin(mixRadians);
+    // Pré-cálculo de Ganhos Mix (Linear)
+    gainWet_ = params_.mix;
+    gainDry_ = 1.0f - params_.mix;
+
     
     // LFO Mapping (0.05 Hz slow drift - 2Hz chorus speed)
     float lfoHz = dsp::lerp(0.05f, 2.0f, params_.modRate);
@@ -261,8 +261,8 @@ void CloudGreyVerb::processGranular(float input, float lfoDrift, float& outL, fl
         accR += sample * window * panR;
     }
 
-    // Normalize output based on grain count
-    float volumeComp = 1.8f / static_cast<float>(CGV_NUM_GRAINS);
+    // Normalize output based on grain count (boosted for clarity)
+    float volumeComp = 4.0f / static_cast<float>(CGV_NUM_GRAINS);
     outL = accL * volumeComp;
     outR = accR * volumeComp;
 }

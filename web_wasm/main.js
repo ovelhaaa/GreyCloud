@@ -206,6 +206,12 @@ function processOffline() {
     
     // Update Peak Meter visually
     let db = 20 * Math.log10(maxPeak + 1e-6);
+    
+    // Safety check: is it actually mute?
+    let sumL = 0;
+    for (let i = 0; i < Math.min(10000, outL.length); i++) sumL += outL[i] * outL[i];
+    console.log("Processed. Max Peak:", maxPeak, "RMS of first 10000:", Math.sqrt(sumL / Math.min(10000, outL.length)));
+
     let pct = Math.max(0, Math.min(100, (db + 60) / 60 * 100));
     peakLevel.style.width = pct + '%';
     peakLevel.style.backgroundColor = db > 0 ? '#EF4444' : '#10B981';
@@ -253,13 +259,31 @@ btnDownload.addEventListener('click', () => {
     if (!processedAudioBuffer) return;
     const wavBlob = audioBufferToWav(processedAudioBuffer);
     const url = URL.createObjectURL(wavBlob);
+    
+    // In strict iframes, a.click() may be blocked. Expose a real link inside the panel:
+    btnDownload.style.display = "none";
+    
+    let existingLink = document.getElementById("directDownloadLink");
+    if (existingLink) { existingLink.remove(); }
+    
     const a = document.createElement('a');
+    a.id = "directDownloadLink";
     a.href = url;
     a.download = "cloudgrey_processed.wav";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    a.textContent = "✅ Ready! Click here to Download WAV";
+    a.style.display = "inline-block";
+    a.style.backgroundColor = "#059669";
+    a.style.color = "white";
+    a.style.padding = "0.5rem 1rem";
+    a.style.borderRadius = "4px";
+    a.style.textDecoration = "none";
+    a.style.fontWeight = "bold";
+    a.style.marginLeft = "1rem";
+    
+    btnDownload.parentElement.appendChild(a);
+    
+    // We cannot immediately revoke because the user needs to manually click the link
+    // URL.revokeObjectURL(url);
 });
 
 function audioBufferToWav(buffer) {
