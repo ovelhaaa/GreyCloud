@@ -9,7 +9,7 @@ constexpr float PI = 3.14159265358979323846f;
 
 // Saturação suave (soft clip) otimizada e sem ramificações arriscadas
 inline float softClip(float x) {
-    return x / (1.0f + std::abs(x));
+    return x / (1.0f + fabsf(x));
 }
 
 // Gerador Aleatorio Leve (Xorshift32) para jitter - s/ alocação e super rápido
@@ -38,7 +38,7 @@ inline float lerp(float a, float b, float t) {
 // Prevenção contra números denormais (evita picos extremos de CPU)
 inline void sanitize(float& val) {
     // 1e-15 é seguro para floats de 32 bits
-    if (std::abs(val) < 1e-15f) val = 0.0f;
+    if (fabsf(val) < 1e-15f) val = 0.0f;
 }
 
 // LFO - Simple Triangle/Sine Approximation
@@ -55,7 +55,7 @@ public:
         if (phase_ >= 1.0f) phase_ -= 1.0f;
         
         // Triângulo suave de -1 a 1
-        float tri = 4.0f * std::abs(phase_ - 0.5f) - 1.0f;
+        float tri = 4.0f * fabsf(phase_ - 0.5f) - 1.0f;
         // Aproximação polinomial para senoidez (opcional, aqui mantemos triângulo para CPU leve)
         return tri;
     }
