@@ -242,6 +242,8 @@ void CloudGreyVerb::processGranular(float input, float lfoDrift, float& outL, fl
         
         float readPos = static_cast<float>(grainWritePos_) - readFrames;
 
+        if (readPos != readPos) readPos = 0.0f; // NaN check evasion
+
         while (readPos < 0.0f) readPos += grainMemorySize_;
         while (readPos >= grainMemorySize_) readPos -= grainMemorySize_;
 
@@ -274,6 +276,9 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
 
     // 1. Excitação Mono Interna
     float monoIn = (inL + inR) * 0.5f * params_.inputGain;
+    
+    // Proteção rigorosa contra NaN do input:
+    if (monoIn != monoIn) monoIn = 0.0f; // NaN check
     dsp::sanitize(monoIn);
 
     // LFOs (Calculados cedo para fornecer drift p/ motor Granular)
@@ -369,6 +374,10 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     // Clip final final safety para os conversores do MCU
     outL = dsp::softClip(finalL);
     outR = dsp::softClip(finalR);
+    
+    // Antídoto final contra NaN blowout:
+    if (outL != outL) outL = 0.0f;
+    if (outR != outR) outR = 0.0f;
 }
 
 void CloudGreyVerb::processBlock(float* left, float* right, size_t numFrames) {

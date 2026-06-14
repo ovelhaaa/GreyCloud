@@ -92,20 +92,23 @@ public:
 
     // Leitura com interpolação linear para suportar delays modulados fracionários
     float read(float delayFrames) const {
-        if (!buffer_ || size_ == 0) return 0.0f;
+        if (!buffer_ || size_ == 0 || delayFrames != delayFrames) return 0.0f; // Check buffer and NaN
 
         float readPos = static_cast<float>(writePos_) - delayFrames;
+        float fSize = static_cast<float>(size_);
         
         // Wrap-around mais leve (presumindo no máximo um wraparound normal por sample)
-        if (readPos < 0.0f) readPos += size_;
-        if (readPos >= static_cast<float>(size_)) readPos -= size_;
+        while (readPos < 0.0f) readPos += fSize;
+        while (readPos >= fSize) readPos -= fSize;
 
         size_t idx1 = static_cast<size_t>(readPos);
         size_t idx2 = idx1 + 1;
         if (idx2 >= size_) idx2 = 0;
-        float frac = readPos - idx1;
+        float frac = readPos - static_cast<float>(idx1);
 
-        return lerp(buffer_[idx1], buffer_[idx2], frac);
+        float val = lerp(buffer_[idx1], buffer_[idx2], frac);
+        if (val != val) val = 0.0f; // Fix NaNs leaking
+        return val;
     }
 
     size_t getSize() const { return size_; }
@@ -154,7 +157,9 @@ public:
     void clear() { z_ = 0.0f; }
 
     float process(float in) {
+        if (in != in) in = 0.0f; // Input NaN
         z_ = in * a0_ + z_ * b1_;
+        if (z_ != z_) z_ = 0.0f; // Filter Blow up NaN
         sanitize(z_);
         return z_;
     }
