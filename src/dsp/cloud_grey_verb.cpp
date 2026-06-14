@@ -396,6 +396,10 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
 void CloudGreyVerb::processBlock(float* left, float* right, size_t numFrames) {
     if (!left || !right) return;
     for(size_t i = 0; i < numFrames; ++i) {
-        processSample(left[i], right[i], left[i], right[i]);
+        float outL = 0.0f;
+        float outR = 0.0f;
+        processSample(left[i], right[i], outL, outR);
+        left[i] = outL;
+        right[i] = outR;
     }
 }
