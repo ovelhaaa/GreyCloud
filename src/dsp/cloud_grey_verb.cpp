@@ -56,7 +56,7 @@ void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferS
     // Custo aproximado e Segurança:
     // Para 48kHz, recomenda-se ao menos 24000 frames (96KB RAM) para delays utilizáveis.
     // Menos que isso soará como reverb de mola curto.
-    if (!externalBuffer || bufferSize < 24000) return;
+    if (!externalBuffer || bufferSize < 24000 || sampleRate <= 0.0f) return;
 
     sampleRate_ = sampleRate;
 
@@ -141,6 +141,7 @@ void CloudGreyVerb::reset() {
 }
 
 static inline float clampParam(float v, float minV, float maxV) {
+    if (v != v) return minV; // NaN proteção!
     return (v < minV) ? minV : ((v > maxV) ? maxV : v);
 }
 
@@ -208,7 +209,9 @@ void CloudGreyVerb::processGranular(float input, float lfoDrift, float& outL, fl
     // Texture: Varredura de tamanho e densidade de 15ms a 400ms
     float grainLenMs = dsp::lerp(15.0f, 400.0f, params_.texture);
     float phaseFramesTotal = (grainLenMs / 1000.0f) * sampleRate_;
-    if (phaseFramesTotal > grainMemorySize_ - 100) phaseFramesTotal = grainMemorySize_ - 100;
+    float fGrainMem = static_cast<float>(grainMemorySize_);
+    if (phaseFramesTotal > fGrainMem - 100.0f) phaseFramesTotal = fGrainMem - 100.0f;
+    if (phaseFramesTotal < 10.0f) phaseFramesTotal = 10.0f;
     
     float increment = 1.0f / phaseFramesTotal;
     
@@ -229,7 +232,10 @@ void CloudGreyVerb::processGranular(float input, float lfoDrift, float& outL, fl
         if (p >= 1.0f) p -= 1.0f;
 
         // Atualiza Jitter de forma limpa apenas no recomeço individual do grão
-        if (p < increment) {
+        float oldP = p - increment;
+        if (oldP < 0.0f) oldP += 1.0f;
+        
+        if (p < increment || p < oldP) {
             grainJitter_[i] = prng_.randFloat() * params_.texture * 45.0f; // Jitter máx 45ms
         }
 
@@ -244,8 +250,11 @@ void CloudGreyVerb::processGranular(float input, float lfoDrift, float& outL, fl
 
         if (readPos != readPos) readPos = 0.0f; // NaN check evasion
 
-        while (readPos < 0.0f) readPos += grainMemorySize_;
-        while (readPos >= grainMemorySize_) readPos -= grainMemorySize_;
+        float fGranSize = static_cast<float>(grainMemorySize_);
+        if (readPos < 0.0f || readPos >= fGranSize) {
+            readPos = fmodf(readPos, fGranSize);
+            if (readPos < 0.0f) readPos += fGranSize;
+        }
 
         size_t idx1 = static_cast<size_t>(readPos);
         size_t idx2 = (idx1 + 1) % grainMemorySize_;
@@ -261,8 +270,8 @@ void CloudGreyVerb::processGranular(float input, float lfoDrift, float& outL, fl
         accR += sample * window * panR;
     }
 
-    // Normalize output based on grain count (boosted for clarity)
-    float volumeComp = 4.0f / static_cast<float>(CGV_NUM_GRAINS);
+    // Normalize output based on grain count
+    float volumeComp = 1.8f / static_cast<float>(CGV_NUM_GRAINS);
     outL = accL * volumeComp;
     outR = accR * volumeComp;
 }
@@ -342,8 +351,8 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     // feedLoopL += pitchShift(readL) * params_.shimmer;
 
     // Saturação musical protegendo O(INF) feedback blowout
-    feedLoopL = dsp::softClip(feedLoopL);
-    feedLoopR = dsp::softClip(feedLoopR);
+    feedLoopL = dsp::hardClip(feedLoopL);
+    feedLoopR = dsp::hardClip(feedLoopR);
 
     // Escreve novamente
     delayL_.write(feedLoopL);
@@ -371,9 +380,9 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     float finalL = (inL * gainDry_) + (wetL * gainWet_);
     float finalR = (inR * gainDry_) + (wetR * gainWet_);
 
-    // Clip final final safety para os conversores do MCU
-    outL = dsp::softClip(finalL);
-    outR = dsp::softClip(finalR);
+    // Clip final safety para os conversores do MCU
+    outL = dsp::hardClip(finalL);
+    outR = dsp::hardClip(finalR);
     
     // Antídoto final contra NaN blowout:
     if (outL != outL) outL = 0.0f;

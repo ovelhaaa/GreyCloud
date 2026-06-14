@@ -7,9 +7,18 @@ namespace dsp {
 
 constexpr float PI = 3.14159265358979323846f;
 
-// Saturação suave (soft clip) otimizada e sem ramificações arriscadas
+// Saturação (Limiter) rápido para reverb tails. Deve ser transparente em sinais baixos.
 inline float softClip(float x) {
-    return x / (1.0f + fabsf(x));
+    // Curva cúbica rápida que limpa a região < 0.5 e satura suavemente em 1.0
+    if (x > 1.0f) return 1.0f;
+    if (x < -1.0f) return -1.0f;
+    return x * (1.5f - 0.5f * x * x);
+}
+
+inline float hardClip(float x) {
+    if (x > 1.0f) return 1.0f;
+    if (x < -1.0f) return -1.0f;
+    return x;
 }
 
 // Gerador Aleatorio Leve (Xorshift32) para jitter - s/ alocação e super rápido
@@ -53,6 +62,10 @@ public:
     float process() {
         phase_ += phaseInc_;
         if (phase_ >= 1.0f) phase_ -= 1.0f;
+        if (phase_ < 0.0f || phase_ >= 1.0f) {
+            phase_ = fmodf(phase_, 1.0f);
+            if (phase_ < 0.0f) phase_ += 1.0f;
+        }
         
         // Triângulo suave de -1 a 1
         float tri = 4.0f * fabsf(phase_ - 0.5f) - 1.0f;
@@ -98,8 +111,10 @@ public:
         float fSize = static_cast<float>(size_);
         
         // Wrap-around mais leve (presumindo no máximo um wraparound normal por sample)
-        while (readPos < 0.0f) readPos += fSize;
-        while (readPos >= fSize) readPos -= fSize;
+        if (readPos < 0.0f || readPos >= fSize) {
+            readPos = fmodf(readPos, fSize);
+            if (readPos < 0.0f) readPos += fSize;
+        }
 
         size_t idx1 = static_cast<size_t>(readPos);
         size_t idx2 = idx1 + 1;
@@ -134,9 +149,15 @@ public:
         
         // Estrutura Allpass padrão Schroeder
         float feedback = input + delayed * g;
+        if (feedback != feedback) feedback = 0.0f; // NaN Protection
+        sanitize(feedback);
+        feedback = hardClip(feedback); // Evita runaway feedback em Allpass series
+        
         delay_.write(feedback);
         
-        return -input * g + delayed;
+        float out = -input * g + delayed;
+        if (out != out) out = 0.0f;
+        return out;
     }
 private:
     DelayLine delay_;
