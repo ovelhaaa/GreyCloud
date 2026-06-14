@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CloudGreyVerb - Offline WASM Tester</title>
+    <style>
+        body { margin: 0; padding: 0; font-family: -apple-system, system-ui, sans-serif; background-color: #0E1117; color: #E5E7EB; }
+        .container { max-width: 900px; margin: 0 auto; padding: 2rem; }
+        header { border-bottom: 1px solid #30363D; padding-bottom: 1rem; margin-bottom: 2rem; }
+        h1 { margin: 0 0 0.5rem 0; color: #10B981; }
+        p.subtitle { color: #9CA3AF; margin: 0; font-size: 0.9rem; }
+        
+        .panel { background-color: #161B22; border: 1px solid #30363D; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
+        .panel h2 { margin-top: 0; font-size: 1.1rem; border-bottom: 1px solid #30363D; padding-bottom: 0.5rem; margin-bottom: 1rem; }
+        
+        .controls-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+        .control-group { display: flex; flex-direction: column; }
+        .control-group label { display: flex; justify-content: space-between; font-size: 0.85rem; color: #9CA3AF; margin-bottom: 0.3rem; }
+        .control-group input[type="range"] { accent-color: #10B981; }
+        
+        .btn-row { display: flex; gap: 0.5rem; margin-top: 1rem; align-items: center; flex-wrap: wrap; }
+        button { background-color: #21262D; color: #E5E7EB; border: 1px solid #30363D; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-weight: 500; font-size: 0.9rem; transition: background 0.2s; }
+        button:hover:not(:disabled) { background-color: #30363D; }
+        button.primary { background-color: #10B981; border-color: #059669; color: #022C22; }
+        button.primary:hover:not(:disabled) { background-color: #059669; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        input[type="file"] { background: #0E1117; padding: 0.5rem; border-radius: 4px; border: 1px dashed #30363D; width: 100%; box-sizing: border-box; }
+        select { background-color: #0E1117; color: white; border: 1px solid #30363D; padding: 0.4rem; border-radius: 4px; }
+        
+        .status { margin-top: 1rem; font-size: 0.85rem; color: #10B981; }
+        #peakMeter { height: 10px; background-color: #0E1117; border-radius: 5px; width: 100%; margin-top: 5px; overflow: hidden; }
+        #peakLevel { height: 100%; background-color: #10B981; width: 0%; transition: width 0.1s; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>CloudGreyVerb WASM</h1>
+        <p class="subtitle">Offline DSP Validation Tool - Emscripten Port</p>
+    </header>
+
+    <div class="panel">
+        <h2>1. Load Audio (Original)</h2>
+        <input type="file" id="audioInput" accept="audio/wav,audio/mp3,audio/*" />
+        <div class="btn-row">
+            <button id="btnPlayOrig" disabled>Play Original</button>
+            <button id="btnStopOrig" disabled>Stop</button>
+            <span class="status" id="loadStatus">Waiting for file...</span>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h2>2. DSP Parameters</h2>
+        <div style="margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1rem;">
+            <label for="presetSelect" style="font-size: 0.9rem; color: #9CA3AF;">Preset:</label>
+            <select id="presetSelect">
+                <option value="0">SmallCloudRoom</option>
+                <option value="1" selected>BassAmbientWash</option>
+                <option value="2">FrozenOrganPad</option>
+                <option value="3">GreyholeDelayVerb</option>
+                <option value="4">DarkInfiniteCloud</option>
+                <option value="5">GlitchSmear</option>
+                <option value="6">AlwaysOnSubtle</option>
+                <option value="7">FauxShimmerCloud</option>
+            </select>
+        </div>
+
+        <div class="controls-grid">
+            <div class="control-group"><label>Mix <span id="val_mix">0.5</span></label><input type="range" id="param_0" min="0" max="1" step="0.01"></div>
+            <div class="control-group"><label>Texture <span id="val_texture">0.5</span></label><input type="range" id="param_1" min="0" max="1" step="0.01"></div>
+            <div class="control-group"><label>Freeze <span id="val_freeze">0.0</span></label><input type="range" id="param_2" min="0" max="1" step="1"></div>
+            <div class="control-group"><label>Feedback <span id="val_feedback">0.5</span></label><input type="range" id="param_3" min="0" max="0.98" step="0.01"></div>
+            <div class="control-group"><label>Size <span id="val_size">0.5</span></label><input type="range" id="param_4" min="0" max="1" step="0.01"></div>
+            <div class="control-group"><label>Diffusion <span id="val_diffusion">0.5</span></label><input type="range" id="param_5" min="0" max="1" step="0.01"></div>
+            <div class="control-group"><label>Mod Depth <span id="val_moddepth">0.2</span></label><input type="range" id="param_6" min="0" max="1" step="0.01"></div>
+            <div class="control-group"><label>Mod Rate <span id="val_modrate">0.2</span></label><input type="range" id="param_7" min="0" max="1" step="0.01"></div>
+            <div class="control-group"><label>Damping <span id="val_damping">0.5</span></label><input type="range" id="param_8" min="0" max="1" step="0.01"></div>
+            <div class="control-group"><label>Tone <span id="val_tone">0.5</span></label><input type="range" id="param_9" min="0" max="1" step="0.01"></div>
+            <div class="control-group"><label>Input Gain <span id="val_ingain">1.0</span></label><input type="range" id="param_10" min="0" max="2" step="0.01"></div>
+            <div class="control-group"><label>Output Gain <span id="val_outgain">1.0</span></label><input type="range" id="param_11" min="0" max="2" step="0.01"></div>
+        </div>
+        
+        <div style="margin-top: 1.5rem;">
+            <p style="font-size: 0.85rem; color: #9CA3AF; margin-bottom: 0.2rem;">Peak Level (Block Eval)</p>
+            <div id="peakMeter"><div id="peakLevel"></div></div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h2>3. Process & Audition</h2>
+        <div class="btn-row">
+            <button class="primary" id="btnProcess" disabled>⚙️ Process Audio (Offline)</button>
+            <span class="status" id="processStatus"></span>
+        </div>
+        
+        <div class="btn-row" style="margin-top: 1rem; border-top: 1px solid #30363D; padding-top: 1rem;">
+            <button id="btnPlayProc" disabled>Play Processed</button>
+            <button id="btnStopProc" disabled>Stop</button>
+            <button id="btnDownload" disabled>Download WAV 💾</button>
+        </div>
+    </div>
+</div>
+
+<script src="cloud_grey.js"></script>
+<script src="main.js"></script>
+
+</body>
+</html>

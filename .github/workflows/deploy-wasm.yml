@@ -1,0 +1,54 @@
+name: Build and Deploy CloudGreyVerb WASM to GitHub Pages
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build_wasm_and_deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+
+      - name: Verify Emscripten
+        run: emcc -v
+
+      - name: Build WASM
+        run: |
+          cd web_wasm
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Prepare Deployment Folder
+        run: |
+          # Opcional: Garante que os arquivos HTML e JS apontam certinho
+          ls -la web_wasm
+
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v4
+        
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './web_wasm' # Vai servir o index.html gerado na pasta web_wasm
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

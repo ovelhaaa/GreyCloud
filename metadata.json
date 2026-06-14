@@ -1,0 +1,8 @@
+{
+  "name": "Remix: CloudGreyVerb DSP",
+  "description": "Embedded DSP algorithms for C++, Mutable Clouds + Greyhole Reverb fusion.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
