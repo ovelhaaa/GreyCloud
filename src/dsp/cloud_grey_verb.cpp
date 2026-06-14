@@ -242,9 +242,14 @@ void CloudGreyVerb::processGranular(float input, float lfoDrift, float& outL, fl
         // Janela Parabólica Otimizada (Cheap e suave como Cosine) -> 4 * p * (1 - p)
         float window = 4.0f * p * (1.0f - p);
 
-        // Onde ler? Poffset(overlap) + Jitter + FreezeDrift
-        float readMs = (p * phaseFramesTotal * (1000.0f/sampleRate_)) + (i * 13.0f) + grainJitter_[i] + driftMs;
+        // Onde ler? Pitch neutro (1x) -> delayTap fixo por grão (alterado no jitter)
+        float readMs = (i * 15.0f) + grainJitter_[i] + driftMs;
         float readFrames = readMs * (sampleRate_ / 1000.0f);
+        
+        float fGranSize = static_cast<float>(grainMemorySize_);
+        // Envolve o delay pacificamente para reutilizar o buffer circular sem empilhar grãos no limite
+        readFrames = fmodf(readFrames, fGranSize - 4.0f);
+        if (readFrames < 2.0f) readFrames = 2.0f;
         
         float readPos = static_cast<float>(grainWritePos_) - readFrames;
 

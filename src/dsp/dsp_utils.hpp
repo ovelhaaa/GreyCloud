@@ -46,8 +46,10 @@ inline float lerp(float a, float b, float t) {
 
 // Prevenção contra números denormais (evita picos extremos de CPU)
 inline void sanitize(float& val) {
-    // 1e-15 é seguro para floats de 32 bits
-    if (fabsf(val) < 1e-15f) val = 0.0f;
+    if (val != val) val = 0.0f;
+    if (val > 1000.0f) val = 1000.0f;
+    if (val < -1000.0f) val = -1000.0f;
+    if (fabsf(val) < 1e-9f) val = 0.0f;
 }
 
 // LFO - Simple Triangle/Sine Approximation
