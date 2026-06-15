@@ -3,6 +3,9 @@
 // Presets sugeridos
 CloudGreyVerb::Params CloudGreyVerb::getPreset(Preset preset) {
     Params p;
+    p.inputGain = 1.0f;
+    p.outputGain = 1.0f;
+    p.shimmer = 0.0f;
     switch(preset) {
         case Preset::SmallCloudRoom:
             p.mix = 0.4f; p.texture = 0.3f; p.freeze = 0.0f; p.feedback = 0.5f;
@@ -45,8 +48,6 @@ CloudGreyVerb::Params CloudGreyVerb::getPreset(Preset preset) {
             p.damping = 0.7f; p.tone = 0.8f; p.shimmer = 0.0f;
             break;
     }
-    p.inputGain = 1.0f;
-    p.outputGain = 1.0f;
     return p;
 }
 

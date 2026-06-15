@@ -91,6 +91,9 @@ public:
     // Processamento amostra a amostra (Útil em loops menores ou ISR/Callbacks simples)
     void processSample(float inL, float inR, float& outL, float& outR);
 
+    // Status / Monitoramento
+    float getFreezeState() const { return freezeSmoothed_; }
+
 private:
     bool initialized_ = false;
     float sampleRate_ = 48000.0f;
