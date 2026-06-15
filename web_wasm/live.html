@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GreyCloud - Live AudioWorklet</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; background-color: #111827; color: #F3F4F6; margin: 0; padding: 2rem; }
+        h1 { color: #60A5FA; margin-bottom: 0.5rem; }
+        .container { max-width: 900px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+        .panel { background-color: #1F2937; padding: 1.5rem; border-radius: 8px; border: 1px solid #374151; }
+        .full-width { grid-column: 1 / -1; }
+        h2 { font-size: 1.2rem; margin-top: 0; color: #9CA3AF; border-bottom: 1px solid #374151; padding-bottom: 0.5rem; }
+        
+        button { background-color: #374151; color: white; border: 1px solid #4B5563; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; margin-right: 0.5rem; margin-bottom: 0.5rem; font-weight: 500; }
+        button:hover { background-color: #4B5563; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        button.primary { background-color: #2563EB; border-color: #1D4ED8; }
+        button.primary:hover { background-color: #1D4ED8; }
+        button.warning { background-color: #B91C1C; border-color: #991B1B; }
+
+        .control-group { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.8rem; }
+        .control-group label { width: 120px; font-size: 0.9rem; color: #D1D5DB; }
+        input[type="range"] { flex: 1; margin: 0 1rem; }
+        
+        #peakMeter { width: 100%; height: 8px; background: #374151; border-radius: 4px; overflow: hidden; margin-top: 5px; }
+        #peakLevel { width: 0%; height: 100%; background: #10B981; transition: width 0.1s; }
+        
+        .alert { padding: 1rem; background-color: rgba(245, 158, 11, 0.1); border-left: 4px solid #F59E0B; margin-bottom: 1rem; font-size: 0.9rem; }
+        
+        .nav-links { margin-bottom: 2rem; }
+        .nav-links a { color: #60A5FA; text-decoration: none; margin-right: 1rem; }
+        .nav-links a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+<div class="nav-links">
+    <a href="index.html">⬅ Back to Offline Render</a>
+    <span style="color: #60A5FA;">|</span>
+    <span style="color: #9CA3AF; margin-left: 1rem;">Live AudioWorklet Mode</span>
+</div>
+
+<div class="container">
+    <div class="panel full-width">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h1>GreyCloud Live</h1>
+                <p style="color: #9CA3AF; margin-top: 0;">Real-time AudioWorklet processor.</p>
+            </div>
+            <div>
+                <button class="primary" id="btnPower" style="font-size: 1.2rem; padding: 0.8rem 2rem;">⚡ START AUDIO</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h2>1. Audio Source</h2>
+        
+        <div class="alert" id="micAlert">
+            <strong>Warning:</strong> Use headphones or an audio interface! Mic input through speakers will cause acoustic feedback loops.
+        </div>
+        
+        <div style="margin-bottom: 1rem;">
+            <label><input type="radio" name="sourceMode" value="mic" checked> 🎤 Mic / Instrument</label>
+            <label style="margin-left: 1rem;"><input type="radio" name="sourceMode" value="file"> 📁 File Player</label>
+        </div>
+
+        <div id="fileControls" style="display: none; padding-top: 1rem; border-top: 1px solid #374151;">
+            <input type="file" id="fileInput" accept="audio/*" style="margin-bottom: 1rem; width: 100%; color: #D1D5DB;">
+            <div>
+                <button id="btnPlayFile" disabled>▶ Play</button>
+                <button id="btnPauseFile" disabled>⏸ Pause</button>
+                <button id="btnStopFile" disabled>⏹ Stop</button>
+                <label style="margin-left: 1rem;"><input type="checkbox" id="chkLoop"> Loop</label>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h2>2. Monitoring & Freeze</h2>
+        
+        <div style="margin-bottom: 1.5rem;">
+            <button id="btnFreezeHold" class="primary" style="width: 120px;">❄ Hold Freeze</button>
+            <label style="margin-left: 1rem;"><input type="checkbox" id="chkFreezeLatch"> Latch</label>
+            <button id="btnResetTail" class="warning" style="float: right;">Reset Tail</button>
+        </div>
+
+        <p style="font-size: 0.85rem; color: #9CA3AF; margin-bottom: 0.2rem;">Peak Level</p>
+        <div id="peakMeter"><div id="peakLevel"></div></div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; font-size: 0.9rem; color: #D1D5DB;">
+            <div>Freeze State: <strong id="val_freezestate" style="color:#60A5FA;">0.00</strong></div>
+            <div>Loop Energy: <strong id="val_loopenergy" style="color:#10B981;">0.00</strong></div>
+            <div>Safety Gain: <strong id="val_safetygain" style="color:#10B981;">1.00</strong></div>
+        </div>
+    </div>
+
+    <div class="panel full-width">
+        <h2>3. DSP Parameters</h2>
+        
+        <select id="presetSelect" style="width: 100%; padding: 0.5rem; margin-bottom: 1.5rem; background: #374151; color: white; border: 1px solid #4B5563; border-radius: 4px;">
+            <option value="SmallCloudRoom">SmallCloudRoom</option>
+            <option value="BassAmbientWash" selected>BassAmbientWash</option>
+            <option value="FrozenOrganPad">FrozenOrganPad</option>
+            <option value="GreyholeDelayVerb">GreyholeDelayVerb</option>
+            <option value="DarkLongCloud">DarkLongCloud</option>
+            <option value="GlitchSmear">GlitchSmear</option>
+            <option value="AlwaysOnSubtle">AlwaysOnSubtle</option>
+            <option value="BrightCloud">BrightCloud</option>
+        </select>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+            <div>
+                <div class="control-group"><label>Mix <span id="v_mix">0.0</span></label><input type="range" id="p_mix" min="0" max="1" step="0.01"></div>
+                <div class="control-group"><label>Texture <span id="v_texture">0.0</span></label><input type="range" id="p_texture" min="0" max="1" step="0.01"></div>
+                <div class="control-group"><label>Feedback <span id="v_feedback">0.0</span></label><input type="range" id="p_feedback" min="0" max="0.94" step="0.01"></div>
+                <div class="control-group"><label>Size <span id="v_size">0.0</span></label><input type="range" id="p_size" min="0" max="1" step="0.01"></div>
+                <div class="control-group"><label>Diffusion <span id="v_diffusion">0.0</span></label><input type="range" id="p_diffusion" min="0" max="1" step="0.01"></div>
+            </div>
+            <div>
+                <div class="control-group"><label>Mod Depth <span id="v_modDepth">0.0</span></label><input type="range" id="p_modDepth" min="0" max="1" step="0.01"></div>
+                <div class="control-group"><label>Mod Rate <span id="v_modRate">0.0</span></label><input type="range" id="p_modRate" min="0" max="1" step="0.01"></div>
+                <div class="control-group"><label>Damping <span id="v_damping">0.0</span></label><input type="range" id="p_damping" min="0" max="1" step="0.01"></div>
+                <div class="control-group"><label>Tone <span id="v_tone">0.0</span></label><input type="range" id="p_tone" min="0" max="1" step="0.01"></div>
+                <div class="control-group"><label>In Gain <span id="v_inputGain">1.0</span></label><input type="range" id="p_inputGain" min="0" max="2" step="0.01"></div>
+                <div class="control-group"><label>Out Gain <span id="v_outputGain">1.0</span></label><input type="range" id="p_outputGain" min="0" max="2" step="0.01"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="live_main.js" type="module"></script>
+</body>
+</html>
