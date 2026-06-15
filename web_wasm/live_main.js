@@ -36,12 +36,12 @@ const presetSelect = document.getElementById('presetSelect');
 
 const PRESETS = {
   SmallCloudRoom: { mix: 0.4, texture: 0.3, freeze: 0.0, feedback: 0.5, size: 0.35, diffusion: 0.6, modDepth: 0.2, modRate: 0.15, damping: 0.5, tone: 0.6, inputGain: 1.0, outputGain: 1.0 },
-  BassAmbientWash: { mix: 0.6, texture: 0.5, freeze: 0.0, feedback: 0.85, size: 0.8, diffusion: 0.8, modDepth: 0.4, modRate: 0.1, damping: 0.2, tone: 0.3, inputGain: 1.0, outputGain: 1.0 },
-  FrozenOrganPad: { mix: 0.8, texture: 0.9, freeze: 1.0, feedback: 0.9, size: 0.9, diffusion: 0.9, modDepth: 0.1, modRate: 0.05, damping: 0.4, tone: 0.4, inputGain: 1.0, outputGain: 1.0 },
-  GreyholeDelayVerb: { mix: 0.5, texture: 0.1, freeze: 0.0, feedback: 0.75, size: 0.8, diffusion: 0.75, modDepth: 0.4, modRate: 0.25, damping: 0.65, tone: 0.5, inputGain: 1.0, outputGain: 1.0 },
+  BassAmbientWash: { mix: 0.35, texture: 0.4, freeze: 0.0, feedback: 0.70, size: 0.6, diffusion: 0.5, modDepth: 0.15, modRate: 0.15, damping: 0.8, tone: 0.4, inputGain: 1.0, outputGain: 1.0 },
+  FrozenOrganPad: { mix: 0.7, texture: 0.85, freeze: 1.0, feedback: 0.65, size: 0.7, diffusion: 0.8, modDepth: 0.4, modRate: 0.05, damping: 0.4, tone: 0.45, inputGain: 1.0, outputGain: 1.0 },
+  GreyholeDelayVerb: { mix: 0.6, texture: 0.55, freeze: 0.0, feedback: 0.85, size: 0.8, diffusion: 0.75, modDepth: 0.4, modRate: 0.25, damping: 0.65, tone: 0.5, inputGain: 1.0, outputGain: 1.0 },
   DarkLongCloud: { mix: 0.55, texture: 0.75, freeze: 0.0, feedback: 0.88, size: 0.9, diffusion: 0.70, modDepth: 0.3, modRate: 0.1, damping: 0.3, tone: 0.3, inputGain: 0.80, outputGain: 0.75 },
-  GlitchSmear: { mix: 0.5, texture: 0.05, freeze: 0.0, feedback: 0.5, size: 0.1, diffusion: 0.1, modDepth: 0.9, modRate: 0.8, damping: 0.5, tone: 0.5, inputGain: 1.0, outputGain: 1.0 },
-  AlwaysOnSubtle: { mix: 0.15, texture: 0.4, freeze: 0.0, feedback: 0.3, size: 0.2, diffusion: 0.4, modDepth: 0.1, modRate: 0.1, damping: 0.5, tone: 0.5, inputGain: 1.0, outputGain: 1.0 },
+  GlitchSmear: { mix: 0.5, texture: 0.05, freeze: 0.0, feedback: 0.5, size: 0.25, diffusion: 0.2, modDepth: 0.9, modRate: 0.8, damping: 0.5, tone: 0.5, inputGain: 1.0, outputGain: 1.0 },
+  AlwaysOnSubtle: { mix: 0.25, texture: 0.2, freeze: 0.0, feedback: 0.3, size: 0.2, diffusion: 0.4, modDepth: 0.1, modRate: 0.1, damping: 0.5, tone: 0.5, inputGain: 1.0, outputGain: 1.0 },
   BrightCloud: { mix: 0.5, texture: 0.6, freeze: 0.0, feedback: 0.75, size: 0.6, diffusion: 0.7, modDepth: 0.6, modRate: 0.4, damping: 0.7, tone: 0.8, inputGain: 1.0, outputGain: 1.0 }
 };
 
@@ -53,10 +53,31 @@ const v_freezestate = document.getElementById('val_freezestate');
 const v_loopenergy = document.getElementById('val_loopenergy');
 const v_safetygain = document.getElementById('val_safetygain');
 
+function setControlsEnabled(enabled) {
+    document.querySelectorAll('[data-dsp-control]').forEach(el => {
+        el.disabled = !enabled;
+    });
+}
+    
+function setEngineStatus(status) {
+    const el = document.getElementById('engineStatus');
+    if (el) {
+        el.textContent = status;
+        if (status === 'Running' || status === 'Ready') el.style.color = '#10B981';
+        else if (status === 'Error') el.style.color = '#EF4444';
+        else el.style.color = '#9CA3AF';
+    }
+}
+
+// Inicialmente desabilitar tudo
+setControlsEnabled(false);
+setEngineStatus('Engine Off');
+
 async function initAudio() {
     try {
         btnPower.textContent = "Loading...";
         btnPower.disabled = true;
+        setEngineStatus('Loading Worklet');
 
         audioCtx = new (window.AudioContext || window.webkitAudioContext)({
             latencyHint: 'interactive'
@@ -64,6 +85,7 @@ async function initAudio() {
 
         await audioCtx.audioWorklet.addModule(WORKLET_URL);
 
+        setEngineStatus('Fetching WASM');
         const response = await fetch(WASM_URL);
         if (!response.ok) throw new Error("Failed to load WASM binary");
         const wasmBytes = await response.arrayBuffer();
@@ -72,6 +94,8 @@ async function initAudio() {
             outputChannelCount: [2]
         });
 
+        setEngineStatus('Initializing DSP');
+
         cloudNode.port.onmessage = (e) => {
             if (e.data.type === 'ready') {
                 btnPower.textContent = "AUDIO ACTIVE";
@@ -79,12 +103,15 @@ async function initAudio() {
                 btnPower.style.backgroundColor = "#10B981";
                 btnPower.style.borderColor = "#059669";
                 
+                setEngineStatus('Running');
+                setControlsEnabled(true);
                 applyPreset(presetSelect.value);
                 handleSourceChange();
             } else if (e.data.type === 'meter') {
                 updateTelemetry(e.data);
             } else if (e.data.type === 'error') {
                 console.error("Worklet Error:", e.data.message);
+                setEngineStatus('Error');
                 alert("Worklet Error: " + e.data.message);
             }
         };
@@ -99,22 +126,33 @@ async function initAudio() {
 
     } catch (err) {
         console.error(err);
+        setEngineStatus('Error');
         alert("Failed to init audio: " + err.message);
         btnPower.textContent = "START AUDIO";
         btnPower.disabled = false;
     }
 }
 
+const v_peakdb = document.getElementById('val_peakdb');
 function updateTelemetry(data) {
     let db = 20 * Math.log10(data.peak + 1e-6);
+    if(v_peakdb) v_peakdb.textContent = db.toFixed(1) + ' dB';
     let pct = Math.max(0, Math.min(100, (db + 60) / 60 * 100));
     peakLevel.style.width = pct + '%';
     peakLevel.style.backgroundColor = db > -0.1 ? '#EF4444' : '#10B981';
 
     v_freezestate.textContent = data.freezeState.toFixed(2);
+    v_freezestate.style.color = data.freezeState > 0.5 ? '#22D3EE' : '#60A5FA';
+    
     v_loopenergy.textContent = data.loopEnergy.toFixed(3);
+    if (data.loopEnergy < 0.25) v_loopenergy.style.color = '#10B981';
+    else if (data.loopEnergy < 0.45) v_loopenergy.style.color = '#FBBF24';
+    else v_loopenergy.style.color = '#EF4444';
+
     v_safetygain.textContent = data.safetyGain.toFixed(2);
-    v_safetygain.style.color = data.safetyGain < 0.95 ? '#EF4444' : '#10B981';
+    if (data.safetyGain >= 0.98) v_safetygain.style.color = '#10B981';
+    else if (data.safetyGain >= 0.90) v_safetygain.style.color = '#FBBF24';
+    else v_safetygain.style.color = '#EF4444';
 }
 
 function applyPreset(name) {
@@ -164,13 +202,24 @@ presetSelect.addEventListener('change', (e) => {
 });
 
 // Freeze controls
-btnFreezeHold.addEventListener('pointerdown', () => setParam('freeze', 1.0));
-btnFreezeHold.addEventListener('pointerup', () => setParam('freeze', chkFreezeLatch.checked ? 1.0 : 0.0));
-btnFreezeHold.addEventListener('pointerleave', () => {
-    if (!btnFreezeHold.matches(':active')) {
-        setParam('freeze', chkFreezeLatch.checked ? 1.0 : 0.0);
+function activateFreeze(e) {
+    if (e.pointerId) btnFreezeHold.setPointerCapture(e.pointerId);
+    btnFreezeHold.style.backgroundColor = '#60A5FA';
+    setParam('freeze', 1.0);
+}
+
+function releaseFreeze(e) {
+    if (e.pointerId) {
+        try { btnFreezeHold.releasePointerCapture(e.pointerId); } catch(ex){}
     }
-});
+    btnFreezeHold.style.backgroundColor = '';
+    setParam('freeze', chkFreezeLatch.checked ? 1.0 : 0.0);
+}
+
+btnFreezeHold.addEventListener('pointerdown', activateFreeze);
+btnFreezeHold.addEventListener('pointerup', releaseFreeze);
+btnFreezeHold.addEventListener('pointercancel', releaseFreeze);
+btnFreezeHold.addEventListener('lostpointercapture', releaseFreeze);
 
 chkFreezeLatch.addEventListener('change', (e) => {
     setParam('freeze', e.target.checked ? 1.0 : 0.0);
@@ -258,8 +307,12 @@ function playFile() {
     fileSourceNode.loop = chkLoop.checked;
     fileSourceNode.connect(cloudNode);
 
-    fileSourceNode.start(0, pauseTime);
-    startTime = audioCtx.currentTime - pauseTime;
+    const safeOffset = fileBuffer.duration > 0
+        ? Math.max(0, Math.min(pauseTime, fileBuffer.duration - 0.001))
+        : 0;
+
+    fileSourceNode.start(0, safeOffset);
+    startTime = audioCtx.currentTime - safeOffset;
     isPlayingFile = true;
 
     btnPlayFile.disabled = true;
@@ -275,8 +328,14 @@ function playFile() {
 
 function pauseFile() {
     if (!isPlayingFile || !fileSourceNode) return;
-    fileSourceNode.stop();
-    pauseTime = audioCtx.currentTime - startTime;
+    try { fileSourceNode.stop(); } catch (e) {}
+    
+    let elapsed = audioCtx.currentTime - startTime;
+    if (fileBuffer && fileBuffer.duration > 0) {
+        elapsed = elapsed % fileBuffer.duration;
+    }
+    pauseTime = elapsed;
+    
     isPlayingFile = false;
     
     btnPlayFile.disabled = false;
@@ -286,8 +345,8 @@ function pauseFile() {
 
 function stopFile() {
     if (fileSourceNode) {
-        fileSourceNode.stop();
-        fileSourceNode.disconnect();
+        try { fileSourceNode.stop(); } catch (e) {}
+        try { fileSourceNode.disconnect(); } catch (e) {}
         fileSourceNode = null;
     }
     isPlayingFile = false;

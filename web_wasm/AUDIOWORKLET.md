@@ -15,36 +15,44 @@ chmod +x build_live.sh
 *(Note that the regular `build.sh` still exists and is used by `index.html` for the offline rendering module, as it uses the regular non-ES6 global export).*
 
 ## How to run
-You must run a local HTTP server such as `python3 -m http.server 8080`, since AudioWorklets and modern JS modules cannot be loaded via `file://` protocol.
+You must run a local HTTP server such as:
+
+```bash
+cd web_wasm
+python3 -m http.server 8080
+```
 
 Navigate to: `http://localhost:8080/live.html`
 
-## Testing with an external instrument (Mic Input)
-1. Select **Mic / Instrument** in the audio source panel.
+## Recommended Testing Flow
+1. Open Live Mode (`live.html`).
 2. Click **⚡ START AUDIO**.
-3. Accept the microphone browser prompt.
-4. **WARNING**: Ensure you have headphones or are using an Audio Interface + Instrument (like a Guitar) to avoid acoustic feedback loop from the speakers reaching the microphone. Audio feedback loops can quickly turn into loud, unpleasant noises.
+3. Select **File Player** (selected by default to avoid acoustic feedback).
+4. Load an audio file (loop).
+5. Test preset `AlwaysOnSubtle`.
+6. Test preset `BassAmbientWash`.
+7. Test **Hold Freeze** button.
+8. Test **Latch** toggle.
+9. Test **Reset Tail** button.
+10. Only after verifying stability, test **Mic / Instrument** with headphones.
 
-## Testing with an audio File
-1. Make sure to **Start Audio**.
-2. Select **File Player** in the audio source panel.
-3. Choose an audio file like `.mp3` or `.wav`.
-4. Use the custom player buttons (Play/Pause/Stop) to listen.
-5. The audio node acts just like a real audio cable sending playback data through the WASM.
+## Warnings and Cautions
+- **Headphones Required**: If you use the Mic Input with speakers, the acoustic feedback loop can quickly turn into loud, unpleasant noises and trigger the Safety Guard.
+- **Safety Gain Indicator**: If the Safety Gain meter turns red, the preset is being aggressively limited by the DSP Safety Guard to protect the audio graph from runaway loops.
 
 ## Features specific to Live Mode
 - **Real-Time DSP evaluation**: Sliders natively push automated `k-rate` data using AudioParams down to the audio processing thread block-by-block.
 - **Visual Telemetry**: Peak, Freeze State, Loop Energy, and Safety Gain update natively every 20 internal buffer blocks avoiding console/UI clutter latency.
-- **Freeze Modes**:
-  - `Hold Freeze`: Transient momentary lock (sends freeze value `1.0` while holding it down, `0.0` when released, mimicking an actual momentary footswitch).
+- **Freeze Modes UX**:
+  - `Hold Freeze`: Transient momentary lock with Pointer capture support for robust touch/mouse handling.
   - `Latch checkbox`: Modifies how the release is evaluated. 
 
 ## Technical Considerations
-- `CloudGreyWorkletProcessor` handles block audio manipulation via the native ES6 Emscripten compiled `.js`. Memory mappings are reused to prevent real-time Allocation.
-- Real-time processing chunk size is normally 128 frames (managed natively by the WebAudio API). The `cloud_grey_wasm.cpp` works efficiently block-by-block regardless of input sizing.
-- To prevent heavy cross-thread lock overheads, messages are sent `k-rate` directly mapped via processor parameters array.
+- `CloudGreyWorkletProcessor` handles block audio manipulation via the native ES6 Emscripten compiled `.js`. Memory mappings are reused optimally without allocation in the hot path.
+- Processor uses parameter caching to avoid redundant `wasm._cgv_set_param()` cycles.
+- Before `CloudGreyVerb` is properly initialized from WASM, the AudioWorklet handles silence.
 
 ## Current Limitations & Next Steps
-- **Shimmer / Pitch Shifter** functionality is disabled. Since Live mode allows you to actually hear how processing operates, evaluating Shimmer overhead here is a fantastic final milestone for a subsequent update.
-- **Presets via Worklet message vs UI state**: We have synced the slider behaviors back up with JS mapping logic to keep visual sliders consistent.
-- No preset load/save (serialization) is built yet, but defaults are easily available.
+- **Shimmer / Pitch Shifter** functionality is disabled.
+- **FDN 4x4** architecture is not implemented yet.
+- **Preset Save/Load** functionality handles only default factory presets right now.

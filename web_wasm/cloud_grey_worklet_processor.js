@@ -24,22 +24,35 @@ class CloudGreyWorkletProcessor extends AudioWorkletProcessor {
     this.rightPtr = null;
     this.bufferSize = 0;
     this.processCount = 0;
+    this.lastParams = {};
 
     this.port.onmessage = async (event) => {
       const { type } = event.data;
       if (type === 'init') {
         try {
           const { wasmBytes, memoryFloats, presetId } = event.data;
+          
+          if (!wasmBytes || wasmBytes.byteLength === 0) {
+            throw new Error('Missing or empty wasm bytes');
+          }
+          if (!memoryFloats || memoryFloats < 24000) {
+            throw new Error('Invalid memoryFloats for CloudGreyVerb');
+          }
+
           this.module = await CloudGreyModule({
             wasmBinary: wasmBytes
           });
           
-          this.module._cgv_init(sampleRate, memoryFloats);
-          if (presetId !== undefined) {
-            this.module._cgv_set_preset(presetId);
-          }
+          const initOk = this.module._cgv_init(sampleRate, memoryFloats);
           
-          this.port.postMessage({ type: 'ready' });
+          if (initOk === 1 && this.module._cgv_is_initialized()) {
+            if (presetId !== undefined) {
+              this.module._cgv_set_preset(presetId);
+            }
+            this.port.postMessage({ type: 'ready' });
+          } else {
+            this.port.postMessage({ type: 'error', message: 'DSP Engine failed to initialize in WASM' });
+          }
         } catch (error) {
           this.port.postMessage({
             type: 'error',
@@ -77,29 +90,74 @@ class CloudGreyWorkletProcessor extends AudioWorkletProcessor {
     ];
   }
 
-  allocateBuffers(frames) {
-    if (this.bufferSize !== frames) {
-      if (this.leftPtr) this.module._free(this.leftPtr);
-      if (this.rightPtr) this.module._free(this.rightPtr);
+  reportError(stage, error) {
+    this.port.postMessage({
+      type: 'error',
+      stage: stage,
+      message: error.message
+    });
+  }
 
-      this.leftPtr = this.module._malloc(frames * 4);
-      this.rightPtr = this.module._malloc(frames * 4);
-      this.bufferSize = frames;
+  freeBuffers() {
+    if (!this.module) return;
+    if (this.leftPtr) {
+      this.module._free(this.leftPtr);
+      this.leftPtr = null;
     }
+    if (this.rightPtr) {
+      this.module._free(this.rightPtr);
+      this.rightPtr = null;
+    }
+    this.bufferSize = 0;
+  }
+
+  allocateBuffers(frames) {
+    if (!this.module || frames <= 0) return false;
+
+    if (
+      this.bufferSize === frames &&
+      this.leftPtr &&
+      this.rightPtr
+    ) {
+      return true;
+    }
+
+    this.freeBuffers();
+
+    const bytes = frames * 4;
+    this.leftPtr = this.module._malloc(bytes);
+    this.rightPtr = this.module._malloc(bytes);
+
+    if (!this.leftPtr || !this.rightPtr) {
+      this.freeBuffers();
+      this.reportError('buffer-alloc', new Error(`Failed to allocate ${frames} frames`));
+      return false;
+    }
+
+    this.bufferSize = frames;
+    return true;
   }
 
   process(inputs, outputs, parameters) {
-    if (!this.module || !this.module._cgv_is_initialized()) return true;
-
-    const input = inputs[0] || [];
-    const inL = input[0];
-    const inR = input.length > 1 ? input[1] : inL;
     const output = outputs[0];
+    if (!output) return true;
+
+    if (!this.module || !this.module._cgv_is_initialized()) {
+      for (const ch of output) {
+        if (ch) ch.fill(0);
+      }
+      return true;
+    }
+
     const outL = output[0];
     const outR = output.length > 1 ? output[1] : output[0];
 
     // Se n\u00e3o h\u00e1 canal de sa\u00edda dispon\u00edvel
     if (!outL || !outR) return true;
+
+    const input = inputs[0] || [];
+    const inL = input[0];
+    const inR = input.length > 1 ? input[1] : inL;
 
     const frames = outL.length;
 
@@ -111,11 +169,15 @@ class CloudGreyWorkletProcessor extends AudioWorkletProcessor {
 
     for (const [name, id] of Object.entries(PARAM_IDS)) {
       const val = getParam(name);
-      // Freeze latch ou momentary (UI manda o value via AudioParam, o worklet processa)
-      this.module._cgv_set_param(id, val);
+      if (Math.abs((this.lastParams[name] ?? NaN) - val) > 1e-6) {
+        this.module._cgv_set_param(id, val);
+        this.lastParams[name] = val;
+      }
     }
 
-    this.allocateBuffers(frames);
+    if (!this.allocateBuffers(frames)) {
+      return true; // continue silently rather than failing completely
+    }
     const heap = this.module.HEAPF32;
 
     if (inL && inL.length > 0) {
