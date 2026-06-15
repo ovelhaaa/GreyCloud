@@ -163,7 +163,7 @@ void ShimmerPitcher::processStereo(float input, float& outL, float& outR) {
     
     outL = readDelay(delayA) * windowA + readDelay(delayB) * windowB;
     
-    float offsetR = sampleRate_ * 0.011f; // 11ms delay for Right channel width
+    float offsetR = sampleRate_ * 0.007f; // 7ms delay for Right channel width (mono safer)
     outR = readDelay(delayA + offsetR) * windowA + readDelay(delayB + offsetR) * windowB;
     
     float norm = windowA + windowB;
@@ -359,8 +359,9 @@ void CloudGreyVerb::setParams(const Params& p) {
 #if CGV_ENABLE_SHIMMER
     shimmerHp_.setFreq(300.0f, sampleRate_);
     
-    // Dynamic lowpass: gets darker as shimmer amount increases to avoid harshness
-    float lpFreq = 5500.0f - (params_.shimmer * 1500.0f);
+    // Dynamic lowpass quadratic curve: preserves brightness in low amounts, darkens in high amounts
+    float shmSq = params_.shimmer * params_.shimmer;
+    float lpFreq = 5500.0f - (shmSq * 1700.0f);
     if (lpFreq < 3800.0f) lpFreq = 3800.0f;
     shimmerLp_.setFreq(lpFreq, sampleRate_);
 #endif
@@ -573,9 +574,9 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
             dsp::sanitize(shimmerOutR);
             
             // Ducking amount: reduce send when duckEnv is high (input has strong transients).
-            // Soft curve: floor at 0.25 to prevent complete disappearance.
-            float duckGain = 1.0f / (1.0f + shimmerEnvState_ * 4.0f); 
-            if (duckGain < 0.25f) duckGain = 0.25f;
+            // Smooth interpolation with a natural floor at 0.25 to prevent complete disappearance
+            float duck = 1.0f / (1.0f + shimmerEnvState_ * 6.0f); 
+            float duckGain = 0.25f + 0.75f * duck;
             
             float shimmerSend = currentShimmerAmount * 0.18f * duckGain; // Ganho máximo 0.18 como de segurança
             

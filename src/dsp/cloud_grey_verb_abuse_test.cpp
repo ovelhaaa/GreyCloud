@@ -285,8 +285,9 @@ int main() {
     cout << left << setw(20) << "TEST NAME"
          << setw(10) << "PASSED"
          << setw(12) << "PEAK"
+         << setw(15) << "EARLY RMS"
          << setw(15) << "END RMS"
-         << setw(15) << "CLIP %"
+         << setw(15) << "DECAY RATIO"
          << "NaN?" << endl;
          
     auto runLongTailTest = [&](float shimmerAmt, float feedbackScale) {
@@ -313,6 +314,7 @@ int main() {
         
         result.numSamples = totalFrames;
         
+        float earlyRmsSum = 0.0f;
         float endRmsSum = 0.0f;
         
         for (int i = 0; i < totalFrames; i++) {
@@ -332,20 +334,26 @@ int main() {
             
             if (peak > 1.0f) result.numClips++;
             
+            if (i > burstFrames && i <= burstFrames + 4800) { // first 100ms of tail
+                earlyRmsSum += outL * outL + outR * outR;
+            }
             if (i > totalFrames - 4800) { // last 100ms
                 endRmsSum += outL * outL + outR * outR;
             }
         }
         
+        float earlyRms = sqrtf(earlyRmsSum / (4800 * 2));
         float endRms = sqrtf(endRmsSum / (4800 * 2));
+        float decayRatio = earlyRms > 1e-6f ? (endRms / earlyRms) : 0.0f;
         
-        result.passed = (!result.hadNaN && endRms < 0.1f && result.maxPeak < 8.0f);
+        result.passed = (!result.hadNaN && endRms < 0.1f && result.maxPeak < 8.0f && decayRatio < 0.1f);
         
         cout << left << setw(20) << result.presetName 
              << setw(10) << (result.passed ? "YES" : "NO")
              << setw(12) << fixed << setprecision(4) << result.maxPeak
+             << setw(15) << fixed << setprecision(6) << earlyRms
              << setw(15) << fixed << setprecision(6) << endRms
-             << setw(15) << fixed << setprecision(3) << ((float)result.numClips / result.numSamples * 100.0f)
+             << setw(15) << fixed << setprecision(4) << decayRatio
              << (result.hadNaN ? "YES" : "NO") << endl;
              
         return result.passed;

@@ -87,7 +87,9 @@ Web MIDI is now fully supported in Live Mode to allow hardware control over the 
 - **FDN 4x4** architecture is not implemented yet.
 
 ## Shimmer (Experimental)
-An experimental Shimmer effect (1 octave up) is now available. It is heavily gated and limited by the internal C++ Safety Guard to prevent feedback blowout since the pitch shifter is injected directly into the reverb feedback loop.
-By default, the Shimmer effect is compiled (using `-DCGV_ENABLE_SHIMMER=1` in `build_live.sh`).
-It uses an internally designed double-window crossover algorithm instead of FFT to keep latency minimum and preserve resources.
-To test it, try adjusting the `Shimmer` slider in the Live UI or load the new `ShimmerCloud` preset.
+An experimental Shimmer effect (1 octave up pitch-shifting) has been added to the internal feedback loop. 
+- **Dynamic LP**: A quadratic lowpass filter (varying from ~5500Hz down to 3800Hz) is applied to the shimmer tail, allowing celestial brightness at low levels while preventing harsh metallic resonance at higher amounts.
+- **Ducking**: A fast-attack envelope tracker listens to transients and applies soft ducking to the shimmer feedback injection. This keeps the initial transient punchy and untainted, allowing the octave bloom to push forward during the decay.
+- **Stereo Widening**: Shimmer utilizes a 7ms delay offset on the right channel within its pitch-shift windows, adding wide stereo bloom while remaining comb-filter safe upon mono downmix.
+- **Parameter Index**: It uses index `12` in parameter mapping arrays. High compatibility with older presets (defaults to `0.0`).
+- **Performance**: While highly optimized compared to FFT alternatives, it consumes about 2x the CPU of the standard cloud mode. To omit it completely for extreme budget scenarios, set `-DCGV_ENABLE_SHIMMER=0`.
