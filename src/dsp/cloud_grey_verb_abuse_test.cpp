@@ -281,6 +281,81 @@ int main() {
         totalTests++;
     }
 
+    cout << "\n--- LONG TAIL STABILITY TESTS (12s) ---" << endl;
+    cout << left << setw(20) << "TEST NAME"
+         << setw(10) << "PASSED"
+         << setw(12) << "PEAK"
+         << setw(15) << "END RMS"
+         << setw(15) << "CLIP %"
+         << "NaN?" << endl;
+         
+    auto runLongTailTest = [&](float shimmerAmt, float feedbackScale) {
+        TestResult result;
+        string name = "LongTail_Shm" + to_string((int)(shimmerAmt * 100)) + "_Fb" + to_string((int)(feedbackScale * 100));
+        result.presetName = name;
+        
+        vector<float> extBuffer(BUFFER_SIZE, 0.0f);
+        CloudGreyVerb cgv;
+        cgv.init(SAMPLE_RATE, extBuffer.data(), BUFFER_SIZE);
+
+        CloudGreyVerb::Params p = CloudGreyVerb::getPreset(CloudGreyVerb::Preset::ShimmerCloud);
+        p.shimmer = shimmerAmt;
+        p.feedback = 0.94f * feedbackScale; 
+        p.size = 1.0f; 
+        p.diffusion = 0.9f;
+        p.mix = 1.0f; 
+        p.modDepth = 0.9f;
+        cgv.setParams(p);
+
+        int burstFrames = 12000; // 250ms burst
+        int tailFrames = 48000 * 12; // 12 secs decay check
+        int totalFrames = burstFrames + tailFrames;
+        
+        result.numSamples = totalFrames;
+        
+        float endRmsSum = 0.0f;
+        
+        for (int i = 0; i < totalFrames; i++) {
+            float inL = 0.0f, inR = 0.0f;
+            if (i < burstFrames) {
+                // Dense chord-like burst
+                inL = (sinf(i * 0.02f) + sinf(i * 0.03f) + ((float)rand() / RAND_MAX * 2.0f - 1.0f) * 0.2f) * 0.3f;
+                inR = (sinf(i * 0.021f) + sinf(i * 0.029f) + ((float)rand() / RAND_MAX * 2.0f - 1.0f) * 0.2f) * 0.3f;
+            }
+            float outL, outR;
+            cgv.processSample(inL, inR, outL, outR);
+            
+            if (isnan(outL) || isnan(outR)) result.hadNaN = true;
+            
+            float peak = max(fabs(outL), fabs(outR));
+            if (peak > result.maxPeak) result.maxPeak = peak;
+            
+            if (peak > 1.0f) result.numClips++;
+            
+            if (i > totalFrames - 4800) { // last 100ms
+                endRmsSum += outL * outL + outR * outR;
+            }
+        }
+        
+        float endRms = sqrtf(endRmsSum / (4800 * 2));
+        
+        result.passed = (!result.hadNaN && endRms < 0.1f && result.maxPeak < 8.0f);
+        
+        cout << left << setw(20) << result.presetName 
+             << setw(10) << (result.passed ? "YES" : "NO")
+             << setw(12) << fixed << setprecision(4) << result.maxPeak
+             << setw(15) << fixed << setprecision(6) << endRms
+             << setw(15) << fixed << setprecision(3) << ((float)result.numClips / result.numSamples * 100.0f)
+             << (result.hadNaN ? "YES" : "NO") << endl;
+             
+        return result.passed;
+    };
+    
+    for (float shm : tailShims) {
+        if (runLongTailTest(shm, 1.0f)) passedCount++;
+        totalTests++;
+    }
+
     cout << string(90, '-') << endl;
     cout << "Testes passando: " << passedCount << "/" << totalTests << endl;
 

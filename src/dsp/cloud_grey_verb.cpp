@@ -147,6 +147,40 @@ float ShimmerPitcher::process(float input) {
     
     return out;
 }
+
+void ShimmerPitcher::processStereo(float input, float& outL, float& outR) {
+    if (!buffer_ || size_ == 0) { outL = 0; outR = 0; return; }
+    
+    dsp::sanitize(input);
+    buffer_[writePos_] = input;
+    writePos_ = (writePos_ + 1) % size_;
+    
+    float delayA = minDelaySamples_ + depthSamples_ * (1.0f - phaseA_);
+    float delayB = minDelaySamples_ + depthSamples_ * (1.0f - phaseB_);
+    
+    float windowA = 4.0f * phaseA_ * (1.0f - phaseA_);
+    float windowB = 4.0f * phaseB_ * (1.0f - phaseB_);
+    
+    outL = readDelay(delayA) * windowA + readDelay(delayB) * windowB;
+    
+    float offsetR = sampleRate_ * 0.011f; // 11ms delay for Right channel width
+    outR = readDelay(delayA + offsetR) * windowA + readDelay(delayB + offsetR) * windowB;
+    
+    float norm = windowA + windowB;
+    if (norm > 0.001f) {
+        outL /= norm;
+        outR /= norm;
+    }
+    
+    outL = dsp::softClip(outL);
+    outR = dsp::softClip(outR);
+    
+    phaseA_ += phaseInc_;
+    if (phaseA_ >= 1.0f) phaseA_ -= 1.0f;
+    
+    phaseB_ += phaseInc_;
+    if (phaseB_ >= 1.0f) phaseB_ -= 1.0f;
+}
 #endif
 
 void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferSize) {
@@ -326,8 +360,8 @@ void CloudGreyVerb::setParams(const Params& p) {
     shimmerHp_.setFreq(300.0f, sampleRate_);
     
     // Dynamic lowpass: gets darker as shimmer amount increases to avoid harshness
-    float lpFreq = 5500.0f - (params_.shimmer * 2500.0f);
-    if (lpFreq < 2000.0f) lpFreq = 2000.0f;
+    float lpFreq = 5500.0f - (params_.shimmer * 1500.0f);
+    if (lpFreq < 3800.0f) lpFreq = 3800.0f;
     shimmerLp_.setFreq(lpFreq, sampleRate_);
 #endif
 }
@@ -518,11 +552,11 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
         float currentShimmerAmount = shimmerSmoother_.process(params_.shimmer);
         
         // Envelope tracking of input magnitude (mono sum) for ducking
-        float inMag = fabsf(inL) + fabsf(inR);
+        float inMag = (fabsf(inL) + fabsf(inR)) * 0.5f;
         if (inMag > shimmerEnvState_) {
-            shimmerEnvState_ += 0.02f * (inMag - shimmerEnvState_); // Fast attack
+            shimmerEnvState_ += 0.05f * (inMag - shimmerEnvState_); // Fast attack
         } else {
-            shimmerEnvState_ += 0.0005f * (inMag - shimmerEnvState_); // Slow release
+            shimmerEnvState_ += 0.0002f * (inMag - shimmerEnvState_); // Slow release
         }
         
         if (currentShimmerAmount > 0.001f) {
@@ -533,17 +567,20 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
             
             shimmerIn = dsp::softClip(shimmerIn);
             
-            float shimmerOut = shimmer_.process(shimmerIn);
-            dsp::sanitize(shimmerOut);
+            float shimmerOutL = 0.0f, shimmerOutR = 0.0f;
+            shimmer_.processStereo(shimmerIn, shimmerOutL, shimmerOutR);
+            dsp::sanitize(shimmerOutL);
+            dsp::sanitize(shimmerOutR);
             
             // Ducking amount: reduce send when duckEnv is high (input has strong transients).
-            // Soft curve: 1.0 down to ~0.11
-            float duckGain = 1.0f / (1.0f + shimmerEnvState_ * 8.0f); 
+            // Soft curve: floor at 0.25 to prevent complete disappearance.
+            float duckGain = 1.0f / (1.0f + shimmerEnvState_ * 4.0f); 
+            if (duckGain < 0.25f) duckGain = 0.25f;
             
             float shimmerSend = currentShimmerAmount * 0.18f * duckGain; // Ganho máximo 0.18 como de segurança
             
-            feedLoopL += shimmerOut * shimmerSend;
-            feedLoopR += shimmerOut * shimmerSend * 0.92f;
+            feedLoopL += shimmerOutL * shimmerSend;
+            feedLoopR += shimmerOutR * shimmerSend;
         }
     }
 #endif

@@ -51,6 +51,7 @@ public:
     bool init(float sampleRate, float* buffer, uint32_t bufferSize);
     void reset();
     float process(float input);
+    void processStereo(float input, float& outL, float& outR);
 
 private:
     float readDelay(float delaySamples) const;
