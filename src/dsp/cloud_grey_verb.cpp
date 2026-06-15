@@ -121,11 +121,20 @@ void CloudGreyVerb::reset() {
     freezeSmoothed_ = 0.0f;
     prng_.seed(1234567);
     
-    for (int i=0; i<CGV_NUM_GRAINS; ++i) grainJitter_[i] = 0.0f;
+    for (int i=0; i<CGV_NUM_GRAINS; ++i) {
+        grainJitter_[i] = 0.0f;
+        grainPan_[i] = prng_.randFloat();
+        grainOffsetMs_[i] = 5.0f + prng_.randFloat() * 35.0f;
+    }
     
     if (grainMemory_) {
         for(size_t i = 0; i < grainMemorySize_; ++i) grainMemory_[i] = 0.0f;
     }
+    
+    modDriftL_ = 0.0f;
+    modDriftR_ = 0.0f;
+    loopEnergy_ = 0.0f;
+    lastSafetyGain_ = 1.0f;
     
     ap1_.clear(); ap2_.clear(); 
 #if CGV_NUM_ALLPASS > 2
@@ -164,9 +173,10 @@ void CloudGreyVerb::setParams(const Params& p) {
     params_.inputGain = clampParam(params_.inputGain, 0.0f, 2.0f);
     params_.outputGain = clampParam(params_.outputGain, 0.0f, 2.0f);
     
-    // Pré-cálculo de Ganhos Mix (Linear)
-    gainWet_ = params_.mix;
-    gainDry_ = 1.0f - params_.mix;
+    // Pré-cálculo de Ganhos Mix (Equal-power approximation)
+    float m = params_.mix;
+    gainDry_ = sqrtf(1.0f - m);
+    gainWet_ = sqrtf(m);
 
     
     // LFO Mapping (0.05 Hz slow drift - 2Hz chorus speed)
@@ -203,7 +213,9 @@ void CloudGreyVerb::processGranular(float input, float lfoDrift, float& outL, fl
     float oldVal = grainMemory_[grainWritePos_];
     // Se freeze = 1.0, mantemos 100% de oldVal preservando a nuvem estática,
     // mas deixamos o ponteiro de gravação avançar para que os grãos girem.
-    grainMemory_[grainWritePos_] = input * (1.0f - freezeSmoothed_) + oldVal * freezeSmoothed_;
+    float writeGain = 1.0f - freezeSmoothed_;
+    writeGain *= writeGain; // curva quadrática: menos vazamento perto de freeze 1
+    grainMemory_[grainWritePos_] = input * writeGain + oldVal * (1.0f - writeGain);
     
     grainWritePos_ = (grainWritePos_ + 1) % grainMemorySize_;
 
@@ -238,13 +250,15 @@ void CloudGreyVerb::processGranular(float input, float lfoDrift, float& outL, fl
         
         if (p < increment || p < oldP) {
             grainJitter_[i] = prng_.randFloat() * params_.texture * 45.0f; // Jitter máx 45ms
+            grainPan_[i] = dsp::lerp(grainPan_[i], prng_.randFloat(), 0.25f);
+            grainOffsetMs_[i] = dsp::lerp(grainOffsetMs_[i], 5.0f + prng_.randFloat() * 45.0f, 0.25f);
         }
 
         // Janela Parabólica Otimizada (Cheap e suave como Cosine) -> 4 * p * (1 - p)
         float window = 4.0f * p * (1.0f - p);
 
         // Onde ler? Pitch neutro (1x) -> delayTap fixo por grão (alterado no jitter)
-        float readMs = (i * 15.0f) + grainJitter_[i] + driftMs;
+        float readMs = grainOffsetMs_[i] + grainJitter_[i] + driftMs;
         float readFrames = readMs * (sampleRate_ / 1000.0f);
         
         float fGranSize = static_cast<float>(grainMemorySize_);
@@ -267,9 +281,10 @@ void CloudGreyVerb::processGranular(float input, float lfoDrift, float& outL, fl
 
         float sample = dsp::lerp(grainMemory_[idx1], grainMemory_[idx2], frac);
         
-        // Espalhamento L/R sutil por grão
-        float panL = (i % 2 == 0) ? 0.7f : 0.3f;
-        float panR = 1.0f - panL;
+        // Espalhamento L/R variável (orgânico)
+        float pan = grainPan_[i];
+        float panL = 0.25f + (1.0f - pan) * 0.75f;
+        float panR = 0.25f + pan * 0.75f;
 
         accL += sample * window * panL;
         accR += sample * window * panR;
@@ -298,6 +313,12 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     // LFOs (Calculados cedo para fornecer drift p/ motor Granular)
     float lfo1_val = lfo1_.process();
     float lfo2_val = lfo2_.process();
+    
+    // Modulation drift update
+    float randL = prng_.randFloat() * 2.0f - 1.0f;
+    float randR = prng_.randFloat() * 2.0f - 1.0f;
+    modDriftL_ = dsp::lerp(modDriftL_, randL, 0.00005f);
+    modDriftR_ = dsp::lerp(modDriftR_, randR, 0.00004f);
 
     // 2. Núcleo Granular Estéreo (Clouds-ish smear/freeze)
     float granOutL = 0.0f, granOutR = 0.0f;
@@ -324,9 +345,17 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     float baseDelayTimeR = baseDelayTimeL * 0.81f; // Assimetria crucial em reverb
     
     // Modulação (drift) convertida para frames. Depth ~ 0 a 15ms
+    float modL = lfo1_val * 0.85f + modDriftL_ * 0.15f;
+    float modR = lfo2_val * 0.85f + modDriftR_ * 0.15f;
+
     float modFrames = params_.modDepth * 0.015f * sampleRate_; 
-    float timeL = baseDelayTimeL + lfo1_val * modFrames;
-    float timeR = baseDelayTimeR + lfo2_val * modFrames;
+    float timeL = baseDelayTimeL + modL * modFrames;
+    float timeR = baseDelayTimeR + modR * modFrames;
+
+    // Boundary constraints limitando tamanho de sweep
+    float maxDelayBaseAllowed = static_cast<float>(mainDelaySize_) - 2.0f;
+    if (timeL < 2.0f) timeL = 2.0f; else if (timeL > maxDelayBaseAllowed) timeL = maxDelayBaseAllowed;
+    if (timeR < 2.0f) timeR = 2.0f; else if (timeR > maxDelayBaseAllowed) timeR = maxDelayBaseAllowed;
 
     // Puxa do delay (fundo do mar)
     float readL = delayL_.read(timeL);
@@ -364,6 +393,28 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     // Saturação musical protegendo O(INF) feedback blowout
     feedLoopL = dsp::softClip(feedLoopL);
     feedLoopR = dsp::softClip(feedLoopR);
+
+    // --- Safety Energy Guard (v2) ---
+    float e = feedLoopL * feedLoopL + feedLoopR * feedLoopR;
+    loopEnergy_ = 0.9995f * loopEnergy_ + 0.0005f * e;
+
+    float safety = 1.0f;
+    if (loopEnergy_ > 0.45f) {
+        safety = 0.45f / loopEnergy_;
+        if (safety > 1.0f) safety = 1.0f;
+        if (safety < 0.35f) safety = 0.35f;
+    }
+    lastSafetyGain_ = dsp::lerp(lastSafetyGain_, safety, 0.001f);
+    
+    dsp::sanitize(loopEnergy_);
+    dsp::sanitize(lastSafetyGain_);
+
+    feedLoopL *= lastSafetyGain_;
+    feedLoopR *= lastSafetyGain_;
+    
+    dsp::sanitize(feedLoopL);
+    dsp::sanitize(feedLoopR);
+    // --------------------------------
 
     // Escreve novamente
     delayL_.write(feedLoopL);

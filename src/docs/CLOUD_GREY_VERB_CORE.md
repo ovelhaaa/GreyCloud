@@ -60,10 +60,35 @@ Sugerimos focar na audição musical para validar a transição teórica -> prá
 
 ---
 
-## O Que Ficou "Para Depois" (Futuras Atualizações)
+## Mecanismos de Segurança e Estabilidade
+
+**Safety Energy Guard (v2)**
+Para evitar crescimento explosivo (runaway feedback) na rede do Greyhole – um problema comum em matrizes recirculantes –, implementamos um Energy Guard lento:
+1. Ele mensura a energia quadrada `L^2 + R^2` injetada de volta nos delays.
+2. Com um filtro passa-baixa (LPF) extremamente lento (`0.9995`), ele rastreia a RMS do loop em janelas longas.
+3. Se a energia excede `0.45`, ele calcula um ganho de redução (Safety Gain) para trazer o loop de volta aos níveis sadios.
+4. O valor máximo de clipping do limiteur também atua secundariamente via `dsp::softClip()` em allpasses e na saída do loop.
+Você pode visualizar a atuação deste limitador verificando o valor *Safety Gain* na UI do testador WASM.
+
+**Por que o preset "DarkLongCloud" não é infinito real?**
+Feedback > 0.94 foi restrito para garantir zero clips e evitar matemática infinita na matriz de atraso (Wash Loop). Além disso, damping contínuo consome a energia do sinal, e o freeze mode é a técnica principal sugerida para prender texturas infinitas em vez de apenas contar com o delay path de `feedback = 0.99`.
+
+## Testando Freeze em Ambiente WASM (Render Demo)
+Como o buffer de gravação WASM roda offline processando toda a trilha no botão *Process Audio (Offline)*, o Freeze manual não captura o loop "naquele exato momento" tocando na UI.
+Criamos o **Render Freeze Demo**:
+1. Clique em `❄️ Render Freeze Demo`.
+2. O código processará o arquivo do segundo `0` ao `2` em estado normal (bypass The Freeze).
+3. Do segundo `2` ao `6`, ele ativará o `Freeze` virtualmente no motor.
+4. Você escutará o engarrafamento granular congelado de 4 segundos e natural "decay" logo depois.
+
+## Nota sobre Damping
+O controle de `Damping` atua quase como um "Feedback Brightness" natural para a sala física simulada: em valores baixos, a sala se torna densa (Dark), reduzindo drasticamente os agudos em poucos taps do loop; em valores altos, os agudos persistem com nitidez no smearing.
+
+---
+
+## O Que Ficou "Para Depois" (Próximas Atualizações)
 
 Com intenção de finalizar um Core rígido de alta robustez, as exclusões a seguir têm justificativa em escopo:
-- **Shimmer Real:** Placeholder `shimmer` parameter está nulo temporariamente (`TODO`); implementar Pitch-shifting fracionário limpo em tempo de áudio precisa de mais calibração na contagem de ciclos/CPU de STMs sem afundar do bloco limitador FPU.
-- **WASM:** Adicionaria complexidade externa de build toolchain a esta fase.
-- **Wrapper STM32 completo:** A integração I2S e DMA específica ficou de fora do Header agnóstico. Cada placa precisará rotear sua `HAL_I2S_Receive_DMA`.
-- **Editor de Presets Externos UI** e **Profilling Específico.**
+- **Shimmer Real:** O parâmetro `shimmer` está no pacote, mas o módulo pitch-shifter de +1 OCTAVE não está conectado ainda, aguardando validação de CPU/Memória na MCU.
+- **AudioWorklet / Live WASM:** O Applet Web usa o motor de forma *Offline Block Rendering*. A futura implementação Live exigirá uma thread AudioWorklet JavaScript conectada ao microfone com ring-buffers independentes.
+- **FDN 4x4:** A arquitetura do Greyhole é baseada em Allpass Loop estéreo. A expansão conceitual para uma verdadeira Feedback Delay Network (Matriz Ortogonal 4x4) será tratada futuramente se pedida.

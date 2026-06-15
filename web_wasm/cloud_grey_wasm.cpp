@@ -93,6 +93,14 @@ float cgv_get_freeze_state() {
     return isInit ? cgv.getFreezeState() : 0.0f;
 }
 
+float cgv_get_loop_energy() {
+    return isInit ? cgv.getLoopEnergy() : 0.0f;
+}
+
+float cgv_get_safety_gain() {
+    return isInit ? cgv.getSafetyGain() : 1.0f;
+}
+
 int cgv_is_initialized() {
     return isInit ? 1 : 0;
 }

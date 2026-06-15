@@ -235,7 +235,7 @@ function processOffline(isFreezeDemo = false) {
     wasmModule._cgv_reset();
     
     // Process in Chunks to save WASM Heap Memory
-    const BLOCK_SIZE = 1024;
+    const BLOCK_SIZE = isFreezeDemo ? 256 : 1024;
     const wasmPtrL = wasmModule._malloc(BLOCK_SIZE * 4);
     const wasmPtrR = wasmModule._malloc(BLOCK_SIZE * 4);
     
@@ -289,6 +289,34 @@ function processOffline(isFreezeDemo = false) {
     // Update Peak Meter visually
     let db = 20 * Math.log10(maxPeak + 1e-6);
     
+    // Ler Loop Energy e Safety
+    const finalLoopEnergy = wasmModule._cgv_get_loop_energy();
+    const finalSafetyGain = wasmModule._cgv_get_safety_gain();
+    const elEnergy = document.getElementById('val_loopenergy');
+    const elSafety = document.getElementById('val_safetygain');
+    if(elEnergy) elEnergy.textContent = finalLoopEnergy.toFixed(3);
+    if(elSafety) {
+        elSafety.textContent = finalSafetyGain.toFixed(2);
+        elSafety.style.color = finalSafetyGain < 0.95 ? '#EF4444' : '#10B981';
+    }
+
+    // Normalization logic
+    const chkNorm = document.getElementById('chkNormalize');
+    let normGain = 1.0;
+    if (chkNorm && chkNorm.checked && maxPeak > 0) {
+        // Target -0.1 dB ~ 0.9885
+        const targetPeak = 0.9885;
+        if (maxPeak > 0.0001) {
+            normGain = targetPeak / maxPeak;
+            for (let i = 0; i < frames; i++) {
+                outL[i] *= normGain;
+                outR[i] *= normGain;
+            }
+            maxPeak = targetPeak; // adjust max peak for display
+            db = 20 * Math.log10(maxPeak + 1e-6);
+        }
+    }
+    
     // Safety check: is it actually mute?
     let sumL = 0;
     for (let i = 0; i < Math.min(10000, outL.length); i++) sumL += outL[i] * outL[i];
@@ -298,7 +326,16 @@ function processOffline(isFreezeDemo = false) {
     peakLevel.style.width = pct + '%';
     peakLevel.style.backgroundColor = db > 0 ? '#EF4444' : '#10B981';
     
-    processStatus.textContent = `Completed! Max Peak: ${db.toFixed(1)} dB`;
+    let wMsg = "";
+    if (maxPeak >= 0.98) wMsg += " [Warning: near clipping]";
+    if (finalSafetyGain < 0.95) wMsg += " [Safety limiter was active]";
+
+    if (chkNorm && chkNorm.checked && normGain !== 1.0) {
+        processStatus.textContent = `Completed! Max Peak: ${db.toFixed(1)} dB (Normalized, Gain: ${normGain.toFixed(2)}x)${wMsg}`;
+    } else {
+        processStatus.textContent = `Completed! Max Peak: ${db.toFixed(1)} dB${wMsg}`;
+    }
+    
     btnProcess.disabled = false;
     if (btnProcessFreezeDemo) btnProcessFreezeDemo.disabled = false;
     btnPlayProc.disabled = false;

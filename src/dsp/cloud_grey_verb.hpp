@@ -93,6 +93,8 @@ public:
 
     // Status / Monitoramento
     float getFreezeState() const { return freezeSmoothed_; }
+    float getLoopEnergy() const { return loopEnergy_; }
+    float getSafetyGain() const { return lastSafetyGain_; }
 
 private:
     bool initialized_ = false;
@@ -114,6 +116,8 @@ private:
     // Controle Granular Estendido
     dsp::FastPRNG prng_;
     float grainJitter_[CGV_NUM_GRAINS] = {0.0f};
+    float grainPan_[CGV_NUM_GRAINS] = {0.5f};
+    float grainOffsetMs_[CGV_NUM_GRAINS] = {0.0f};
     float freezeSmoothed_ = 0.0f;
 
     // Núcleo Diffuser (Smear Allpasses pré-delay)
@@ -126,6 +130,14 @@ private:
 
     // LFOs dedicados (Fases cruzadas para imagem estéreo larga)
     dsp::LFO lfo1_, lfo2_;
+    
+    // Modulation drift state
+    float modDriftL_ = 0.0f;
+    float modDriftR_ = 0.0f;
+    
+    // Safety guard loop state
+    float loopEnergy_ = 0.0f;
+    float lastSafetyGain_ = 1.0f;
 
     // Filtros
     dsp::OnePoleRC dampL_, dampR_;

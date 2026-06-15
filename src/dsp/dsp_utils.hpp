@@ -153,7 +153,7 @@ public:
         float feedback = input + delayed * g;
         if (feedback != feedback) feedback = 0.0f; // NaN Protection
         sanitize(feedback);
-        feedback = hardClip(feedback); // Evita runaway feedback em Allpass series
+        feedback = softClip(feedback); // Saturação musical protegendo O(INF) feedback em Allpass series
         
         delay_.write(feedback);
         

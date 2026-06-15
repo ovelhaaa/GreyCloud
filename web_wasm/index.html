@@ -86,6 +86,10 @@
         <div style="margin-top: 1.5rem;">
             <p style="font-size: 0.85rem; color: #9CA3AF; margin-bottom: 0.2rem;">Peak Level (Block Eval)</p>
             <div id="peakMeter"><div id="peakLevel"></div></div>
+            <p style="font-size: 0.85rem; color: #9CA3AF; margin-top: 0.5rem; display: flex; gap: 1rem;">
+                <span>Loop Energy: <strong id="val_loopenergy" style="color:#10B981;">0.00</strong></span>
+                <span>Safety Gain: <strong id="val_safetygain" style="color:#10B981;">1.00</strong></span>
+            </p>
         </div>
         
         <div style="margin-top: 1.5rem;">
@@ -100,6 +104,11 @@
             <p style="font-size: 0.85rem; color: #9CA3AF; margin: 0; line-height: 1.4;">
                 <strong style="color: #E5E7EB;">Note:</strong> Freeze is applied during offline rendering. Change it, then click Process Audio. For live freeze, future AudioWorklet mode is needed.
             </p>
+        </div>
+        <div style="margin-bottom: 1rem;">
+            <label style="font-size: 0.9rem; color: #E5E7EB; display: flex; align-items: center; gap: 0.5rem;">
+                <input type="checkbox" id="chkNormalize"> Normalize exported WAV
+            </label>
         </div>
         <div class="btn-row">
             <button class="primary" id="btnProcess" disabled>⚙️ Process Audio (Offline)</button>
