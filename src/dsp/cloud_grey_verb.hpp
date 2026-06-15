@@ -180,6 +180,8 @@ private:
     bool shimmerAvailable_ = false;
     dsp::OnePoleRC shimmerHp_;
     dsp::OnePoleRC shimmerLp_;
+    dsp::OnePoleRC shimmerSmoother_;
+    float shimmerEnvState_ = 0.0f;
 #endif
 
     // Helpers
