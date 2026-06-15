@@ -61,10 +61,10 @@
                 <option value="1" selected>BassAmbientWash</option>
                 <option value="2">FrozenOrganPad</option>
                 <option value="3">GreyholeDelayVerb</option>
-                <option value="4">DarkInfiniteCloud</option>
+                <option value="4">DarkLongCloud</option>
                 <option value="5">GlitchSmear</option>
                 <option value="6">AlwaysOnSubtle</option>
-                <option value="7">FauxShimmerCloud</option>
+                <option value="7">BrightCloud</option>
             </select>
         </div>
 
@@ -72,7 +72,7 @@
             <div class="control-group"><label>Mix <span id="val_mix">0.5</span></label><input type="range" id="param_0" min="0" max="1" step="0.01"></div>
             <div class="control-group"><label>Texture <span id="val_texture">0.5</span></label><input type="range" id="param_1" min="0" max="1" step="0.01"></div>
             <div class="control-group"><label>Freeze <span id="val_freeze">0.0</span></label><input type="range" id="param_2" min="0" max="1" step="1"></div>
-            <div class="control-group"><label>Feedback <span id="val_feedback">0.5</span></label><input type="range" id="param_3" min="0" max="0.98" step="0.01"></div>
+            <div class="control-group"><label>Feedback <span id="val_feedback">0.5</span></label><input type="range" id="param_3" min="0" max="0.94" step="0.01"></div>
             <div class="control-group"><label>Size <span id="val_size">0.5</span></label><input type="range" id="param_4" min="0" max="1" step="0.01"></div>
             <div class="control-group"><label>Diffusion <span id="val_diffusion">0.5</span></label><input type="range" id="param_5" min="0" max="1" step="0.01"></div>
             <div class="control-group"><label>Mod Depth <span id="val_moddepth">0.2</span></label><input type="range" id="param_6" min="0" max="1" step="0.01"></div>
@@ -96,8 +96,14 @@
 
     <div class="panel">
         <h2>3. Process & Audition</h2>
+        <div style="margin-bottom: 1rem; padding: 0.8rem; background-color: rgba(59, 130, 246, 0.1); border-left: 3px solid #3B82F6; border-radius: 0 4px 4px 0;">
+            <p style="font-size: 0.85rem; color: #9CA3AF; margin: 0; line-height: 1.4;">
+                <strong style="color: #E5E7EB;">Note:</strong> Freeze is applied during offline rendering. Change it, then click Process Audio. For live freeze, future AudioWorklet mode is needed.
+            </p>
+        </div>
         <div class="btn-row">
             <button class="primary" id="btnProcess" disabled>⚙️ Process Audio (Offline)</button>
+            <button id="btnProcessFreezeDemo" disabled>❄️ Render Freeze Demo</button>
             <span class="status" id="processStatus"></span>
         </div>
         

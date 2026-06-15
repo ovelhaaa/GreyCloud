@@ -89,6 +89,10 @@ float cgv_get_peak() {
     return lastPeak;
 }
 
+float cgv_get_freeze_state() {
+    return isInit ? cgv.getFreezeState() : 0.0f;
+}
+
 int cgv_is_initialized() {
     return isInit ? 1 : 0;
 }

@@ -46,10 +46,10 @@ public:
         BassAmbientWash,
         FrozenOrganPad,
         GreyholeDelayVerb,
-        DarkInfiniteCloud,
+        DarkLongCloud,
         GlitchSmear,
         AlwaysOnSubtle,
-        FauxShimmerCloud
+        BrightCloud
     };
 
     struct Params {

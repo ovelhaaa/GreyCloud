@@ -24,10 +24,10 @@ CloudGreyVerb::Params CloudGreyVerb::getPreset(Preset preset) {
             p.size = 0.8f; p.diffusion = 0.75f; p.modDepth = 0.4f; p.modRate = 0.25f;
             p.damping = 0.65f; p.tone = 0.5f;
             break;
-        case Preset::DarkInfiniteCloud:
-            p.mix = 0.65f; p.texture = 0.75f; p.freeze = 0.0f; p.feedback = 0.95f;
-            p.size = 0.9f; p.diffusion = 0.8f; p.modDepth = 0.3f; p.modRate = 0.1f;
-            p.damping = 0.3f; p.tone = 0.3f;
+        case Preset::DarkLongCloud:
+            p.mix = 0.55f; p.texture = 0.75f; p.freeze = 0.0f; p.feedback = 0.88f;
+            p.size = 0.9f; p.diffusion = 0.70f; p.modDepth = 0.3f; p.modRate = 0.1f;
+            p.damping = 0.3f; p.tone = 0.3f; p.inputGain = 0.80f; p.outputGain = 0.75f;
             break;
         case Preset::GlitchSmear:
             p.mix = 0.5f; p.texture = 0.05f; p.freeze = 0.0f; p.feedback = 0.5f;
@@ -39,10 +39,10 @@ CloudGreyVerb::Params CloudGreyVerb::getPreset(Preset preset) {
             p.size = 0.2f; p.diffusion = 0.4f; p.modDepth = 0.1f; p.modRate = 0.1f;
             p.damping = 0.5f; p.tone = 0.5f;
             break;
-        case Preset::FauxShimmerCloud:
+        case Preset::BrightCloud:
             p.mix = 0.5f; p.texture = 0.6f; p.freeze = 0.0f; p.feedback = 0.75f;
             p.size = 0.6f; p.diffusion = 0.7f; p.modDepth = 0.6f; p.modRate = 0.4f;
-            p.damping = 0.7f; p.tone = 0.8f; p.shimmer = 0.5f;
+            p.damping = 0.7f; p.tone = 0.8f; p.shimmer = 0.0f;
             break;
     }
     p.inputGain = 1.0f;
@@ -152,7 +152,7 @@ void CloudGreyVerb::setParams(const Params& p) {
     params_.mix = clampParam(params_.mix, 0.0f, 1.0f);
     params_.texture = clampParam(params_.texture, 0.0f, 1.0f);
     params_.freeze = clampParam(params_.freeze, 0.0f, 1.0f);
-    params_.feedback = clampParam(params_.feedback, 0.0f, 0.98f); // Teto seguro
+    params_.feedback = clampParam(params_.feedback, 0.0f, 0.94f); // Teto seguro
     params_.size = clampParam(params_.size, 0.0f, 1.0f);
     params_.diffusion = clampParam(params_.diffusion, 0.0f, 1.0f);
     params_.modDepth = clampParam(params_.modDepth, 0.0f, 1.0f);
@@ -160,8 +160,8 @@ void CloudGreyVerb::setParams(const Params& p) {
     params_.damping = clampParam(params_.damping, 0.0f, 1.0f);
     params_.tone = clampParam(params_.tone, 0.0f, 1.0f);
     params_.shimmer = clampParam(params_.shimmer, 0.0f, 1.0f);
-    params_.inputGain = clampParam(params_.inputGain, 0.0f, 4.0f);
-    params_.outputGain = clampParam(params_.outputGain, 0.0f, 4.0f);
+    params_.inputGain = clampParam(params_.inputGain, 0.0f, 2.0f);
+    params_.outputGain = clampParam(params_.outputGain, 0.0f, 2.0f);
     
     // Pré-cálculo de Ganhos Mix (Linear)
     gainWet_ = params_.mix;
@@ -347,16 +347,22 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
 #endif
 
     // Injeção de volta à linha de atraso (CROSS-FEEDBACK Matrix L/R)
-    float feedLoopL = diffInL + readR * params_.feedback;
-    float feedLoopR = diffInR + readL * params_.feedback;
+    float feedLoopL = diffInL * 0.65f + readR * params_.feedback;
+    float feedLoopR = diffInR * 0.65f + readL * params_.feedback;
+    
+    if (freezeSmoothed_ > 0.5f) {
+        float reduction = 1.0f - ((freezeSmoothed_ - 0.5f) * 2.0f * 0.2f); // up to 20% reduction
+        feedLoopL *= reduction;
+        feedLoopR *= reduction;
+    }
 
     // TODO: Implementar módulo Shimmer (+1 OCT pitch shifter).
     // Evitado temporariamente por restrições rigorosas de segurança/CPU.
     // feedLoopL += pitchShift(readL) * params_.shimmer;
 
     // Saturação musical protegendo O(INF) feedback blowout
-    feedLoopL = dsp::hardClip(feedLoopL);
-    feedLoopR = dsp::hardClip(feedLoopR);
+    feedLoopL = dsp::softClip(feedLoopL);
+    feedLoopR = dsp::softClip(feedLoopR);
 
     // Escreve novamente
     delayL_.write(feedLoopL);

@@ -11,6 +11,7 @@ const fileInput = document.getElementById('audioInput');
 const btnPlayOrig = document.getElementById('btnPlayOrig');
 const btnStopOrig = document.getElementById('btnStopOrig');
 const btnProcess = document.getElementById('btnProcess');
+const btnProcessFreezeDemo = document.getElementById('btnProcessFreezeDemo');
 const btnPlayProc = document.getElementById('btnPlayProc');
 const btnStopProc = document.getElementById('btnStopProc');
 const btnDownload = document.getElementById('btnDownload');
@@ -91,6 +92,7 @@ if (typeof CloudGreyModule === 'function') {
         if (originalAudioBuffer) {
             initDSP(originalAudioBuffer.sampleRate);
             if (btnProcess) btnProcess.disabled = false;
+            if (btnProcessFreezeDemo) btnProcessFreezeDemo.disabled = false;
         } else {
             loadStatus.textContent = "WASM Ready. Waiting for file...";
         }
@@ -118,6 +120,7 @@ fileInput.addEventListener('change', async (e) => {
         if (wasmModule) {
             initDSP(originalAudioBuffer.sampleRate);
             btnProcess.disabled = false;
+            if (btnProcessFreezeDemo) btnProcessFreezeDemo.disabled = false;
         } else {
             loadStatus.textContent += " (Waiting for WASM to load before processing...)";
         }
@@ -184,18 +187,34 @@ btnProcess.addEventListener('click', () => {
     
     processStatus.textContent = "Processing offline...";
     btnProcess.disabled = true;
+    if (btnProcessFreezeDemo) btnProcessFreezeDemo.disabled = true;
     
     // Process async to avoid freezing UI for large files
     setTimeout(() => {
-        processOffline();
+        processOffline(false);
     }, 10);
 });
 
-function processOffline() {
+if (btnProcessFreezeDemo) {
+    btnProcessFreezeDemo.addEventListener('click', () => {
+        if (!originalAudioBuffer || !wasmModule) return;
+        
+        processStatus.textContent = "Processing Freeze Demo (0-2s off, 2-6s on)...";
+        btnProcess.disabled = true;
+        btnProcessFreezeDemo.disabled = true;
+        
+        setTimeout(() => {
+            processOffline(true);
+        }, 10);
+    });
+}
+
+function processOffline(isFreezeDemo = false) {
     if (!wasmModule._cgv_is_initialized()) {
         processStatus.textContent = "Error: DSP not initialized.";
         processStatus.style.color = "red";
         btnProcess.disabled = false;
+        if (btnProcessFreezeDemo) btnProcessFreezeDemo.disabled = false;
         return;
     }
 
@@ -226,6 +245,22 @@ function processOffline() {
     let maxPeak = 0.0;
     
     for (let offset = 0; offset < frames; offset += BLOCK_SIZE) {
+        if (isFreezeDemo) {
+            const timeS = offset / sr;
+            let freezeValue = 0.0;
+            if (timeS >= 2.0 && timeS < 6.0) {
+                freezeValue = 1.0;
+            }
+            wasmModule._cgv_set_param(2, freezeValue);
+            const uiFreezeVal = document.getElementById('val_freeze');
+            const uiFreezeParam = document.getElementById('param_2');
+            if (uiFreezeVal) uiFreezeVal.textContent = freezeValue.toFixed(1);
+            if (uiFreezeParam) uiFreezeParam.value = freezeValue;
+            
+            // Note: switching parameters programmatically might unset preset conceptually,
+            // but for offline render demonstration it's fine.
+        }
+
         const len = Math.min(BLOCK_SIZE, frames - offset);
         
         // Copy to WASM heap securely
@@ -265,6 +300,7 @@ function processOffline() {
     
     processStatus.textContent = `Completed! Max Peak: ${db.toFixed(1)} dB`;
     btnProcess.disabled = false;
+    if (btnProcessFreezeDemo) btnProcessFreezeDemo.disabled = false;
     btnPlayProc.disabled = false;
     btnDownload.disabled = false;
 }
