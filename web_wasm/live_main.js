@@ -613,3 +613,258 @@ btnPower.addEventListener('click', () => {
         initAudio();
     }
 });
+
+// MIDI
+let midiAccess = null;
+let currentMidiInput = null;
+let midiLearnActive = false;
+let midiMap = {};
+
+const MIDI_MAP_STORAGE_KEY = 'greycloud.midiMap.v1';
+const DEFAULT_MIDI_MAP = {
+  "cc:1": "mix",
+  "cc:2": "texture",
+  "cc:3": "feedback",
+  "cc:4": "size",
+  "cc:5": "tone",
+  "cc:64": "freeze"
+};
+
+const btnEnableMidi = document.getElementById('btnEnableMidi');
+const midiInputSelect = document.getElementById('midiInputSelect');
+const btnMidiLearn = document.getElementById('btnMidiLearn');
+const midiLearnTarget = document.getElementById('midiLearnTarget');
+const btnClearMidiMap = document.getElementById('btnClearMidiMap');
+const midiLastMessage = document.getElementById('midiLastMessage');
+
+function setMidiStatus(message, level = 'info') {
+    const el = document.getElementById('midiStatus');
+    if (!el) return;
+    el.textContent = message;
+    el.dataset.level = level;
+}
+
+function updateLastMidiMessage(command, channel, data1, data2) {
+    if (midiLastMessage) {
+        midiLastMessage.textContent = `Last MIDI: CMD 0x${command.toString(16).toUpperCase()} | CH ${channel} | Data1: ${data1} | Data2: ${data2}`;
+    }
+}
+
+function loadMidiMap() {
+    try {
+        const stored = localStorage.getItem(MIDI_MAP_STORAGE_KEY);
+        if (stored) {
+            midiMap = JSON.parse(stored);
+            setMidiStatus('MIDI Map loaded from Storage', 'info');
+            return;
+        }
+    } catch(e) {
+        console.warn("Failed to load MIDI map:", e);
+    }
+    midiMap = { ...DEFAULT_MIDI_MAP };
+    setMidiStatus('Default MIDI Map applied', 'info');
+}
+
+function saveMidiMap(map) {
+    midiMap = map;
+    localStorage.setItem(MIDI_MAP_STORAGE_KEY, JSON.stringify(map));
+    setMidiStatus('MIDI Map saved', 'ok');
+}
+
+function clearMidiMap() {
+    saveMidiMap({});
+    setMidiStatus('MIDI Map cleared', 'ok');
+}
+
+async function enableMidi() {
+    try {
+        setMidiStatus('Requesting MIDI access...', 'info');
+        midiAccess = await navigator.requestMIDIAccess({ sysex: false });
+        midiAccess.onstatechange = refreshMidiInputs;
+        
+        loadMidiMap();
+        refreshMidiInputs();
+        
+        btnEnableMidi.disabled = true;
+        midiInputSelect.disabled = false;
+        
+        // Let midi learn be available if DSP is running
+        if (cloudNode) {
+            btnMidiLearn.disabled = false;
+            midiLearnTarget.disabled = false;
+        }
+    } catch (err) {
+        setMidiStatus('MIDI Access denied or not supported: ' + err.message, 'error');
+    }
+}
+
+function refreshMidiInputs() {
+    if (!midiAccess) return;
+    const inputs = midiAccess.inputs.values();
+    const selectedId = midiInputSelect.value;
+    
+    midiInputSelect.innerHTML = '<option value="">-- Select MIDI Input --</option>';
+    let foundCurrent = false;
+
+    for (let input of inputs) {
+        const opt = document.createElement('option');
+        opt.value = input.id;
+        opt.textContent = input.name || `Input ${input.id}`;
+        midiInputSelect.appendChild(opt);
+        if (input.id === selectedId) foundCurrent = true;
+    }
+    
+    if (!foundCurrent && midiInputSelect.options.length > 1) {
+        midiInputSelect.selectedIndex = 1;
+    } else if (foundCurrent) {
+        midiInputSelect.value = selectedId;
+    }
+    
+    selectMidiInput(midiInputSelect.value);
+}
+
+function selectMidiInput(inputId) {
+    if (currentMidiInput) {
+        currentMidiInput.onmidimessage = null;
+    }
+    
+    if (!inputId) {
+        currentMidiInput = null;
+        setMidiStatus('No MIDI Input selected', 'warn');
+        return;
+    }
+    
+    currentMidiInput = midiAccess.inputs.get(inputId);
+    if (currentMidiInput) {
+        currentMidiInput.onmidimessage = handleMidiMessage;
+        setMidiStatus(`Listening to: ${currentMidiInput.name}`, 'ok');
+    }
+}
+
+function handleMidiMessage(event) {
+    const data = event.data;
+    if (data.length < 2) return;
+    
+    const command = data[0] & 0xf0;
+    const channel = (data[0] & 0x0f) + 1;
+    const data1 = data[1];
+    const data2 = data.length > 2 ? data[2] : 0;
+    
+    updateLastMidiMessage(command, channel, data1, data2);
+
+    if (command === 0xB0) {
+        handleMidiCC(channel, data1, data2);
+    } else if (command === 0x90 && data2 > 0) {
+        handleMidiNote(channel, data1, data2);
+    } else if (command === 0x80 || (command === 0x90 && data2 === 0)) {
+        handleMidiNoteOff(channel, data1, data2);
+    } else if (command === 0xC0) {
+        handleProgramChange(channel, data1);
+    }
+}
+
+function assignMidiMapping(midiKey, target) {
+    midiMap[midiKey] = target;
+    saveMidiMap(midiMap);
+    setMidiStatus(`Mapped ${midiKey} to ${target}`, 'ok');
+}
+
+function handleMidiCC(channel, cc, value) {
+    const midiKey = `cc:${cc}`;
+    if (midiLearnActive) {
+        assignMidiMapping(midiKey, midiLearnTarget.value);
+        stopMidiLearn();
+        return;
+    }
+    
+    const target = midiMap[midiKey];
+    if (!target) return;
+    
+    const normalized = value / 127.0;
+    applyMidiToTarget(target, normalized);
+}
+
+function handleMidiNote(channel, note, velocity) {
+    const midiKey = `note:${note}`;
+    if (midiLearnActive) {
+        assignMidiMapping(midiKey, midiLearnTarget.value);
+        stopMidiLearn();
+        return;
+    }
+    
+    const target = midiMap[midiKey];
+    if (target === 'freeze') {
+        setAudioParamSmooth('freeze', 1.0, 0.005);
+        btnFreezeHold.classList.add('active'); // Visual feedback
+    }
+}
+
+function handleMidiNoteOff(channel, note, velocity) {
+    const midiKey = `note:${note}`;
+    const target = midiMap[midiKey];
+    if (target === 'freeze') {
+        setAudioParamSmooth('freeze', chkFreezeLatch.checked ? 1.0 : 0.0, 0.02);
+        btnFreezeHold.classList.remove('active');
+    }
+}
+
+function handleProgramChange(channel, program) {
+    if (midiLearnActive) {
+        stopMidiLearn();
+    }
+    
+    const factoryKeys = Object.keys(FACTORY_PRESETS);
+    if (factoryKeys.length === 0) return;
+    
+    const index = program % factoryKeys.length;
+    const targetPreset = factoryKeys[index];
+    
+    presetSelect.value = targetPreset;
+    applyPreset(targetPreset);
+    setMidiStatus(`Program Change: ${program} -> Loaded ${targetPreset}`, 'info');
+}
+
+function applyMidiToTarget(target, normalized) {
+    if (target === 'freeze') {
+        const value = normalized >= 0.5 ? 1.0 : (chkFreezeLatch.checked ? 1.0 : 0.0);
+        setAudioParamSmooth('freeze', value, 0.01);
+        if (normalized >= 0.5) btnFreezeHold.classList.add('active');
+        else btnFreezeHold.classList.remove('active');
+        return;
+    }
+    
+    let scaled = normalized;
+    if (target === 'feedback') scaled = normalized * 0.94;
+    else if (target === 'inputGain' || target === 'outputGain') scaled = normalized * 2.0;
+    
+    // Update UI
+    const slider = document.getElementById(`p_${target}`);
+    if (slider) slider.value = scaled;
+    
+    const valEl = document.getElementById(`v_${target}`);
+    if (valEl) valEl.textContent = scaled.toFixed(2);
+    
+    setParam(target, scaled, true);
+}
+
+function startMidiLearn() {
+    midiLearnActive = true;
+    btnMidiLearn.textContent = "Learning... (Move Controller)";
+    btnMidiLearn.classList.add('warning');
+    setMidiStatus(`Move a MIDI CC or press a note to map to: ${midiLearnTarget.value}`, 'warn');
+}
+
+function stopMidiLearn() {
+    midiLearnActive = false;
+    btnMidiLearn.textContent = "MIDI Learn";
+    btnMidiLearn.classList.remove('warning');
+}
+
+if (btnEnableMidi) btnEnableMidi.addEventListener('click', enableMidi);
+if (midiInputSelect) midiInputSelect.addEventListener('change', (e) => selectMidiInput(e.target.value));
+if (btnMidiLearn) btnMidiLearn.addEventListener('click', () => {
+    if (midiLearnActive) stopMidiLearn();
+    else startMidiLearn();
+});
+if (btnClearMidiMap) btnClearMidiMap.addEventListener('click', clearMidiMap);
+

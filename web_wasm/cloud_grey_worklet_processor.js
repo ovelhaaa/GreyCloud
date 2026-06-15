@@ -169,7 +169,9 @@ class CloudGreyWorkletProcessor extends AudioWorkletProcessor {
 
     for (const [name, id] of Object.entries(PARAM_IDS)) {
       const val = getParam(name);
-      if (Math.abs((this.lastParams[name] ?? NaN) - val) > 1e-6) {
+      const prev = this.lastParams[name];
+
+      if (prev === undefined || Math.abs(prev - val) > 1e-6) {
         this.module._cgv_set_param(id, val);
         this.lastParams[name] = val;
       }

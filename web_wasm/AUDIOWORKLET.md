@@ -62,6 +62,27 @@ Custom presets can be saved, updated, deleted, exported, and imported using Loca
 ## Smooth Preset Switching
 Parameter changes (such as slider drags or entire preset swaps) are smoothed natively using the WebAudio `setTargetAtTime` API to avoid audio clicks and artifacts during harsh transitions. Note that radical changes to `size` or `feedback` may still cause temporary audible artifacts, as a characteristic of delay-line interpolation.
 
+## MIDI Control
+Web MIDI is now fully supported in Live Mode to allow hardware control over the DSP parameters.
+
+- **Enable MIDI**: Click the "Enable MIDI" button under the MIDI Control panel to request browser access.
+- **Select Input**: Once authorized, select your hardware controller from the dropdown menu.
+- **MIDI Learn**: 
+  - Select a target parameter (e.g., Mix, Size, Freeze) in the dropdown next to the MIDI Learn button.
+  - Click "MIDI Learn". The button will turn red.
+  - Move a CC knob or press a Note on your controller.
+  - The map is saved automatically to LocalStorage across sessions.
+- **Default CC Mappings**:
+  - `CC 1`: Mix
+  - `CC 2`: Texture
+  - `CC 3`: Feedback
+  - `CC 4`: Size
+  - `CC 5`: Tone
+  - `CC 64`: Freeze (values >= 64 enable hold freeze, values < 64 release it unless Latch is active).
+- **Program Change**: Sending a MIDI Program Change will cycle through the Factory Presets automatically modulo length.
+- **Freeze Mapping via Notes**: You can map a MIDI note directly to the Freeze parameter using MIDI Learn. Pressing the note engages the freeze, and releasing the note releases it.
+- **Note**: The Web MIDI API requires a secure context (localhost or HTTPS), and in some browsers, explicit user permission must be granted.
+
 ## Current Limitations & Next Steps
 - **Shimmer / Pitch Shifter**: Shimmer will be implemented later as a separate pitch-shift module inside the C++ DSP core, protected by the same Safety Energy Guard.
 - **FDN 4x4** architecture is not implemented yet.

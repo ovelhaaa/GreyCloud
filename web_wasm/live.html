@@ -166,7 +166,35 @@
     </div>
 
     <div class="panel full-width">
-        <h2>5. Quick Test Checklist</h2>
+        <h2>5. MIDI Control</h2>
+        <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem;">
+            <button id="btnEnableMidi" class="primary">Enable MIDI</button>
+            <select id="midiInputSelect" disabled style="background: #374151; color: white; border: 1px solid #4B5563; padding: 0.5rem; border-radius: 4px; min-width: 150px;">
+                <option value="">No MIDI active</option>
+            </select>
+            <button id="btnMidiLearn" data-dsp-control disabled>MIDI Learn</button>
+            <select id="midiLearnTarget" data-dsp-control disabled style="background: #374151; color: white; border: 1px solid #4B5563; padding: 0.5rem; border-radius: 4px;">
+                <option value="mix">Mix</option>
+                <option value="texture">Texture</option>
+                <option value="feedback">Feedback</option>
+                <option value="size">Size</option>
+                <option value="diffusion">Diffusion</option>
+                <option value="modDepth">Mod Depth</option>
+                <option value="modRate">Mod Rate</option>
+                <option value="damping">Damping</option>
+                <option value="tone">Tone</option>
+                <option value="inputGain">Input Gain</option>
+                <option value="outputGain">Output Gain</option>
+                <option value="freeze">Freeze</option>
+            </select>
+            <button id="btnClearMidiMap" class="warning">Clear MIDI Map</button>
+        </div>
+        <div id="midiLastMessage" style="font-family: monospace; font-size: 0.9rem; color: #60A5FA; margin-bottom: 0.5rem;">Last MIDI: —</div>
+        <div id="midiStatus" class="status-log"></div>
+    </div>
+
+    <div class="panel full-width">
+        <h2>6. Quick Test Checklist</h2>
         <div style="font-size: 0.95rem; color: #D1D5DB;">
             <ol id="testChecklist" style="margin: 0; padding-left: 1.5rem; line-height: 1.6;">
                 <li><label><input type="checkbox"> Start Audio.</label></li>
