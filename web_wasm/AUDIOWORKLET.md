@@ -84,5 +84,10 @@ Web MIDI is now fully supported in Live Mode to allow hardware control over the 
 - **Note**: The Web MIDI API requires a secure context (localhost or HTTPS), and in some browsers, explicit user permission must be granted.
 
 ## Current Limitations & Next Steps
-- **Shimmer / Pitch Shifter**: Shimmer will be implemented later as a separate pitch-shift module inside the C++ DSP core, protected by the same Safety Energy Guard.
 - **FDN 4x4** architecture is not implemented yet.
+
+## Shimmer (Experimental)
+An experimental Shimmer effect (1 octave up) is now available. It is heavily gated and limited by the internal C++ Safety Guard to prevent feedback blowout since the pitch shifter is injected directly into the reverb feedback loop.
+By default, the Shimmer effect is compiled (using `-DCGV_ENABLE_SHIMMER=1` in `build_live.sh`).
+It uses an internally designed double-window crossover algorithm instead of FFT to keep latency minimum and preserve resources.
+To test it, try adjusting the `Shimmer` slider in the Live UI or load the new `ShimmerCloud` preset.

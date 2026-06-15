@@ -13,7 +13,8 @@ const PARAM_IDS = {
   damping: 8,
   tone: 9,
   inputGain: 10,
-  outputGain: 11
+  outputGain: 11,
+  shimmer: 12
 };
 
 class CloudGreyWorkletProcessor extends AudioWorkletProcessor {
@@ -86,7 +87,8 @@ class CloudGreyWorkletProcessor extends AudioWorkletProcessor {
       { name: 'damping', defaultValue: 0.8, minValue: 0, maxValue: 1, automationRate: 'k-rate' },
       { name: 'tone', defaultValue: 0.4, minValue: 0, maxValue: 1, automationRate: 'k-rate' },
       { name: 'inputGain', defaultValue: 1, minValue: 0, maxValue: 2, automationRate: 'k-rate' },
-      { name: 'outputGain', defaultValue: 1, minValue: 0, maxValue: 2, automationRate: 'k-rate' }
+      { name: 'outputGain', defaultValue: 1, minValue: 0, maxValue: 2, automationRate: 'k-rate' },
+      { name: 'shimmer', defaultValue: 0, minValue: 0, maxValue: 1, automationRate: 'k-rate' }
     ];
   }
 

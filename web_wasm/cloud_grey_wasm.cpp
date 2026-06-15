@@ -39,7 +39,7 @@ void cgv_set_param(int paramId, float value) {
         case 7: cgv_params.modRate = value; break;
         case 8: cgv_params.damping = value; break;
         case 9: cgv_params.tone = value; break;
-        // shimmer is disabled directly, skipped
+        case 12: cgv_params.shimmer = value; break;
         case 10: cgv_params.inputGain = value; break;
         case 11: cgv_params.outputGain = value; break;
     }
@@ -58,6 +58,7 @@ float cgv_get_param(int paramId) {
         case 7: return cgv_params.modRate;
         case 8: return cgv_params.damping;
         case 9: return cgv_params.tone;
+        case 12: return cgv_params.shimmer;
         case 10: return cgv_params.inputGain;
         case 11: return cgv_params.outputGain;
     }
@@ -103,6 +104,14 @@ float cgv_get_safety_gain() {
 
 int cgv_is_initialized() {
     return isInit ? 1 : 0;
+}
+
+int cgv_shimmer_is_enabled() {
+#if CGV_ENABLE_SHIMMER
+    return 1;
+#else
+    return 0;
+#endif
 }
 
 } // extern "C"

@@ -26,17 +26,47 @@
     #define CGV_NUM_GRAINS 3
     #define CGV_NUM_ALLPASS 2
     #define CGV_NUM_LOOP_ALLPASS 0
-    #define CGV_ENABLE_SHIMMER 0
+    #ifndef CGV_ENABLE_SHIMMER
+        #define CGV_ENABLE_SHIMMER 0
+    #endif
 #elif CLOUD_GREY_PROFILE_H7_HIGH_QUALITY
     #define CGV_NUM_GRAINS 4
     #define CGV_NUM_ALLPASS 4
     #define CGV_NUM_LOOP_ALLPASS 2
-    #define CGV_ENABLE_SHIMMER 1 // TODO
+    #ifndef CGV_ENABLE_SHIMMER
+        #define CGV_ENABLE_SHIMMER 1
+    #endif
 #else // H5_BALANCED
     #define CGV_NUM_GRAINS 4
     #define CGV_NUM_ALLPASS 4
     #define CGV_NUM_LOOP_ALLPASS 2
-    #define CGV_ENABLE_SHIMMER 0
+    #ifndef CGV_ENABLE_SHIMMER
+        #define CGV_ENABLE_SHIMMER 0
+    #endif
+#endif
+
+#if CGV_ENABLE_SHIMMER
+class ShimmerPitcher {
+public:
+    bool init(float sampleRate, float* buffer, uint32_t bufferSize);
+    void reset();
+    float process(float input);
+
+private:
+    float readDelay(float delaySamples) const;
+
+    float* buffer_ = nullptr;
+    uint32_t size_ = 0;
+    uint32_t writePos_ = 0;
+    float sampleRate_ = 48000.0f;
+
+    float phaseA_ = 0.0f;
+    float phaseB_ = 0.5f;
+    float phaseInc_ = 0.0f;
+
+    float minDelaySamples_ = 0.0f;
+    float depthSamples_ = 0.0f;
+};
 #endif
 
 class CloudGreyVerb {
@@ -49,7 +79,8 @@ public:
         DarkLongCloud,
         GlitchSmear,
         AlwaysOnSubtle,
-        BrightCloud
+        BrightCloud,
+        ShimmerCloud
     };
 
     struct Params {
@@ -143,6 +174,13 @@ private:
     dsp::OnePoleRC dampL_, dampR_;
     dsp::OnePoleRC hpFeedL_, hpFeedR_; // Filtro HP para secar o low end
     dsp::OnePoleRC toneL_, toneR_;
+
+#if CGV_ENABLE_SHIMMER
+    ShimmerPitcher shimmer_;
+    bool shimmerAvailable_ = false;
+    dsp::OnePoleRC shimmerHp_;
+    dsp::OnePoleRC shimmerLp_;
+#endif
 
     // Helpers
     void processGranular(float input, float lfoDrift, float& outL, float& outR);

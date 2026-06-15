@@ -56,7 +56,7 @@ struct TestResult {
     bool hadNaN = false;
 };
 
-TestResult runTestForPreset(CloudGreyVerb::Preset preset, const string& presetName) {
+TestResult runTestForPreset(CloudGreyVerb::Preset preset, const string& presetName, float shimmerOverride = -1.0f) {
     TestResult result;
     result.presetName = presetName;
 
@@ -65,6 +65,9 @@ TestResult runTestForPreset(CloudGreyVerb::Preset preset, const string& presetNa
     cgv.init(SAMPLE_RATE, extBuffer.data(), BUFFER_SIZE);
 
     CloudGreyVerb::Params p = CloudGreyVerb::getPreset(preset);
+    if (shimmerOverride >= 0.0f) {
+        p.shimmer = shimmerOverride;
+    }
     cgv.setParams(p);
 
     const int chunkFrames = 512;
@@ -156,7 +159,8 @@ int main() {
         {CloudGreyVerb::Preset::DarkLongCloud, "DarkLongCloud"},
         {CloudGreyVerb::Preset::GlitchSmear, "GlitchSmear"},
         {CloudGreyVerb::Preset::AlwaysOnSubtle, "AlwaysOnSubtle"},
-        {CloudGreyVerb::Preset::BrightCloud, "BrightCloud"}
+        {CloudGreyVerb::Preset::BrightCloud, "BrightCloud"},
+        {CloudGreyVerb::Preset::ShimmerCloud, "ShimmerCloud"}
     };
     
     int passedCount = 0;
@@ -170,11 +174,8 @@ int main() {
          << "NaN?" << endl;
     cout << string(90, '-') << endl;
 
-    for (const auto& t : tests) {
-        TestResult r = runTestForPreset(t.first, t.second);
-        
+    auto printResult = [](const TestResult& r) {
         float clipPct = (float)r.numClips / (float)r.numSamples * 100.0f;
-        
         cout << left << setw(20) << r.presetName 
              << setw(10) << (r.passed ? "YES" : "NO")
              << setw(12) << fixed << setprecision(4) << r.maxPeak
@@ -182,14 +183,30 @@ int main() {
              << setw(12) << r.maxLoopEnergy
              << setw(15) << fixed << setprecision(3) << clipPct
              << (r.hadNaN ? "YES" : "NO") << endl;
-             
+    };
+
+    int totalTests = 0;
+    for (const auto& t : tests) {
+        TestResult r = runTestForPreset(t.first, t.second);
+        printResult(r);
         if (r.passed) passedCount++;
+        totalTests++;
+    }
+    
+    // Testes de estresse Shimmer
+    vector<float> shimmerValues = {0.0f, 0.25f, 0.5f, 1.0f};
+    for (float shm : shimmerValues) {
+        string name = "SafeShimmer_" + to_string((int)(shm * 100)) + "pct";
+        TestResult r = runTestForPreset(CloudGreyVerb::Preset::AlwaysOnSubtle, name, shm);
+        printResult(r);
+        if (r.passed) passedCount++;
+        totalTests++;
     }
 
     cout << string(90, '-') << endl;
-    cout << "Testes passando: " << passedCount << "/" << tests.size() << endl;
+    cout << "Testes passando: " << passedCount << "/" << totalTests << endl;
 
-    if (passedCount == tests.size()) {
+    if (passedCount == totalTests) {
         cout << "SUCESSO GERAL!" << endl;
         return 0;
     } else {

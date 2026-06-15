@@ -47,9 +47,92 @@ CloudGreyVerb::Params CloudGreyVerb::getPreset(Preset preset) {
             p.size = 0.6f; p.diffusion = 0.7f; p.modDepth = 0.6f; p.modRate = 0.4f;
             p.damping = 0.7f; p.tone = 0.8f; p.shimmer = 0.0f;
             break;
+        case Preset::ShimmerCloud:
+            p.mix = 0.55f; p.texture = 0.55f; p.freeze = 0.0f; p.feedback = 0.65f;
+            p.size = 0.65f; p.diffusion = 0.75f; p.modDepth = 0.20f; p.modRate = 0.12f;
+            p.damping = 0.55f; p.tone = 0.62f; p.shimmer = 0.25f; p.inputGain = 0.85f; p.outputGain = 0.85f;
+            break;
     }
     return p;
 }
+
+#if CGV_ENABLE_SHIMMER
+bool ShimmerPitcher::init(float sampleRate, float* buffer, uint32_t bufferSize) {
+    if (!buffer || bufferSize == 0 || sampleRate <= 0.0f) return false;
+    sampleRate_ = sampleRate;
+    buffer_ = buffer;
+    size_ = bufferSize;
+    
+    float ratio = 2.0f; // one octave up
+    minDelaySamples_ = (8.0f / 1000.0f) * sampleRate_;
+    depthSamples_ = (42.0f / 1000.0f) * sampleRate_;
+    
+    if (minDelaySamples_ + depthSamples_ + 2.0f > size_) {
+        depthSamples_ = size_ - minDelaySamples_ - 2.0f;
+    }
+    
+    if (depthSamples_ < 10.0f) return false;
+    
+    phaseInc_ = (ratio - 1.0f) / depthSamples_;
+    reset();
+    return true;
+}
+
+void ShimmerPitcher::reset() {
+    if (buffer_) {
+        for (uint32_t i=0; i<size_; ++i) buffer_[i] = 0.0f;
+    }
+    writePos_ = 0;
+    phaseA_ = 0.0f;
+    phaseB_ = 0.5f;
+}
+
+float ShimmerPitcher::readDelay(float delaySamples) const {
+    float readPos = static_cast<float>(writePos_) - delaySamples;
+    float fSize = static_cast<float>(size_);
+    if (readPos < 0.0f) {
+        readPos = fmodf(readPos, fSize);
+        if (readPos < 0.0f) readPos += fSize;
+    }
+    
+    uint32_t idx1 = static_cast<uint32_t>(readPos);
+    uint32_t idx2 = (idx1 + 1) % size_;
+    float frac = readPos - static_cast<float>(idx1);
+    
+    return dsp::lerp(buffer_[idx1], buffer_[idx2], frac);
+}
+
+float ShimmerPitcher::process(float input) {
+    if (!buffer_ || size_ == 0) return 0.0f;
+    
+    input = dsp::sanitize(input);
+    buffer_[writePos_] = input;
+    writePos_ = (writePos_ + 1) % size_;
+    
+    float delayA = minDelaySamples_ + depthSamples_ * (1.0f - phaseA_);
+    float delayB = minDelaySamples_ + depthSamples_ * (1.0f - phaseB_);
+    
+    float windowA = 4.0f * phaseA_ * (1.0f - phaseA_);
+    float windowB = 4.0f * phaseB_ * (1.0f - phaseB_);
+    
+    float outA = readDelay(delayA);
+    float outB = readDelay(delayB);
+    
+    float out = outA * windowA + outB * windowB;
+    float norm = windowA + windowB;
+    if (norm > 0.001f) out /= norm;
+    
+    out = dsp::softClip(out);
+    
+    phaseA_ += phaseInc_;
+    if (phaseA_ >= 1.0f) phaseA_ -= 1.0f;
+    
+    phaseB_ += phaseInc_;
+    if (phaseB_ >= 1.0f) phaseB_ -= 1.0f;
+    
+    return out;
+}
+#endif
 
 void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferSize) {
     initialized_ = false;
@@ -81,9 +164,15 @@ void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferS
     size_t lapLSize   = 0;
     size_t lapRSize   = 0;
 #endif
+
+#if CGV_ENABLE_SHIMMER
+    size_t shimmerSize = static_cast<size_t>(bufferSize * 0.08f); // ~80ms a 48kHz
+#else
+    size_t shimmerSize = 0;
+#endif
     
-    // O restante vai para main delays (~66%)
-    size_t remaining = bufferSize - (granulSize + ap1Size + ap2Size + ap3Size + ap4Size + lapLSize + lapRSize);
+    // O restante vai para main delays (~58-66%)
+    size_t remaining = bufferSize - (granulSize + ap1Size + ap2Size + ap3Size + ap4Size + lapLSize + lapRSize + shimmerSize);
     mainDelaySize_ = remaining / 2;
 
     // Atribuição sequencial s/ alocação
@@ -102,6 +191,11 @@ void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferS
 #if CGV_NUM_LOOP_ALLPASS > 0
     loopApL_.init(ptr, lapLSize); ptr += lapLSize;
     loopApR_.init(ptr, lapRSize); ptr += lapRSize;
+#endif
+
+#if CGV_ENABLE_SHIMMER
+    shimmerAvailable_ = shimmer_.init(sampleRate_, ptr, shimmerSize);
+    ptr += shimmerSize;
 #endif
 
     delayL_.init(ptr, mainDelaySize_); ptr += mainDelaySize_;
@@ -148,6 +242,11 @@ void CloudGreyVerb::reset() {
     dampL_.clear(); dampR_.clear();
     hpFeedL_.clear(); hpFeedR_.clear();
     toneL_.clear(); toneR_.clear();
+#if CGV_ENABLE_SHIMMER
+    shimmerHp_.clear();
+    shimmerLp_.clear();
+    shimmer_.reset();
+#endif
 }
 
 static inline float clampParam(float v, float minV, float maxV) {
@@ -204,6 +303,11 @@ void CloudGreyVerb::setParams(const Params& p) {
         toneGainLow_ = (1.0f - (params_.tone - 0.5f) * 2.0f); // Atenua graves
         toneGainHigh_ = 1.0f;
     }
+
+#if CGV_ENABLE_SHIMMER
+    shimmerHp_.setFreq(300.0f, sampleRate_);
+    shimmerLp_.setFreq(7000.0f, sampleRate_);
+#endif
 }
 
 void CloudGreyVerb::processGranular(float input, float lfoDrift, float& outL, float& outR) {
@@ -386,9 +490,25 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
         feedLoopR *= reduction;
     }
 
-    // TODO: Implementar módulo Shimmer (+1 OCT pitch shifter).
-    // Evitado temporariamente por restrições rigorosas de segurança/CPU.
-    // feedLoopL += pitchShift(readL) * params_.shimmer;
+#if CGV_ENABLE_SHIMMER
+    if (shimmerAvailable_ && params_.shimmer > 0.001f) {
+        // Obter uma média mono filtrada da cauda
+        float shimmerIn = (readL + readR) * 0.5f;
+        shimmerIn = shimmerIn - shimmerHp_.process(shimmerIn); // HP 300Hz (hp = x - lp)
+        shimmerIn = shimmerLp_.process(shimmerIn);             // LP 7000Hz
+        
+        shimmerIn = dsp::softClip(shimmerIn);
+        
+        float shimmerOut = shimmer_.process(shimmerIn);
+        shimmerOut = dsp::sanitize(shimmerOut);
+        
+        float shimmerAmount = params_.shimmer;
+        float shimmerSend = shimmerAmount * 0.18f; // Ganho máximo 0.18 como de segurança
+        
+        feedLoopL += shimmerOut * shimmerSend;
+        feedLoopR += shimmerOut * shimmerSend * 0.92f;
+    }
+#endif
 
     // Saturação musical protegendo O(INF) feedback blowout
     feedLoopL = dsp::softClip(feedLoopL);

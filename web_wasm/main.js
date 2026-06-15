@@ -78,6 +78,7 @@ const paramInputs = [
     { el: document.getElementById('param_7'), val: document.getElementById('val_modrate') },
     { el: document.getElementById('param_8'), val: document.getElementById('val_damping') },
     { el: document.getElementById('param_9'), val: document.getElementById('val_tone') },
+    { el: document.getElementById('param_12'), val: document.getElementById('val_shimmer') },
     { el: document.getElementById('param_10'), val: document.getElementById('val_ingain') },
     { el: document.getElementById('param_11'), val: document.getElementById('val_outgain') }
 ];
