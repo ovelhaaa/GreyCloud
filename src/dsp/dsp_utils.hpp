@@ -9,10 +9,15 @@ constexpr float PI = 3.14159265358979323846f;
 
 // Saturação (Limiter) rápido para reverb tails. Deve ser transparente em sinais baixos.
 inline float softClip(float x) {
-    // Curva cúbica rápida que limpa a região < 0.5 e satura suavemente em 1.0
-    if (x > 1.0f) return 1.0f;
-    if (x < -1.0f) return -1.0f;
-    return x * (1.5f - 0.5f * x * x);
+    if (x > 3.0f) return 1.0f;
+    if (x < -3.0f) return -1.0f;
+
+    float x2 = x * x;
+    float y = x * (27.0f + x2) / (27.0f + 9.0f * x2);
+
+    if (y > 1.0f) return 1.0f;
+    if (y < -1.0f) return -1.0f;
+    return y;
 }
 
 inline float hardClip(float x) {

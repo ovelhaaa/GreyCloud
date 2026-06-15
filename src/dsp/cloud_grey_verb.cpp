@@ -13,9 +13,9 @@ CloudGreyVerb::Params CloudGreyVerb::getPreset(Preset preset) {
             p.damping = 0.5f; p.tone = 0.6f;
             break;
         case Preset::BassAmbientWash:
-            p.mix = 0.35f; p.texture = 0.4f; p.freeze = 0.0f; p.feedback = 0.70f;
-            p.size = 0.6f; p.diffusion = 0.5f; p.modDepth = 0.15f; p.modRate = 0.15f;
-            p.damping = 0.8f; p.tone = 0.4f;
+            p.mix = 0.32f; p.texture = 0.38f; p.freeze = 0.0f; p.feedback = 0.58f;
+            p.size = 0.52f; p.diffusion = 0.45f; p.modDepth = 0.12f; p.modRate = 0.15f;
+            p.damping = 0.75f; p.tone = 0.38f; p.inputGain = 0.85f; p.outputGain = 0.85f; p.shimmer = 0.0f;
             break;
         case Preset::FrozenOrganPad:
             p.mix = 0.7f; p.texture = 0.85f; p.freeze = 1.0f; p.feedback = 0.65f;
@@ -23,14 +23,14 @@ CloudGreyVerb::Params CloudGreyVerb::getPreset(Preset preset) {
             p.damping = 0.4f; p.tone = 0.45f;
             break;
         case Preset::GreyholeDelayVerb:
-            p.mix = 0.6f; p.texture = 0.55f; p.freeze = 0.0f; p.feedback = 0.85f;
-            p.size = 0.8f; p.diffusion = 0.75f; p.modDepth = 0.4f; p.modRate = 0.25f;
-            p.damping = 0.65f; p.tone = 0.5f;
+            p.mix = 0.6f; p.texture = 0.55f; p.freeze = 0.0f; p.feedback = 0.72f;
+            p.size = 0.72f; p.diffusion = 0.65f; p.modDepth = 0.4f; p.modRate = 0.25f;
+            p.damping = 0.65f; p.tone = 0.5f; p.outputGain = 0.85f;
             break;
         case Preset::DarkLongCloud:
-            p.mix = 0.55f; p.texture = 0.75f; p.freeze = 0.0f; p.feedback = 0.88f;
-            p.size = 0.9f; p.diffusion = 0.70f; p.modDepth = 0.3f; p.modRate = 0.1f;
-            p.damping = 0.3f; p.tone = 0.3f; p.inputGain = 0.80f; p.outputGain = 0.75f;
+            p.mix = 0.55f; p.texture = 0.75f; p.freeze = 0.0f; p.feedback = 0.74f;
+            p.size = 0.82f; p.diffusion = 0.62f; p.modDepth = 0.3f; p.modRate = 0.1f;
+            p.damping = 0.3f; p.tone = 0.3f; p.inputGain = 0.70f; p.outputGain = 0.65f;
             break;
         case Preset::GlitchSmear:
             p.mix = 0.5f; p.texture = 0.05f; p.freeze = 0.0f; p.feedback = 0.5f;
@@ -48,9 +48,9 @@ CloudGreyVerb::Params CloudGreyVerb::getPreset(Preset preset) {
             p.damping = 0.7f; p.tone = 0.8f; p.shimmer = 0.0f;
             break;
         case Preset::ShimmerCloud:
-            p.mix = 0.55f; p.texture = 0.55f; p.freeze = 0.0f; p.feedback = 0.65f;
-            p.size = 0.65f; p.diffusion = 0.75f; p.modDepth = 0.20f; p.modRate = 0.12f;
-            p.damping = 0.55f; p.tone = 0.62f; p.shimmer = 0.25f; p.inputGain = 0.85f; p.outputGain = 0.85f;
+            p.mix = 0.55f; p.texture = 0.55f; p.freeze = 0.0f; p.feedback = 0.55f;
+            p.size = 0.58f; p.diffusion = 0.65f; p.modDepth = 0.20f; p.modRate = 0.12f;
+            p.damping = 0.55f; p.tone = 0.62f; p.shimmer = 0.18f; p.inputGain = 0.75f; p.outputGain = 0.75f;
             break;
     }
     return p;
@@ -361,9 +361,9 @@ void CloudGreyVerb::setParams(const Params& p) {
     
     // Dynamic lowpass quadratic curve: preserves brightness in low amounts, darkens in high amounts
     float shmSq = params_.shimmer * params_.shimmer;
-    float lpFreq = 5500.0f - (shmSq * 1700.0f);
-    if (lpFreq < 3800.0f) lpFreq = 3800.0f;
-    shimmerLp_.setFreq(lpFreq, sampleRate_);
+    float shimmerLpFreq = 5500.0f - (shmSq * 1700.0f);
+    if (shimmerLpFreq < 3800.0f) shimmerLpFreq = 3800.0f;
+    shimmerLp_.setFreq(shimmerLpFreq, sampleRate_);
 #endif
 }
 
@@ -538,8 +538,16 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
 #endif
 
     // Injeção de volta à linha de atraso (CROSS-FEEDBACK Matrix L/R)
-    float feedLoopL = diffInL * 0.65f + readR * params_.feedback;
-    float feedLoopR = diffInR * 0.65f + readL * params_.feedback;
+    float inputInject = dsp::lerp(0.24f, 0.34f, params_.diffusion);
+
+    float sizeComp = dsp::lerp(1.0f, 0.82f, params_.size);
+    float effectiveFeedback = params_.feedback * sizeComp;
+
+    float feedbackProbeL = readR * effectiveFeedback;
+    float feedbackProbeR = readL * effectiveFeedback;
+
+    float feedLoopL = diffInL * inputInject + feedbackProbeL;
+    float feedLoopR = diffInR * inputInject + feedbackProbeR;
     
     if (freezeSmoothed_ > 0.5f) {
         float reduction = 1.0f - ((freezeSmoothed_ - 0.5f) * 2.0f * 0.2f); // up to 20% reduction
@@ -578,13 +586,17 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
             float duck = 1.0f / (1.0f + shimmerEnvState_ * 6.0f); 
             float duckGain = 0.25f + 0.75f * duck;
             
-            float shimmerSend = currentShimmerAmount * 0.18f * duckGain; // Ganho máximo 0.18 como de segurança
+            float shimmerSend = currentShimmerAmount * 0.08f * duckGain; // Reduced max gain
             
             feedLoopL += shimmerOutL * shimmerSend;
             feedLoopR += shimmerOutR * shimmerSend;
         }
     }
 #endif
+
+    constexpr float kLoopWriteHeadroom = 0.82f;
+    feedLoopL *= kLoopWriteHeadroom;
+    feedLoopR *= kLoopWriteHeadroom;
 
     // Saturação musical protegendo O(INF) feedback blowout
     feedLoopL = dsp::softClip(feedLoopL);
@@ -594,13 +606,15 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     float e = feedLoopL * feedLoopL + feedLoopR * feedLoopR;
     loopEnergy_ = 0.9995f * loopEnergy_ + 0.0005f * e;
 
+    constexpr float kSafetyThreshold = 0.55f;
     float safety = 1.0f;
-    if (loopEnergy_ > 0.45f) {
-        safety = 0.45f / loopEnergy_;
+    if (loopEnergy_ > kSafetyThreshold) {
+        safety = kSafetyThreshold / loopEnergy_;
         if (safety > 1.0f) safety = 1.0f;
         if (safety < 0.35f) safety = 0.35f;
     }
-    lastSafetyGain_ = dsp::lerp(lastSafetyGain_, safety, 0.001f);
+    float safetyCoeff = (safety < lastSafetyGain_) ? 0.03f : 0.001f;
+    lastSafetyGain_ = dsp::lerp(lastSafetyGain_, safety, safetyCoeff);
     
     dsp::sanitize(loopEnergy_);
     dsp::sanitize(lastSafetyGain_);

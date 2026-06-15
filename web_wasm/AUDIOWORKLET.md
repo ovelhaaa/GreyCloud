@@ -83,6 +83,29 @@ Web MIDI is now fully supported in Live Mode to allow hardware control over the 
 - **Freeze Mapping via Notes**: You can map a MIDI note directly to the Freeze parameter using MIDI Learn. Pressing the note engages the freeze, and releasing the note releases it.
 - **Note**: The Web MIDI API requires a secure context (localhost or HTTPS), and in some browsers, explicit user permission must be granted.
 
+## Troubleshooting: Unable to load a worklet's module
+
+If Live Mode fails with:
+
+`Failed to init audio: Unable to load a worklet's module`
+
+check that `cloud_grey_live.js` and `cloud_grey_live.wasm` exist in `web_wasm/`.
+
+Run:
+
+```bash
+cd web_wasm
+chmod +x build_live.sh
+./build_live.sh
+python3 -m http.server 8080
+```
+
+Then open:
+
+`http://localhost:8080/live.html`
+
+Do not open the HTML directly from the filesystem.
+
 ## Current Limitations & Next Steps
 - **FDN 4x4** architecture is not implemented yet.
 

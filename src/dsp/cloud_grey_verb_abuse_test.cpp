@@ -54,6 +54,10 @@ struct TestResult {
     float minSafetyGain = 1.0f;
     float maxLoopEnergy = 0.0f;
     bool hadNaN = false;
+    float earlyTailRms = 0.0f;
+    float endTailRms = 0.0f;
+    int safetyActiveChunks = 0;
+    int totalChunks = 0;
 };
 
 TestResult runTestForPreset(CloudGreyVerb::Preset preset, const string& presetName, float shimmerOverride = -1.0f) {
@@ -114,12 +118,25 @@ TestResult runTestForPreset(CloudGreyVerb::Preset preset, const string& presetNa
                 if (absR >= 0.999f) result.numClips++;
                 
                 result.numSamples += 2;
+                
+                if (stageIdx == 1) {
+                    int sampleIdx = c * chunkFrames + i;
+                    if (sampleIdx >= 0 && sampleIdx < 24000) { // first 500ms
+                        result.earlyTailRms += left[i]*left[i] + right[i]*right[i];
+                    }
+                    if (sampleIdx >= totalFrames - 24000 && sampleIdx < totalFrames) { // last 500ms
+                        result.endTailRms += left[i]*left[i] + right[i]*right[i];
+                    }
+                }
             }
             
             float sg = cgv.getSafetyGain();
             float le = cgv.getLoopEnergy();
             if (sg < result.minSafetyGain) result.minSafetyGain = sg;
             if (le > result.maxLoopEnergy) result.maxLoopEnergy = le;
+            
+            if (sg < 0.98f) result.safetyActiveChunks++;
+            result.totalChunks++;
         }
     };
 
@@ -140,6 +157,16 @@ TestResult runTestForPreset(CloudGreyVerb::Preset preset, const string& presetNa
     if (result.maxPeak > 1.0f) result.passed = false;
     float clipRatio = (float)result.numClips / (float)result.numSamples;
     if (clipRatio > 0.01f) result.passed = false;
+    
+    // Tail Growth check on stage 1
+    result.earlyTailRms = sqrtf(result.earlyTailRms / (24000 * 2));
+    result.endTailRms = sqrtf(result.endTailRms / (24000 * 2));
+    
+    if (preset != CloudGreyVerb::Preset::FrozenOrganPad) {
+        if (result.endTailRms > result.earlyTailRms * 0.85f && result.earlyTailRms > 1e-5f) {
+            result.passed = false;
+        }
+    }
     // Se o safety gain diminui muito e fica colado, pode indicar instabilidade extrema.
     // Mas se descer < 0.5 transitoriamente e proteger o loop, é um sucesso do safety!
     
@@ -167,21 +194,27 @@ int main() {
 
     cout << left << setw(20) << "Preset Name" 
          << setw(10) << "Passed" 
-         << setw(12) << "Max Peak"
-         << setw(12) << "Min Safety"
-         << setw(12) << "Max Energy"
-         << setw(15) << "Clip %" 
+         << setw(10) << "Max Peak"
+         << setw(10) << "Min Sfty"
+         << setw(10) << "Max E"
+         << setw(12) << "Tail Ratio"
+         << setw(12) << "Sfty Act%"
+         << setw(10) << "Clip %" 
          << "NaN?" << endl;
-    cout << string(90, '-') << endl;
+    cout << string(105, '-') << endl;
 
     auto printResult = [](const TestResult& r) {
         float clipPct = (float)r.numClips / (float)r.numSamples * 100.0f;
+        float tailRatio = (r.earlyTailRms > 1e-6f) ? (r.endTailRms / r.earlyTailRms) : 0.0f;
+        float sftyPct = (r.totalChunks > 0) ? ((float)r.safetyActiveChunks / r.totalChunks * 100.0f) : 0.0f;
         cout << left << setw(20) << r.presetName 
              << setw(10) << (r.passed ? "YES" : "NO")
-             << setw(12) << fixed << setprecision(4) << r.maxPeak
-             << setw(12) << r.minSafetyGain
-             << setw(12) << r.maxLoopEnergy
-             << setw(15) << fixed << setprecision(3) << clipPct
+             << setw(10) << fixed << setprecision(3) << r.maxPeak
+             << setw(10) << r.minSafetyGain
+             << setw(10) << r.maxLoopEnergy
+             << setw(12) << tailRatio
+             << setw(12) << sftyPct
+             << setw(10) << fixed << setprecision(2) << clipPct
              << (r.hadNaN ? "YES" : "NO") << endl;
     };
 

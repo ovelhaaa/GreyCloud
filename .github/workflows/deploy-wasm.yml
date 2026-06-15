@@ -35,6 +35,8 @@ jobs:
           cd web_wasm
           chmod +x build.sh
           ./build.sh
+          chmod +x build_live.sh
+          ./build_live.sh
 
       - name: Prepare Deployment Folder
         run: |

@@ -37,14 +37,14 @@ const presetAlert = document.getElementById('presetAlert');
 
 const FACTORY_PRESETS = {
   SmallCloudRoom: { mix: 0.4, texture: 0.3, freeze: 0.0, feedback: 0.5, size: 0.35, diffusion: 0.6, modDepth: 0.2, modRate: 0.15, damping: 0.5, tone: 0.6, inputGain: 1.0, outputGain: 1.0, shimmer: 0.0 },
-  BassAmbientWash: { mix: 0.35, texture: 0.4, freeze: 0.0, feedback: 0.70, size: 0.6, diffusion: 0.5, modDepth: 0.15, modRate: 0.15, damping: 0.8, tone: 0.4, inputGain: 1.0, outputGain: 1.0, shimmer: 0.0 },
+  BassAmbientWash: { mix: 0.32, texture: 0.38, freeze: 0.0, feedback: 0.58, size: 0.52, diffusion: 0.45, modDepth: 0.12, modRate: 0.15, damping: 0.75, tone: 0.38, inputGain: 0.85, outputGain: 0.85, shimmer: 0.0 },
   FrozenOrganPad: { mix: 0.7, texture: 0.85, freeze: 1.0, feedback: 0.65, size: 0.7, diffusion: 0.8, modDepth: 0.4, modRate: 0.05, damping: 0.4, tone: 0.45, inputGain: 1.0, outputGain: 1.0, shimmer: 0.0 },
-  GreyholeDelayVerb: { mix: 0.6, texture: 0.55, freeze: 0.0, feedback: 0.85, size: 0.8, diffusion: 0.75, modDepth: 0.4, modRate: 0.25, damping: 0.65, tone: 0.5, inputGain: 1.0, outputGain: 1.0, shimmer: 0.0 },
-  DarkLongCloud: { mix: 0.55, texture: 0.75, freeze: 0.0, feedback: 0.88, size: 0.9, diffusion: 0.70, modDepth: 0.3, modRate: 0.1, damping: 0.3, tone: 0.3, inputGain: 0.80, outputGain: 0.75, shimmer: 0.0 },
+  GreyholeDelayVerb: { mix: 0.6, texture: 0.55, freeze: 0.0, feedback: 0.72, size: 0.72, diffusion: 0.65, modDepth: 0.4, modRate: 0.25, damping: 0.65, tone: 0.5, inputGain: 1.0, outputGain: 0.85, shimmer: 0.0 },
+  DarkLongCloud: { mix: 0.55, texture: 0.75, freeze: 0.0, feedback: 0.74, size: 0.82, diffusion: 0.62, modDepth: 0.3, modRate: 0.1, damping: 0.3, tone: 0.3, inputGain: 0.70, outputGain: 0.65, shimmer: 0.0 },
   GlitchSmear: { mix: 0.5, texture: 0.05, freeze: 0.0, feedback: 0.5, size: 0.25, diffusion: 0.2, modDepth: 0.9, modRate: 0.8, damping: 0.5, tone: 0.5, inputGain: 1.0, outputGain: 1.0, shimmer: 0.0 },
   AlwaysOnSubtle: { mix: 0.25, texture: 0.2, freeze: 0.0, feedback: 0.3, size: 0.2, diffusion: 0.4, modDepth: 0.1, modRate: 0.1, damping: 0.5, tone: 0.5, inputGain: 1.0, outputGain: 1.0, shimmer: 0.0 },
   BrightCloud: { mix: 0.5, texture: 0.6, freeze: 0.0, feedback: 0.75, size: 0.6, diffusion: 0.7, modDepth: 0.6, modRate: 0.4, damping: 0.7, tone: 0.8, inputGain: 1.0, outputGain: 1.0, shimmer: 0.0 },
-  ShimmerCloud: { mix: 0.55, texture: 0.55, freeze: 0.0, feedback: 0.65, size: 0.65, diffusion: 0.75, modDepth: 0.20, modRate: 0.12, damping: 0.55, tone: 0.62, inputGain: 0.85, outputGain: 0.85, shimmer: 0.25 }
+  ShimmerCloud: { mix: 0.55, texture: 0.55, freeze: 0.0, feedback: 0.55, size: 0.58, diffusion: 0.65, modDepth: 0.20, modRate: 0.12, damping: 0.55, tone: 0.62, inputGain: 0.75, outputGain: 0.75, shimmer: 0.18 }
 };
 
 const sliders = ['mix', 'texture', 'feedback', 'size', 'diffusion', 'modDepth', 'modRate', 'damping', 'tone', 'shimmer', 'inputGain', 'outputGain'];
@@ -105,7 +105,13 @@ async function initAudio() {
             latencyHint: 'interactive'
         });
 
-        await audioCtx.audioWorklet.addModule(WORKLET_URL);
+        try {
+            await audioCtx.audioWorklet.addModule(WORKLET_URL);
+        } catch (err) {
+            throw new Error(
+                `Failed to load AudioWorklet module. Make sure cloud_grey_worklet_processor.js can import cloud_grey_live.js and that build_live.sh was run. Original error: ${err.message}`
+            );
+        }
 
         setEngineStatus('Fetching WASM');
         setStatus('Fetching WASM binary...', 'info');
