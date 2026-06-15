@@ -33,8 +33,9 @@ const chkFreezeLatch = document.getElementById('chkFreezeLatch');
 const btnResetTail = document.getElementById('btnResetTail');
 
 const presetSelect = document.getElementById('presetSelect');
+const presetAlert = document.getElementById('presetAlert');
 
-const PRESETS = {
+const FACTORY_PRESETS = {
   SmallCloudRoom: { mix: 0.4, texture: 0.3, freeze: 0.0, feedback: 0.5, size: 0.35, diffusion: 0.6, modDepth: 0.2, modRate: 0.15, damping: 0.5, tone: 0.6, inputGain: 1.0, outputGain: 1.0 },
   BassAmbientWash: { mix: 0.35, texture: 0.4, freeze: 0.0, feedback: 0.70, size: 0.6, diffusion: 0.5, modDepth: 0.15, modRate: 0.15, damping: 0.8, tone: 0.4, inputGain: 1.0, outputGain: 1.0 },
   FrozenOrganPad: { mix: 0.7, texture: 0.85, freeze: 1.0, feedback: 0.65, size: 0.7, diffusion: 0.8, modDepth: 0.4, modRate: 0.05, damping: 0.4, tone: 0.45, inputGain: 1.0, outputGain: 1.0 },
@@ -46,6 +47,8 @@ const PRESETS = {
 };
 
 const sliders = ['mix', 'texture', 'feedback', 'size', 'diffusion', 'modDepth', 'modRate', 'damping', 'tone', 'inputGain', 'outputGain'];
+
+const USER_PRESETS_STORAGE_KEY = 'greycloud.userPresets.v1';
 
 // Telemetry Elements
 const peakLevel = document.getElementById('peakLevel');
@@ -69,6 +72,24 @@ function setEngineStatus(status) {
     }
 }
 
+function setStatus(message, level = 'info') {
+    const el = document.getElementById('statusLog');
+    if (!el) return;
+    el.textContent = message;
+    el.dataset.level = level;
+    if (level === 'error') {
+        alert(message); // Keep alert for fatal errors for visibility
+    }
+}
+
+function setPresetStatus(msg, error=false) {
+    const el = document.getElementById('presetStatus');
+    if (el) {
+        el.textContent = msg;
+        el.style.color = error ? '#EF4444' : '#10B981';
+    }
+}
+
 // Inicialmente desabilitar tudo
 setControlsEnabled(false);
 setEngineStatus('Engine Off');
@@ -86,9 +107,11 @@ async function initAudio() {
         await audioCtx.audioWorklet.addModule(WORKLET_URL);
 
         setEngineStatus('Fetching WASM');
+        setStatus('Fetching WASM binary...', 'info');
         const response = await fetch(WASM_URL);
         if (!response.ok) throw new Error("Failed to load WASM binary");
         const wasmBytes = await response.arrayBuffer();
+        setStatus('WASM loaded successfuly.', 'ok');
 
         cloudNode = new AudioWorkletNode(audioCtx, 'cloud-grey-worklet-processor', {
             outputChannelCount: [2]
@@ -104,7 +127,9 @@ async function initAudio() {
                 btnPower.style.borderColor = "#059669";
                 
                 setEngineStatus('Running');
+                setStatus('DSP Engine initialized and running.', 'ok');
                 setControlsEnabled(true);
+                refreshPresetSelect();
                 applyPreset(presetSelect.value);
                 handleSourceChange();
             } else if (e.data.type === 'meter') {
@@ -112,7 +137,7 @@ async function initAudio() {
             } else if (e.data.type === 'error') {
                 console.error("Worklet Error:", e.data.message);
                 setEngineStatus('Error');
-                alert("Worklet Error: " + e.data.message);
+                setStatus("Worklet Error: " + e.data.message, 'error');
             }
         };
 
@@ -127,7 +152,7 @@ async function initAudio() {
     } catch (err) {
         console.error(err);
         setEngineStatus('Error');
-        alert("Failed to init audio: " + err.message);
+        setStatus("Failed to init audio: " + err.message, 'error');
         btnPower.textContent = "START AUDIO";
         btnPower.disabled = false;
     }
@@ -155,10 +180,17 @@ function updateTelemetry(data) {
     else v_safetygain.style.color = '#EF4444';
 }
 
-function applyPreset(name) {
+function setAudioParamSmooth(name, value, timeConstant = 0.02) {
+    if (!cloudNode || !audioCtx) return;
+    const param = cloudNode.parameters.get(name);
+    if (!param) return;
+
+    param.cancelScheduledValues(audioCtx.currentTime);
+    param.setTargetAtTime(value, audioCtx.currentTime, timeConstant);
+}
+
+function applyParams(p) {
     if (!cloudNode) return;
-    const p = PRESETS[name];
-    if (!p) return;
 
     for (const key of sliders) {
         const el = document.getElementById(`p_${key}`);
@@ -167,21 +199,45 @@ function applyPreset(name) {
             el.value = p[key];
             if (valEl) valEl.textContent = p[key].toFixed(2);
             
-            const param = cloudNode.parameters.get(key);
-            if (param) param.value = p[key];
+            // Smooth transition for preset swaps
+            setAudioParamSmooth(key, p[key], 0.02);
         }
     }
     
     // freeze
-    const fParam = cloudNode.parameters.get('freeze');
-    if (fParam) fParam.value = p.freeze;
+    setAudioParamSmooth('freeze', p.freeze, 0.02);
     chkFreezeLatch.checked = p.freeze > 0.5;
+
+    if (presetAlert) {
+        if (p.feedback >= 0.85 || p.size >= 0.85 || p.diffusion >= 0.75) {
+            presetAlert.style.display = 'block';
+        } else {
+            presetAlert.style.display = 'none';
+        }
+    }
 }
 
-function setParam(name, value) {
+function applyPreset(name) {
+    const all = getAllPresets();
+    const p = all[name];
+    if (!p) return;
+    const nameInput = document.getElementById('presetNameInput');
+    if (nameInput && name.startsWith('user:')) {
+        nameInput.value = name.substring(5);
+    } else if (nameInput) {
+        nameInput.value = '';
+    }
+    applyParams(p.params || p); // user presets vs factory structure
+}
+
+function setParam(name, value, smooth = false) {
     if (!cloudNode) return;
-    const param = cloudNode.parameters.get(name);
-    if (param) param.value = value;
+    if (smooth) {
+        setAudioParamSmooth(name, value, 0.01);
+    } else {
+        const param = cloudNode.parameters.get(name);
+        if (param) param.value = value;
+    }
 }
 
 // Sliders binding
@@ -192,7 +248,7 @@ for (const key of sliders) {
         el.addEventListener('input', (e) => {
             const v = parseFloat(e.target.value);
             if (valEl) valEl.textContent = v.toFixed(2);
-            setParam(key, v);
+            setParam(key, v, true);
         });
     }
 }
@@ -201,28 +257,217 @@ presetSelect.addEventListener('change', (e) => {
     applyPreset(e.target.value);
 });
 
+// PRESET MANAGER
+
+function loadUserPresets() {
+    try {
+        const data = localStorage.getItem(USER_PRESETS_STORAGE_KEY);
+        if (data) return JSON.parse(data);
+    } catch(e) {
+        console.error("Failed to load user presets:", e);
+    }
+    return [];
+}
+
+function saveUserPresets(presets) {
+    localStorage.setItem(USER_PRESETS_STORAGE_KEY, JSON.stringify(presets));
+}
+
+function getAllPresets() {
+    return {
+        ...FACTORY_PRESETS,
+        ...Object.fromEntries(loadUserPresets().map(p => [`user:${p.name}`, p.params]))
+    };
+}
+
+function refreshPresetSelect(selectedVal = null) {
+    presetSelect.innerHTML = '';
+    let currentSel = selectedVal || presetSelect.value;
+    
+    const factGrp = document.createElement('optgroup');
+    factGrp.label = 'Factory Presets';
+    for (const key in FACTORY_PRESETS) {
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = key;
+        factGrp.appendChild(opt);
+    }
+    presetSelect.appendChild(factGrp);
+
+    const usrGrp = document.createElement('optgroup');
+    usrGrp.label = 'User Presets';
+    const users = loadUserPresets();
+    for (const p of users) {
+        const opt = document.createElement('option');
+        opt.value = `user:${p.name}`;
+        opt.textContent = p.name;
+        usrGrp.appendChild(opt);
+    }
+    presetSelect.appendChild(usrGrp);
+    
+    if (currentSel) presetSelect.value = currentSel;
+    if (presetSelect.selectedIndex < 0) presetSelect.selectedIndex = 0;
+}
+
+function getCurrentLiveParams() {
+    const params = {};
+    for (const key of sliders) {
+        const el = document.getElementById(`p_${key}`);
+        if(el) params[key] = parseFloat(el.value);
+    }
+    const freezeParam = cloudNode?.parameters?.get('freeze');
+    params.freeze = freezeParam ? freezeParam.value : (chkFreezeLatch.checked ? 1.0 : 0.0);
+    return params;
+}
+
+document.getElementById('btnSavePreset')?.addEventListener('click', () => {
+    let name = document.getElementById('presetNameInput').value.trim();
+    if (!name) return setPresetStatus("Please enter a preset name.", true);
+    if (name.length > 40) name = name.substring(0, 40);
+    
+    let presets = loadUserPresets();
+    let existingIndex = presets.findIndex(p => p.name === name);
+    if (existingIndex !== -1) {
+        if (!confirm(`Overwrite existing preset "${name}"?`)) return;
+    }
+    
+    const newPreset = {
+        name: name,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        params: getCurrentLiveParams()
+    };
+
+    if (existingIndex !== -1) {
+        presets[existingIndex] = newPreset;
+    } else {
+        presets.push(newPreset);
+    }
+    
+    saveUserPresets(presets);
+    refreshPresetSelect(`user:${name}`);
+    setPresetStatus(`Saved user preset "${name}".`);
+});
+
+document.getElementById('btnUpdatePreset')?.addEventListener('click', () => {
+    let sel = presetSelect.value;
+    if (!sel.startsWith('user:')) {
+        return setPresetStatus("Cannot overwrite Factory Presets. Save as a new name.", true);
+    }
+    let name = sel.substring(5);
+    let presets = loadUserPresets();
+    let idx = presets.findIndex(p => p.name === name);
+    if (idx === -1) return setPresetStatus("Preset not found.", true);
+
+    presets[idx].params = getCurrentLiveParams();
+    presets[idx].updatedAt = new Date().toISOString();
+    saveUserPresets(presets);
+    setPresetStatus(`Updated user preset "${name}".`);
+});
+
+document.getElementById('btnDeletePreset')?.addEventListener('click', () => {
+    let sel = presetSelect.value;
+    if (!sel.startsWith('user:')) {
+        return setPresetStatus("Cannot delete Factory Presets.", true);
+    }
+    let name = sel.substring(5);
+    if (!confirm(`Delete preset "${name}"?`)) return;
+
+    let presets = loadUserPresets();
+    presets = presets.filter(p => p.name !== name);
+    saveUserPresets(presets);
+    refreshPresetSelect('SmallCloudRoom');
+    applyPreset('SmallCloudRoom');
+    setPresetStatus(`Deleted user preset "${name}".`);
+});
+
+document.getElementById('btnExportPresets')?.addEventListener('click', () => {
+    const list = loadUserPresets();
+    if (list.length === 0) return setPresetStatus("No user presets to export.", true);
+    
+    const data = { app: "GreyCloud", version: 1, exportedAt: new Date().toISOString(), presets: list };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'greycloud-presets.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    setPresetStatus("Presets exported.");
+});
+
+document.getElementById('presetImportInput')?.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        if (data.app !== "GreyCloud" || !Array.isArray(data.presets)) {
+            throw new Error("Invalid preset file format.");
+        }
+        
+        let existing = loadUserPresets();
+        let imported = 0;
+        for (const p of data.presets) {
+            if (p.name && p.params) {
+                // simple validation
+                let safeParams = {};
+                for (const key of sliders) {
+                    if (typeof p.params[key] === 'number') {
+                        let v = p.params[key];
+                        // clamp roughly
+                        if (['inputGain','outputGain'].includes(key)) v = Math.max(0, Math.min(2, v));
+                        else if (key === 'feedback') v = Math.max(0, Math.min(0.94, v));
+                        else v = Math.max(0, Math.min(1, v));
+                        safeParams[key] = v;
+                    }
+                }
+                safeParams.freeze = typeof p.params.freeze === 'number' ? Math.max(0, Math.min(1, p.params.freeze)) : 0;
+                
+                let baseName = p.name;
+                let finalName = baseName;
+                let counter = 1;
+                while (existing.some(e => e.name === finalName)) {
+                    finalName = `${baseName} (imported ${counter++})`;
+                }
+                existing.push({ name: finalName, createdAt: p.createdAt, updatedAt: p.updatedAt, params: safeParams });
+                imported++;
+            }
+        }
+        saveUserPresets(existing);
+        refreshPresetSelect();
+        setPresetStatus(`Imported ${imported} user preset(s).`);
+    } catch(err) {
+        setPresetStatus(`Import failed: ${err.message}`, true);
+    }
+    e.target.value = ''; // clear
+});
+
 // Freeze controls
 function activateFreeze(e) {
-    if (e.pointerId) btnFreezeHold.setPointerCapture(e.pointerId);
-    btnFreezeHold.style.backgroundColor = '#60A5FA';
-    setParam('freeze', 1.0);
+    if (!cloudNode) return;
+    if (e.pointerId !== undefined) {
+        try { btnFreezeHold.setPointerCapture(e.pointerId); } catch(ex){}
+    }
+    btnFreezeHold.classList.add('active');
+    setAudioParamSmooth('freeze', 1.0, 0.005);
 }
 
 function releaseFreeze(e) {
-    if (e.pointerId) {
+    if (!cloudNode) return;
+    if (e.pointerId !== undefined && typeof btnFreezeHold.hasPointerCapture === 'function' && btnFreezeHold.hasPointerCapture(e.pointerId)) {
         try { btnFreezeHold.releasePointerCapture(e.pointerId); } catch(ex){}
     }
-    btnFreezeHold.style.backgroundColor = '';
-    setParam('freeze', chkFreezeLatch.checked ? 1.0 : 0.0);
+    btnFreezeHold.classList.remove('active');
+    setAudioParamSmooth('freeze', chkFreezeLatch.checked ? 1.0 : 0.0, 0.02);
 }
 
 btnFreezeHold.addEventListener('pointerdown', activateFreeze);
 btnFreezeHold.addEventListener('pointerup', releaseFreeze);
 btnFreezeHold.addEventListener('pointercancel', releaseFreeze);
-btnFreezeHold.addEventListener('lostpointercapture', releaseFreeze);
 
 chkFreezeLatch.addEventListener('change', (e) => {
-    setParam('freeze', e.target.checked ? 1.0 : 0.0);
+    setAudioParamSmooth('freeze', e.target.checked ? 1.0 : 0.0, 0.02);
 });
 
 btnResetTail.addEventListener('click', () => {
@@ -276,7 +521,7 @@ async function ensureMicSource() {
         }
     } catch (err) {
         console.error(err);
-        alert("Failed to access microphone: " + err.message);
+        setStatus("Microphone access denied: " + err.message, 'error');
     }
 }
 
@@ -285,7 +530,7 @@ fileInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     if (!audioCtx) {
-        alert("Start Audio first!");
+        setStatus("Start Audio first!", 'warn');
         return;
     }
     

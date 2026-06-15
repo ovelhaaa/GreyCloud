@@ -52,7 +52,16 @@ Navigate to: `http://localhost:8080/live.html`
 - Processor uses parameter caching to avoid redundant `wasm._cgv_set_param()` cycles.
 - Before `CloudGreyVerb` is properly initialized from WASM, the AudioWorklet handles silence.
 
+## User Presets
+Custom presets can be saved, updated, deleted, exported, and imported using LocalStorage.
+- **Save Current**: Saves the current slider state as a new preset.
+- **Update Selected**: Updates an existing custom preset (Factory presets cannot be overwritten).
+- **Export/Import JSON**: Allows backing up presets to a file for portability or sharing.
+- Note: LocalStorage is local to the device/browser. Use JSON export for true backup.
+
+## Smooth Preset Switching
+Parameter changes (such as slider drags or entire preset swaps) are smoothed natively using the WebAudio `setTargetAtTime` API to avoid audio clicks and artifacts during harsh transitions. Note that radical changes to `size` or `feedback` may still cause temporary audible artifacts, as a characteristic of delay-line interpolation.
+
 ## Current Limitations & Next Steps
-- **Shimmer / Pitch Shifter** functionality is disabled.
+- **Shimmer / Pitch Shifter**: Shimmer will be implemented later as a separate pitch-shift module inside the C++ DSP core, protected by the same Safety Energy Guard.
 - **FDN 4x4** architecture is not implemented yet.
-- **Preset Save/Load** functionality handles only default factory presets right now.
