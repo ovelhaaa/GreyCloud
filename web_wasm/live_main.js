@@ -1,8 +1,8 @@
 // GreyCloud - Live AudioWorklet Main
 
-const WORKLET_URL = './cloud_grey_worklet_processor.js';
+const WORKLET_URL = new URL('./cloud_grey_worklet_processor.js', import.meta.url).href;
 // Module import will happen inside the worklet, but we also fetch it to pass the bytes
-const WASM_URL = './cloud_grey_live.wasm';
+const WASM_URL = new URL('./cloud_grey_live.wasm', import.meta.url).href;
 
 let audioCtx = null;
 let cloudNode = null;

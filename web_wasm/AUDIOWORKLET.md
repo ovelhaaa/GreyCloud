@@ -83,15 +83,36 @@ Web MIDI is now fully supported in Live Mode to allow hardware control over the 
 - **Freeze Mapping via Notes**: You can map a MIDI note directly to the Freeze parameter using MIDI Learn. Pressing the note engages the freeze, and releasing the note releases it.
 - **Note**: The Web MIDI API requires a secure context (localhost or HTTPS), and in some browsers, explicit user permission must be granted.
 
+## GitHub Pages
+
+The live app is available at:
+
+https://ovelhaaa.github.io/GreyCloud/web_wasm/live.html
+
+The GitHub Pages workflow builds:
+
+- cloud_grey_live.js
+- cloud_grey_live.wasm
+
+before deployment.
+
+Do not open live.html directly from the filesystem. AudioWorklet and WASM require a secure context such as localhost or HTTPS.
+
 ## Troubleshooting: Unable to load a worklet's module
 
 If Live Mode fails with:
 
 `Failed to init audio: Unable to load a worklet's module`
 
-check that `cloud_grey_live.js` and `cloud_grey_live.wasm` exist in `web_wasm/`.
+Check in DevTools > Network if any of these files returned 404:
 
-Run:
+- cloud_grey_worklet_processor.js
+- cloud_grey_live.js
+- cloud_grey_live.wasm
+
+If `cloud_grey_live.js` or `cloud_grey_live.wasm` is missing, the WASM build did not run before deployment.
+
+When running manually, ensure you run:
 
 ```bash
 cd web_wasm
