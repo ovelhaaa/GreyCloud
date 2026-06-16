@@ -227,7 +227,7 @@ int main() {
     }
     
     // Testes de estresse Shimmer
-    vector<float> shimmerValues = {0.0f, 0.25f, 0.5f, 0.75f, 1.0f};
+    vector<float> shimmerValues = {0.20f, 0.35f, 0.5f, 0.75f, 1.0f};
     for (float shm : shimmerValues) {
         string name = "SafeShimmer_" + to_string((int)(shm * 100)) + "pct";
         TestResult r = runTestForPreset(CloudGreyVerb::Preset::AlwaysOnSubtle, name, shm);

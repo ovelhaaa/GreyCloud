@@ -83,6 +83,23 @@ Web MIDI is now fully supported in Live Mode to allow hardware control over the 
 - **Freeze Mapping via Notes**: You can map a MIDI note directly to the Freeze parameter using MIDI Learn. Pressing the note engages the freeze, and releasing the note releases it.
 - **Note**: The Web MIDI API requires a secure context (localhost or HTTPS), and in some browsers, explicit user permission must be granted.
 
+## WASM loading model
+
+The GitHub Pages build uses Emscripten `SINGLE_FILE=1`.
+
+This embeds the `.wasm` payload inside:
+
+- `cloud_grey_live.js` for AudioWorklet Live Mode
+- `cloud_grey.js` for Offline Render Mode
+
+This avoids AudioWorklet failures caused by Emscripten glue trying to resolve `cloud_grey_live.wasm` using APIs unavailable inside `AudioWorkletGlobalScope`, such as `URL`.
+
+If Live Mode fails with:
+
+`Worklet Error: URL is not defined`
+
+make sure `build_live.sh` uses `-s SINGLE_FILE=1` and that `cloud_grey_worklet_processor.js` calls `CloudGreyModule()` without `wasmBinary`.
+
 ## GitHub Pages
 
 The live app is available at:
@@ -92,7 +109,8 @@ https://ovelhaaa.github.io/GreyCloud/web_wasm/live.html
 The GitHub Pages workflow builds:
 
 - cloud_grey_live.js
-- cloud_grey_live.wasm
+- cloud_grey.js
+
 
 before deployment.
 
@@ -108,9 +126,8 @@ Check in DevTools > Network if any of these files returned 404:
 
 - cloud_grey_worklet_processor.js
 - cloud_grey_live.js
-- cloud_grey_live.wasm
 
-If `cloud_grey_live.js` or `cloud_grey_live.wasm` is missing, the WASM build did not run before deployment.
+If `cloud_grey_live.js` is missing, the WASM build did not run before deployment.
 
 When running manually, ensure you run:
 

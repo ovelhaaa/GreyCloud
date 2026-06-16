@@ -28,18 +28,21 @@ jobs:
         with:
           version: latest
 
-      - name: Build Live WASM
+      - name: Build WASM
         run: |
           cd web_wasm
-          chmod +x build_live.sh
+          chmod +x build_live.sh build.sh
           ./build_live.sh
+          ./build.sh
 
-      - name: Verify generated Live files
+      - name: Verify generated files
         run: |
           test -f web_wasm/cloud_grey_live.js
-          test -f web_wasm/cloud_grey_live.wasm
           test -f web_wasm/cloud_grey_worklet_processor.js
           test -f web_wasm/live.html
+          test -f web_wasm/cloud_grey.js
+          test -f web_wasm/main.js
+          test -f web_wasm/index.html
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

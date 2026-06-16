@@ -13,9 +13,9 @@ CloudGreyVerb::Params CloudGreyVerb::getPreset(Preset preset) {
             p.damping = 0.5f; p.tone = 0.6f;
             break;
         case Preset::BassAmbientWash:
-            p.mix = 0.32f; p.texture = 0.38f; p.freeze = 0.0f; p.feedback = 0.58f;
-            p.size = 0.52f; p.diffusion = 0.45f; p.modDepth = 0.12f; p.modRate = 0.15f;
-            p.damping = 0.75f; p.tone = 0.38f; p.inputGain = 0.85f; p.outputGain = 0.85f; p.shimmer = 0.0f;
+            p.mix = 0.36f; p.texture = 0.42f; p.freeze = 0.0f; p.feedback = 0.62f;
+            p.size = 0.56f; p.diffusion = 0.52f; p.modDepth = 0.14f; p.modRate = 0.15f;
+            p.damping = 0.78f; p.tone = 0.40f; p.inputGain = 0.90f; p.outputGain = 0.92f; p.shimmer = 0.0f;
             break;
         case Preset::FrozenOrganPad:
             p.mix = 0.7f; p.texture = 0.85f; p.freeze = 1.0f; p.feedback = 0.65f;
@@ -23,14 +23,14 @@ CloudGreyVerb::Params CloudGreyVerb::getPreset(Preset preset) {
             p.damping = 0.4f; p.tone = 0.45f;
             break;
         case Preset::GreyholeDelayVerb:
-            p.mix = 0.6f; p.texture = 0.55f; p.freeze = 0.0f; p.feedback = 0.72f;
-            p.size = 0.72f; p.diffusion = 0.65f; p.modDepth = 0.4f; p.modRate = 0.25f;
-            p.damping = 0.65f; p.tone = 0.5f; p.outputGain = 0.85f;
+            p.mix = 0.6f; p.texture = 0.55f; p.freeze = 0.0f; p.feedback = 0.76f;
+            p.size = 0.76f; p.diffusion = 0.70f; p.modDepth = 0.4f; p.modRate = 0.25f;
+            p.damping = 0.65f; p.tone = 0.5f; p.outputGain = 0.90f;
             break;
         case Preset::DarkLongCloud:
-            p.mix = 0.55f; p.texture = 0.75f; p.freeze = 0.0f; p.feedback = 0.74f;
-            p.size = 0.82f; p.diffusion = 0.62f; p.modDepth = 0.3f; p.modRate = 0.1f;
-            p.damping = 0.3f; p.tone = 0.3f; p.inputGain = 0.70f; p.outputGain = 0.65f;
+            p.mix = 0.55f; p.texture = 0.75f; p.freeze = 0.0f; p.feedback = 0.76f;
+            p.size = 0.84f; p.diffusion = 0.66f; p.modDepth = 0.3f; p.modRate = 0.1f;
+            p.damping = 0.3f; p.tone = 0.3f; p.inputGain = 0.72f; p.outputGain = 0.72f;
             break;
         case Preset::GlitchSmear:
             p.mix = 0.5f; p.texture = 0.05f; p.freeze = 0.0f; p.feedback = 0.5f;
@@ -48,9 +48,9 @@ CloudGreyVerb::Params CloudGreyVerb::getPreset(Preset preset) {
             p.damping = 0.7f; p.tone = 0.8f; p.shimmer = 0.0f;
             break;
         case Preset::ShimmerCloud:
-            p.mix = 0.55f; p.texture = 0.55f; p.freeze = 0.0f; p.feedback = 0.55f;
-            p.size = 0.58f; p.diffusion = 0.65f; p.modDepth = 0.20f; p.modRate = 0.12f;
-            p.damping = 0.55f; p.tone = 0.62f; p.shimmer = 0.18f; p.inputGain = 0.75f; p.outputGain = 0.75f;
+            p.mix = 0.55f; p.texture = 0.55f; p.freeze = 0.0f; p.feedback = 0.58f;
+            p.size = 0.62f; p.diffusion = 0.70f; p.modDepth = 0.20f; p.modRate = 0.12f;
+            p.damping = 0.55f; p.tone = 0.62f; p.shimmer = 0.20f; p.inputGain = 0.80f; p.outputGain = 0.85f;
             break;
     }
     return p;
@@ -538,9 +538,9 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
 #endif
 
     // Injeção de volta à linha de atraso (CROSS-FEEDBACK Matrix L/R)
-    float inputInject = dsp::lerp(0.24f, 0.34f, params_.diffusion);
+    float inputInject = dsp::lerp(0.28f, 0.40f, params_.diffusion);
 
-    float sizeComp = dsp::lerp(1.0f, 0.82f, params_.size);
+    float sizeComp = dsp::lerp(1.0f, 0.88f, params_.size);
     float effectiveFeedback = params_.feedback * sizeComp;
 
     float feedbackProbeL = readR * effectiveFeedback;
@@ -554,6 +554,9 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
         feedLoopL *= reduction;
         feedLoopR *= reduction;
     }
+
+    float shimmerWetL = 0.0f;
+    float shimmerWetR = 0.0f;
 
 #if CGV_ENABLE_SHIMMER
     if (shimmerAvailable_) {
@@ -590,11 +593,19 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
             
             feedLoopL += shimmerOutL * shimmerSend;
             feedLoopR += shimmerOutR * shimmerSend;
+            
+            shimmerWetL = shimmerOutL * currentShimmerAmount * 0.08f;
+            shimmerWetR = shimmerOutR * currentShimmerAmount * 0.08f;
+            
+            dsp::sanitize(shimmerWetL);
+            dsp::sanitize(shimmerWetR);
+            shimmerWetL = dsp::softClip(shimmerWetL);
+            shimmerWetR = dsp::softClip(shimmerWetR);
         }
     }
 #endif
 
-    constexpr float kLoopWriteHeadroom = 0.82f;
+    constexpr float kLoopWriteHeadroom = 0.88f;
     feedLoopL *= kLoopWriteHeadroom;
     feedLoopR *= kLoopWriteHeadroom;
 
@@ -632,8 +643,12 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
 
     // 5. Tonalidade Global (Tilt EQ)
     // Mistura frações do difusor de entrada na cauda p/ colar ataques
-    float wetL = readL + diffInL * 0.35f;
-    float wetR = readR + diffInR * 0.35f;
+    float wetGlue = dsp::lerp(0.38f, 0.50f, params_.diffusion);
+    float wetL = readL + diffInL * wetGlue;
+    float wetR = readR + diffInR * wetGlue;
+
+    wetL += shimmerWetL;
+    wetR += shimmerWetR;
 
     // Separa Low/High em 800Hz e remix com ganhos Tilt
     float lowL = toneL_.process(wetL);

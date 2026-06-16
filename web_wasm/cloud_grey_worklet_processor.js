@@ -31,18 +31,13 @@ class CloudGreyWorkletProcessor extends AudioWorkletProcessor {
       const { type } = event.data;
       if (type === 'init') {
         try {
-          const { wasmBytes, memoryFloats, presetId } = event.data;
+          const { memoryFloats, presetId } = event.data;
           
-          if (!wasmBytes || wasmBytes.byteLength === 0) {
-            throw new Error('Missing or empty wasm bytes');
-          }
           if (!memoryFloats || memoryFloats < 24000) {
             throw new Error('Invalid memoryFloats for CloudGreyVerb');
           }
 
-          this.module = await CloudGreyModule({
-            wasmBinary: wasmBytes
-          });
+          this.module = await CloudGreyModule();
           
           const initOk = this.module._cgv_init(sampleRate, memoryFloats);
           
