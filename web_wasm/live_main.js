@@ -25,6 +25,8 @@ const btnPlayFile = document.getElementById('btnPlayFile');
 const btnPauseFile = document.getElementById('btnPauseFile');
 const btnStopFile = document.getElementById('btnStopFile');
 const chkLoop = document.getElementById('chkLoop');
+const btnExportLiveWav = document.getElementById('btnExportLiveWav');
+const exportLiveStatus = document.getElementById('exportLiveStatus');
 
 const btnFreezeHold = document.getElementById('btnFreezeHold');
 const chkFreezeLatch = document.getElementById('chkFreezeLatch');
@@ -537,6 +539,7 @@ fileInput.addEventListener('change', async (e) => {
     btnPlayFile.disabled = false;
     btnPauseFile.disabled = true;
     btnStopFile.disabled = true;
+    if (btnExportLiveWav) btnExportLiveWav.disabled = false;
     stopFile();
 });
 
@@ -596,6 +599,7 @@ function stopFile() {
     
     if (fileBuffer) {
         btnPlayFile.disabled = false;
+        if (btnExportLiveWav) btnExportLiveWav.disabled = false;
     }
     btnPauseFile.disabled = true;
     btnStopFile.disabled = true;
@@ -604,6 +608,129 @@ function stopFile() {
 btnPlayFile.addEventListener('click', playFile);
 btnPauseFile.addEventListener('click', pauseFile);
 btnStopFile.addEventListener('click', stopFile);
+
+if (btnExportLiveWav) {
+    btnExportLiveWav.addEventListener('click', async () => {
+        if (!fileBuffer || !audioCtx) return;
+        exportLiveStatus.textContent = "Rendering...";
+        btnExportLiveWav.disabled = true;
+        
+        try {
+            const offlineCtx = new OfflineAudioContext(2, fileBuffer.length, fileBuffer.sampleRate);
+            await offlineCtx.audioWorklet.addModule(WORKLET_URL);
+            
+            const renderNode = new AudioWorkletNode(offlineCtx, 'cloud-grey-worklet-processor', {
+                outputChannelCount: [2]
+            });
+            
+            // send parameters
+            const p = getCurrentLiveParams();
+            for (const key of sliders) {
+                const param = renderNode.parameters.get(key);
+                if (param && p[key] !== undefined) param.value = p[key];
+            }
+            const freezeParam = renderNode.parameters.get('freeze');
+            if (freezeParam) freezeParam.value = p.freeze;
+            
+            const sourceNode = offlineCtx.createBufferSource();
+            sourceNode.buffer = fileBuffer;
+            sourceNode.connect(renderNode);
+            renderNode.connect(offlineCtx.destination);
+            
+            // init worklet memory inside offline
+            renderNode.port.postMessage({
+                type: 'init',
+                memoryFloats: Math.floor(offlineCtx.sampleRate * 3.0)
+            });
+            
+            sourceNode.start(0);
+            const renderedBuffer = await offlineCtx.startRendering();
+            
+            const wavBlob = audioBufferToWav(renderedBuffer);
+            const url = URL.createObjectURL(wavBlob);
+            
+            exportLiveStatus.textContent = "";
+            let existingLink = document.getElementById("directLiveExportLink");
+            if (existingLink) { existingLink.remove(); }
+            
+            const a = document.createElement('a');
+            a.id = "directLiveExportLink";
+            a.href = url;
+            a.download = "cloudgrey_live_export.wav";
+            a.textContent = "✅ Ready! Click here to Download WAV";
+            a.style.display = "inline-block";
+            a.style.backgroundColor = "#059669";
+            a.style.color = "white";
+            a.style.padding = "0.5rem 1rem";
+            a.style.borderRadius = "4px";
+            a.style.textDecoration = "none";
+            a.style.fontWeight = "bold";
+            a.style.marginTop = "0.5rem";
+            exportLiveStatus.appendChild(a);
+        } catch (err) {
+            console.error(err);
+            exportLiveStatus.textContent = "Error during export: " + err.message;
+        } finally {
+            btnExportLiveWav.disabled = false;
+        }
+    });
+}
+
+function audioBufferToWav(buffer) {
+    const numChannels = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    const format = 1; // PCM
+    const bitDepth = 16;
+    const bytesPerSample = bitDepth / 8;
+    const blockAlign = numChannels * bytesPerSample;
+    const dataByteLength = buffer.length * blockAlign;
+    
+    const arrayBuffer = new ArrayBuffer(44 + dataByteLength);
+    const view = new DataView(arrayBuffer);
+    
+    const writeString = (view, offset, string) => {
+        for (let i = 0; i < string.length; i++) {
+            view.setUint8(offset + i, string.charCodeAt(i));
+        }
+    };
+    
+    // RIFF chunk descriptor
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + dataByteLength, true);
+    writeString(view, 8, 'WAVE');
+    
+    // FMT sub-chunk
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, format, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * blockAlign, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitDepth, true);
+    
+    // Data sub-chunk
+    writeString(view, 36, 'data');
+    view.setUint32(40, dataByteLength, true);
+    
+    // Interleave and Write Data
+    let offset = 44;
+    const inL = buffer.getChannelData(0);
+    const inR = numChannels > 1 ? buffer.getChannelData(1) : inL;
+    
+    for (let i = 0; i < buffer.length; i++) {
+        let sampleL = Math.max(-1, Math.min(1, inL[i]));
+        view.setInt16(offset, sampleL < 0 ? sampleL * 0x8000 : sampleL * 0x7FFF, true);
+        offset += 2;
+        if (numChannels > 1) {
+            let sampleR = Math.max(-1, Math.min(1, inR[i]));
+            view.setInt16(offset, sampleR < 0 ? sampleR * 0x8000 : sampleR * 0x7FFF, true);
+            offset += 2;
+        }
+    }
+    
+    return new Blob([view], { type: 'audio/wav' });
+}
 
 btnPower.addEventListener('click', () => {
     if (!audioCtx) {

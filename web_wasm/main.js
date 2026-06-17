@@ -68,20 +68,34 @@ function drawVisualizer() {
 }
 
 const paramInputs = [
-    { el: document.getElementById('param_0'), val: document.getElementById('val_mix') },
-    { el: document.getElementById('param_1'), val: document.getElementById('val_texture') },
-    { el: document.getElementById('param_2'), val: document.getElementById('val_freeze') },
-    { el: document.getElementById('param_3'), val: document.getElementById('val_feedback') },
-    { el: document.getElementById('param_4'), val: document.getElementById('val_size') },
-    { el: document.getElementById('param_5'), val: document.getElementById('val_diffusion') },
-    { el: document.getElementById('param_6'), val: document.getElementById('val_moddepth') },
-    { el: document.getElementById('param_7'), val: document.getElementById('val_modrate') },
-    { el: document.getElementById('param_8'), val: document.getElementById('val_damping') },
-    { el: document.getElementById('param_9'), val: document.getElementById('val_tone') },
-    { el: document.getElementById('param_12'), val: document.getElementById('val_shimmer') },
-    { el: document.getElementById('param_10'), val: document.getElementById('val_ingain') },
-    { el: document.getElementById('param_11'), val: document.getElementById('val_outgain') }
+    { key: 'mix', el: document.getElementById('param_0'), val: document.getElementById('val_mix'), idx: 0 },
+    { key: 'texture', el: document.getElementById('param_1'), val: document.getElementById('val_texture'), idx: 1 },
+    { key: 'freeze', el: document.getElementById('param_2'), val: document.getElementById('val_freeze'), idx: 2 },
+    { key: 'feedback', el: document.getElementById('param_3'), val: document.getElementById('val_feedback'), idx: 3 },
+    { key: 'size', el: document.getElementById('param_4'), val: document.getElementById('val_size'), idx: 4 },
+    { key: 'diffusion', el: document.getElementById('param_5'), val: document.getElementById('val_diffusion'), idx: 5 },
+    { key: 'modDepth', el: document.getElementById('param_6'), val: document.getElementById('val_moddepth'), idx: 6 },
+    { key: 'modRate', el: document.getElementById('param_7'), val: document.getElementById('val_modrate'), idx: 7 },
+    { key: 'damping', el: document.getElementById('param_8'), val: document.getElementById('val_damping'), idx: 8 },
+    { key: 'tone', el: document.getElementById('param_9'), val: document.getElementById('val_tone'), idx: 9 },
+    { key: 'shimmer', el: document.getElementById('param_12'), val: document.getElementById('val_shimmer'), idx: 12 },
+    { key: 'inputGain', el: document.getElementById('param_10'), val: document.getElementById('val_ingain'), idx: 10 },
+    { key: 'outputGain', el: document.getElementById('param_11'), val: document.getElementById('val_outgain'), idx: 11 }
 ];
+
+const USER_PRESETS_STORAGE_KEY = 'greycloud.userPresets.v1';
+
+const FACTORY_PRESETS = {
+  SmallCloudRoom: { mix: 0.4, texture: 0.3, freeze: 0.0, feedback: 0.5, size: 0.35, diffusion: 0.6, modDepth: 0.2, modRate: 0.15, damping: 0.5, tone: 0.6, inputGain: 1.0, outputGain: 1.0, shimmer: 0.0 },
+  BassAmbientWash: { mix: 0.36, texture: 0.42, freeze: 0.0, feedback: 0.62, size: 0.56, diffusion: 0.52, modDepth: 0.14, modRate: 0.15, damping: 0.78, tone: 0.40, inputGain: 0.90, outputGain: 0.92, shimmer: 0.0 },
+  FrozenOrganPad: { mix: 0.7, texture: 0.85, freeze: 1.0, feedback: 0.65, size: 0.7, diffusion: 0.8, modDepth: 0.4, modRate: 0.05, damping: 0.4, tone: 0.45, inputGain: 1.0, outputGain: 1.0, shimmer: 0.0 },
+  GreyholeDelayVerb: { mix: 0.6, texture: 0.55, freeze: 0.0, feedback: 0.76, size: 0.76, diffusion: 0.70, modDepth: 0.4, modRate: 0.25, damping: 0.65, tone: 0.5, inputGain: 1.0, outputGain: 0.90, shimmer: 0.0 },
+  DarkLongCloud: { mix: 0.55, texture: 0.75, freeze: 0.0, feedback: 0.76, size: 0.84, diffusion: 0.66, modDepth: 0.3, modRate: 0.1, damping: 0.3, tone: 0.3, inputGain: 0.72, outputGain: 0.72, shimmer: 0.0 },
+  GlitchSmear: { mix: 0.5, texture: 0.05, freeze: 0.0, feedback: 0.5, size: 0.25, diffusion: 0.2, modDepth: 0.9, modRate: 0.8, damping: 0.5, tone: 0.5, inputGain: 1.0, outputGain: 1.0, shimmer: 0.0 },
+  AlwaysOnSubtle: { mix: 0.25, texture: 0.2, freeze: 0.0, feedback: 0.3, size: 0.2, diffusion: 0.4, modDepth: 0.1, modRate: 0.1, damping: 0.5, tone: 0.5, inputGain: 1.0, outputGain: 1.0, shimmer: 0.0 },
+  BrightCloud: { mix: 0.5, texture: 0.6, freeze: 0.0, feedback: 0.75, size: 0.6, diffusion: 0.7, modDepth: 0.6, modRate: 0.4, damping: 0.7, tone: 0.8, inputGain: 1.0, outputGain: 1.0, shimmer: 0.0 },
+  ShimmerCloud: { mix: 0.55, texture: 0.55, freeze: 0.0, feedback: 0.58, size: 0.62, diffusion: 0.70, modDepth: 0.20, modRate: 0.12, damping: 0.55, tone: 0.62, inputGain: 0.80, outputGain: 0.85, shimmer: 0.20 }
+};
 
 // Initialize WASM
 if (typeof CloudGreyModule === 'function') {
@@ -136,7 +150,7 @@ fileInput.addEventListener('change', async (e) => {
 function syncSlidersToDSP() {
     if (!wasmModule || !wasmModule._cgv_is_initialized()) return;
     for (let i = 0; i < paramInputs.length; i++) {
-        let val = wasmModule._cgv_get_param(i);
+        let val = wasmModule._cgv_get_param(paramInputs[i].idx); // Fix it to use accurate id
         paramInputs[i].el.value = val;
         paramInputs[i].val.textContent = val.toFixed(2);
     }
@@ -154,32 +168,244 @@ function initDSP(sampleRate) {
     }
     
     // Set initial preset
-    wasmModule._cgv_set_preset(parseInt(presetSelect.value));
-    syncSlidersToDSP();
+    refreshPresetSelect('BassAmbientWash');
+    applyPreset('BassAmbientWash');
     console.log(`DSP Initialized at ${sampleRate}Hz`);
 }
 
 // UI param listeners
-paramInputs.forEach((item, index) => {
+paramInputs.forEach((item) => {
     item.el.addEventListener('input', (e) => {
         const val = parseFloat(e.target.value);
         item.val.textContent = val.toFixed(2);
         if (wasmModule && wasmModule._cgv_is_initialized()) {
-            wasmModule._cgv_set_param(index, val);
+            wasmModule._cgv_set_param(item.idx, val);
             
             // If freezing manually, switch preset dropdown to custom to avoid confusion
-            presetSelect.value = "-1"; // Out of bounds but visually clears selection logic
+            if (presetSelect.value && !presetSelect.value.startsWith('user:')) {
+                presetSelect.value = ""; 
+            }
         }
     });
 });
 
 presetSelect.addEventListener('change', (e) => {
     if (!wasmModule || !wasmModule._cgv_is_initialized()) return;
-    let presetId = parseInt(e.target.value);
-    if (presetId >= 0) {
-        wasmModule._cgv_set_preset(presetId);
-        syncSlidersToDSP();
+    applyPreset(e.target.value);
+});
+
+// PRESET MANAGER
+
+function loadUserPresets() {
+    try {
+        const data = localStorage.getItem(USER_PRESETS_STORAGE_KEY);
+        if (data) return JSON.parse(data);
+    } catch(e) {
+        console.error("Failed to load user presets:", e);
     }
+    return [];
+}
+
+function saveUserPresets(presets) {
+    localStorage.setItem(USER_PRESETS_STORAGE_KEY, JSON.stringify(presets));
+}
+
+function getAllPresets() {
+    return {
+        ...FACTORY_PRESETS,
+        ...Object.fromEntries(loadUserPresets().map(p => [`user:${p.name}`, p.params]))
+    };
+}
+
+function refreshPresetSelect(selectedVal = null) {
+    presetSelect.innerHTML = '<option value="">-- Custom --</option>';
+    let currentSel = selectedVal || presetSelect.value;
+    
+    const factGrp = document.createElement('optgroup');
+    factGrp.label = 'Factory Presets';
+    for (const key in FACTORY_PRESETS) {
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = key;
+        factGrp.appendChild(opt);
+    }
+    presetSelect.appendChild(factGrp);
+
+    const usrGrp = document.createElement('optgroup');
+    usrGrp.label = 'User Presets';
+    const users = loadUserPresets();
+    for (const p of users) {
+        const opt = document.createElement('option');
+        opt.value = `user:${p.name}`;
+        opt.textContent = p.name;
+        usrGrp.appendChild(opt);
+    }
+    presetSelect.appendChild(usrGrp);
+    
+    if (currentSel) presetSelect.value = currentSel;
+}
+
+function setPresetStatus(msg, error=false) {
+    const el = document.getElementById('presetStatus');
+    if (el) {
+        el.textContent = msg;
+        el.style.color = error ? '#EF4444' : '#10B981';
+    }
+}
+
+function getCurrentOfflineParams() {
+    const params = {};
+    for (const item of paramInputs) {
+        params[item.key] = parseFloat(item.el.value);
+    }
+    return params;
+}
+
+function applyPreset(name) {
+    if (!name) return;
+    const all = getAllPresets();
+    let p = all[name];
+    if (!p) return;
+    if (p.params) p = p.params;
+    
+    const nameInput = document.getElementById('presetNameInput');
+    if (nameInput && name.startsWith('user:')) {
+        nameInput.value = name.substring(5);
+    } else if (nameInput) {
+        nameInput.value = '';
+    }
+    
+    for (const item of paramInputs) {
+        if (p[item.key] !== undefined) {
+            const val = p[item.key];
+            item.el.value = val;
+            item.val.textContent = val.toFixed(2);
+            if (wasmModule && wasmModule._cgv_is_initialized()) {
+                wasmModule._cgv_set_param(item.idx, val);
+            }
+        }
+    }
+}
+
+document.getElementById('btnSavePreset')?.addEventListener('click', () => {
+    let name = document.getElementById('presetNameInput').value.trim();
+    if (!name) return setPresetStatus("Please enter a preset name.", true);
+    if (name.length > 40) name = name.substring(0, 40);
+    
+    let presets = loadUserPresets();
+    let existingIndex = presets.findIndex(p => p.name === name);
+    if (existingIndex !== -1) {
+        if (!confirm(`Overwrite existing preset "${name}"?`)) return;
+    }
+    
+    const newPreset = {
+        name: name,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        params: getCurrentOfflineParams()
+    };
+
+    if (existingIndex !== -1) {
+        presets[existingIndex] = newPreset;
+    } else {
+        presets.push(newPreset);
+    }
+    
+    saveUserPresets(presets);
+    refreshPresetSelect(`user:${name}`);
+    setPresetStatus(`Saved user preset "${name}".`);
+});
+
+document.getElementById('btnUpdatePreset')?.addEventListener('click', () => {
+    let sel = presetSelect.value;
+    if (!sel || !sel.startsWith('user:')) {
+        return setPresetStatus("Cannot overwrite Factory Presets. Save as a new name.", true);
+    }
+    let name = sel.substring(5);
+    let presets = loadUserPresets();
+    let idx = presets.findIndex(p => p.name === name);
+    if (idx === -1) return setPresetStatus("Preset not found.", true);
+
+    presets[idx].params = getCurrentOfflineParams();
+    presets[idx].updatedAt = new Date().toISOString();
+    saveUserPresets(presets);
+    setPresetStatus(`Updated user preset "${name}".`);
+});
+
+document.getElementById('btnDeletePreset')?.addEventListener('click', () => {
+    let sel = presetSelect.value;
+    if (!sel || !sel.startsWith('user:')) {
+        return setPresetStatus("Cannot delete Factory Presets.", true);
+    }
+    let name = sel.substring(5);
+    if (!confirm(`Delete preset "${name}"?`)) return;
+
+    let presets = loadUserPresets();
+    presets = presets.filter(p => p.name !== name);
+    saveUserPresets(presets);
+    refreshPresetSelect('SmallCloudRoom');
+    applyPreset('SmallCloudRoom');
+    setPresetStatus(`Deleted user preset "${name}".`);
+});
+
+document.getElementById('btnExportPresets')?.addEventListener('click', () => {
+    const list = loadUserPresets();
+    if (list.length === 0) return setPresetStatus("No user presets to export.", true);
+    
+    const data = { app: "GreyCloud", version: 1, exportedAt: new Date().toISOString(), presets: list };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'greycloud-presets.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    setPresetStatus("Presets exported.");
+});
+
+document.getElementById('presetImportInput')?.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        if (data.app !== "GreyCloud" || !Array.isArray(data.presets)) {
+            throw new Error("Invalid preset file format.");
+        }
+        
+        let existing = loadUserPresets();
+        let imported = 0;
+        for (const p of data.presets) {
+            if (p.name && p.params) {
+                let safeParams = {};
+                for (const item of paramInputs) {
+                    if (typeof p.params[item.key] === 'number') {
+                        let v = p.params[item.key];
+                        if (['inputGain','outputGain'].includes(item.key)) v = Math.max(0, Math.min(2, v));
+                        else if (item.key === 'feedback') v = Math.max(0, Math.min(0.94, v));
+                        else v = Math.max(0, Math.min(1, v));
+                        safeParams[item.key] = v;
+                    }
+                }
+                safeParams.freeze = typeof p.params.freeze === 'number' ? Math.max(0, Math.min(1, p.params.freeze)) : 0;
+                
+                let baseName = p.name;
+                let finalName = baseName;
+                let counter = 1;
+                while (existing.some(req => req.name === finalName)) {
+                    finalName = `${baseName} (imported ${counter++})`;
+                }
+                existing.push({ name: finalName, createdAt: p.createdAt, updatedAt: p.updatedAt, params: safeParams });
+                imported++;
+            }
+        }
+        saveUserPresets(existing);
+        refreshPresetSelect();
+        setPresetStatus(`Imported ${imported} user preset(s).`);
+    } catch(err) {
+        setPresetStatus(`Import failed: ${err.message}`, true);
+    }
+    e.target.value = ''; 
 });
 
 // Processing Audio

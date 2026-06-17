@@ -106,7 +106,28 @@
     </div>
 
     <div class="panel">
-        <h2>3. Process & Audition</h2>
+        <h2>3. User Presets</h2>
+        <div style="display: flex; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                <input type="text" id="presetNameInput" placeholder="Preset name" style="background: #374151; color: white; border: 1px solid #4B5563; padding: 0.5rem; border-radius: 4px; width: 200px;">
+                <button id="btnSavePreset" class="primary">Save Current</button>
+                <button id="btnUpdatePreset">Update Selected</button>
+                <button id="btnDeletePreset" style="background-color: #B91C1C; border-color: #991B1B;">Delete Selected</button>
+            </div>
+            
+            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                <button id="btnExportPresets">Export JSON</button>
+                <label style="background: #21262D; border: 1px solid #30363D; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; color: white; font-weight: 500;">
+                    Import JSON
+                    <input type="file" id="presetImportInput" accept="application/json,.json" style="display: none;">
+                </label>
+            </div>
+        </div>
+        <p id="presetStatus" style="font-size: 0.9rem; color: #10B981; margin-top: 0.5rem; min-height: 1.2em;"></p>
+    </div>
+
+    <div class="panel">
+        <h2>4. Process & Audition</h2>
         <div style="margin-bottom: 1rem; padding: 0.8rem; background-color: rgba(59, 130, 246, 0.1); border-left: 3px solid #3B82F6; border-radius: 0 4px 4px 0;">
             <p style="font-size: 0.85rem; color: #9CA3AF; margin: 0; line-height: 1.4;">
                 <strong style="color: #E5E7EB;">Note:</strong> Freeze is applied during offline rendering. Change it, then click Process Audio. For live freeze, future AudioWorklet mode is needed.
