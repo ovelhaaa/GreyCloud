@@ -14,7 +14,10 @@ const PARAM_IDS = {
   tone: 9,
   inputGain: 10,
   outputGain: 11,
-  shimmer: 12
+  shimmer: 12,
+  preDelay: 13,
+  stereoWidth: 14,
+  lowDamping: 15
 };
 
 class CloudGreyWorkletProcessor extends AudioWorkletProcessor {

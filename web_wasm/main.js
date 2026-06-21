@@ -77,8 +77,11 @@ const paramInputs = [
     { key: 'modDepth', el: document.getElementById('param_6'), val: document.getElementById('val_moddepth'), idx: 6 },
     { key: 'modRate', el: document.getElementById('param_7'), val: document.getElementById('val_modrate'), idx: 7 },
     { key: 'damping', el: document.getElementById('param_8'), val: document.getElementById('val_damping'), idx: 8 },
+    { key: 'lowDamping', el: document.getElementById('param_15'), val: document.getElementById('val_lowdamping'), idx: 15 },
     { key: 'tone', el: document.getElementById('param_9'), val: document.getElementById('val_tone'), idx: 9 },
     { key: 'shimmer', el: document.getElementById('param_12'), val: document.getElementById('val_shimmer'), idx: 12 },
+    { key: 'preDelay', el: document.getElementById('param_13'), val: document.getElementById('val_predelay'), idx: 13 },
+    { key: 'stereoWidth', el: document.getElementById('param_14'), val: document.getElementById('val_stereowidth'), idx: 14 },
     { key: 'inputGain', el: document.getElementById('param_10'), val: document.getElementById('val_ingain'), idx: 10 },
     { key: 'outputGain', el: document.getElementById('param_11'), val: document.getElementById('val_outgain'), idx: 11 }
 ];
@@ -86,15 +89,15 @@ const paramInputs = [
 const USER_PRESETS_STORAGE_KEY = 'greycloud.userPresets.v1';
 
 const FACTORY_PRESETS = {
-  SmallCloudRoom: { mix: 0.4, texture: 0.3, freeze: 0.0, feedback: 0.5, size: 0.35, diffusion: 0.6, modDepth: 0.2, modRate: 0.15, damping: 0.5, tone: 0.6, inputGain: 1.0, outputGain: 1.0, shimmer: 0.0 },
-  BassAmbientWash: { mix: 0.36, texture: 0.42, freeze: 0.0, feedback: 0.62, size: 0.56, diffusion: 0.52, modDepth: 0.14, modRate: 0.15, damping: 0.78, tone: 0.40, inputGain: 0.90, outputGain: 0.92, shimmer: 0.0 },
-  FrozenOrganPad: { mix: 0.7, texture: 0.85, freeze: 1.0, feedback: 0.65, size: 0.7, diffusion: 0.8, modDepth: 0.4, modRate: 0.05, damping: 0.4, tone: 0.45, inputGain: 1.0, outputGain: 1.0, shimmer: 0.0 },
-  GreyholeDelayVerb: { mix: 0.6, texture: 0.55, freeze: 0.0, feedback: 0.76, size: 0.76, diffusion: 0.70, modDepth: 0.4, modRate: 0.25, damping: 0.65, tone: 0.5, inputGain: 1.0, outputGain: 0.90, shimmer: 0.0 },
-  DarkLongCloud: { mix: 0.55, texture: 0.75, freeze: 0.0, feedback: 0.76, size: 0.84, diffusion: 0.66, modDepth: 0.3, modRate: 0.1, damping: 0.3, tone: 0.3, inputGain: 0.72, outputGain: 0.72, shimmer: 0.0 },
-  GlitchSmear: { mix: 0.5, texture: 0.05, freeze: 0.0, feedback: 0.5, size: 0.25, diffusion: 0.2, modDepth: 0.9, modRate: 0.8, damping: 0.5, tone: 0.5, inputGain: 1.0, outputGain: 1.0, shimmer: 0.0 },
-  AlwaysOnSubtle: { mix: 0.25, texture: 0.2, freeze: 0.0, feedback: 0.3, size: 0.2, diffusion: 0.4, modDepth: 0.1, modRate: 0.1, damping: 0.5, tone: 0.5, inputGain: 1.0, outputGain: 1.0, shimmer: 0.0 },
-  BrightCloud: { mix: 0.5, texture: 0.6, freeze: 0.0, feedback: 0.75, size: 0.6, diffusion: 0.7, modDepth: 0.6, modRate: 0.4, damping: 0.7, tone: 0.8, inputGain: 1.0, outputGain: 1.0, shimmer: 0.0 },
-  ShimmerCloud: { mix: 0.55, texture: 0.55, freeze: 0.0, feedback: 0.58, size: 0.62, diffusion: 0.70, modDepth: 0.20, modRate: 0.12, damping: 0.55, tone: 0.62, inputGain: 0.80, outputGain: 0.85, shimmer: 0.20 }
+  SmallCloudRoom: { mix: 0.4, texture: 0.3, freeze: 0.0, feedback: 0.5, size: 0.35, diffusion: 0.6, modDepth: 0.2, modRate: 0.15, damping: 0.5, lowDamping: 0.5, tone: 0.6, inputGain: 1.0, outputGain: 1.0, shimmer: 0.0, preDelay: 0.0, stereoWidth: 1.0 },
+  BassAmbientWash: { mix: 0.36, texture: 0.42, freeze: 0.0, feedback: 0.62, size: 0.56, diffusion: 0.52, modDepth: 0.14, modRate: 0.15, damping: 0.78, lowDamping: 0.2, tone: 0.40, inputGain: 0.90, outputGain: 0.92, shimmer: 0.0, preDelay: 0.1, stereoWidth: 1.5 },
+  FrozenOrganPad: { mix: 0.7, texture: 0.85, freeze: 1.0, feedback: 0.65, size: 0.7, diffusion: 0.8, modDepth: 0.4, modRate: 0.05, damping: 0.4, lowDamping: 0.6, tone: 0.45, inputGain: 1.0, outputGain: 1.0, shimmer: 0.0, preDelay: 0.0, stereoWidth: 1.2 },
+  GreyholeDelayVerb: { mix: 0.6, texture: 0.55, freeze: 0.0, feedback: 0.76, size: 0.76, diffusion: 0.70, modDepth: 0.4, modRate: 0.25, damping: 0.65, lowDamping: 0.5, tone: 0.5, inputGain: 1.0, outputGain: 0.90, shimmer: 0.0, preDelay: 0.2, stereoWidth: 1.0 },
+  DarkLongCloud: { mix: 0.55, texture: 0.75, freeze: 0.0, feedback: 0.76, size: 0.84, diffusion: 0.66, modDepth: 0.3, modRate: 0.1, damping: 0.3, lowDamping: 0.4, tone: 0.3, inputGain: 0.72, outputGain: 0.72, shimmer: 0.0, preDelay: 0.3, stereoWidth: 1.0 },
+  GlitchSmear: { mix: 0.5, texture: 0.05, freeze: 0.0, feedback: 0.5, size: 0.25, diffusion: 0.2, modDepth: 0.9, modRate: 0.8, damping: 0.5, lowDamping: 0.5, tone: 0.5, inputGain: 1.0, outputGain: 1.0, shimmer: 0.0, preDelay: 0.0, stereoWidth: 1.0 },
+  AlwaysOnSubtle: { mix: 0.25, texture: 0.2, freeze: 0.0, feedback: 0.3, size: 0.2, diffusion: 0.4, modDepth: 0.1, modRate: 0.1, damping: 0.5, lowDamping: 0.5, tone: 0.5, inputGain: 1.0, outputGain: 1.0, shimmer: 0.0, preDelay: 0.05, stereoWidth: 0.8 },
+  BrightCloud: { mix: 0.5, texture: 0.6, freeze: 0.0, feedback: 0.75, size: 0.6, diffusion: 0.7, modDepth: 0.6, modRate: 0.4, damping: 0.7, lowDamping: 0.8, tone: 0.8, inputGain: 1.0, outputGain: 1.0, shimmer: 0.0, preDelay: 0.1, stereoWidth: 1.2 },
+  ShimmerCloud: { mix: 0.55, texture: 0.55, freeze: 0.0, feedback: 0.58, size: 0.62, diffusion: 0.70, modDepth: 0.20, modRate: 0.12, damping: 0.55, lowDamping: 0.6, tone: 0.62, inputGain: 0.80, outputGain: 0.85, shimmer: 0.20, preDelay: 0.15, stereoWidth: 1.4 }
 };
 
 // Initialize WASM

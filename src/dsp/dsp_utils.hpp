@@ -20,6 +20,25 @@ inline float softClip(float x) {
     return y;
 }
 
+// Tape Saturation: Polinômio para saturação magnética quente
+inline float tapeClip(float x) {
+    // Adiciona pequeno offset DC para harmônicos pares (assimetria térmica leve)
+    float xp = x + 0.05f; 
+    
+    // Clipper cúbico suave: out = x - (x^3)/3
+    if (xp > 1.0f) xp = 1.0f;
+    else if (xp < -1.0f) xp = -1.0f;
+    
+    float x2 = xp * xp;
+    float out = xp - (x2 * xp) * 0.333333f;
+    
+    // Remove o DC (offset rest em ~0.04995)
+    out -= 0.049958f;
+    
+    // Normalizar nível percebido perto de 1 (já cruncheia na fita)
+    return out * 1.5f;
+}
+
 inline float hardClip(float x) {
     if (x > 1.0f) return 1.0f;
     if (x < -1.0f) return -1.0f;
@@ -47,6 +66,24 @@ private:
 // Interpolação linear rápida
 inline float lerp(float a, float b, float t) {
     return a + (b - a) * t;
+}
+
+// Utilitários para encontrar números primos (útil para Schroeder reverbs)
+inline bool isPrime(size_t n) {
+    if (n <= 1) return false;
+    if (n <= 3) return true;
+    if (n % 2 == 0 || n % 3 == 0) return false;
+    for (size_t i = 5; i * i <= n; i += 6) {
+        if (n % i == 0 || n % (i + 2) == 0) return false;
+    }
+    return true;
+}
+
+inline size_t nextPrime(size_t n) {
+    while (!isPrime(n)) {
+        n++;
+    }
+    return n;
 }
 
 // Interpolação Hermite Cúbica para preservar altas frequências
@@ -133,13 +170,14 @@ public:
     float read(float delayFrames) const {
         if (!buffer_ || size_ == 0 || delayFrames != delayFrames) return 0.0f; // Check buffer and NaN
 
-        // Restringir entre 1 e size_-2 para interpolação Hermite (precisa de 4 pontos)
-        float fDelayed = fmaxf(1.0f, fminf(static_cast<float>(size_ - 3), delayFrames));
+        // Restringir delay: minimo de 1 sample (já que usamos write após read se feedback for usado, ou vice-versa, evitar ler o frame futuro).
+        // Máximo é o tamanho inteiro do buffer.
+        float fDelayed = fmaxf(1.0f, fminf(static_cast<float>(size_), delayFrames));
 
         float readPos = static_cast<float>(writePos_) - fDelayed;
         float fSize = static_cast<float>(size_);
         
-        // Wrap-around mais leve (presumindo no máximo um wraparound normal por sample)
+        // Wrap-around mais leve
         if (readPos < 0.0f || readPos >= fSize) {
             readPos = fmodf(readPos, fSize);
             if (readPos < 0.0f) readPos += fSize;
@@ -193,7 +231,7 @@ public:
 
     float processModulated(float input, float g, float modSamples) {
         // modSamples deve variar entre +- poucos samples
-        float delayT = static_cast<float>(delay_.getSize()) - 3.0f + modSamples;
+        float delayT = static_cast<float>(delay_.getSize()) - 1.5f + modSamples;
         if (delayT < 1.0f) delayT = 1.0f;
         float delayed = delay_.read(delayT);
         

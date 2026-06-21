@@ -42,6 +42,9 @@ void cgv_set_param(int paramId, float value) {
         case 12: cgv_params.shimmer = value; break;
         case 10: cgv_params.inputGain = value; break;
         case 11: cgv_params.outputGain = value; break;
+        case 13: cgv_params.preDelay = value; break;
+        case 14: cgv_params.stereoWidth = value; break;
+        case 15: cgv_params.lowDamping = value; break;
     }
     if (isInit) cgv.setParams(cgv_params);
 }
@@ -61,6 +64,9 @@ float cgv_get_param(int paramId) {
         case 12: return cgv_params.shimmer;
         case 10: return cgv_params.inputGain;
         case 11: return cgv_params.outputGain;
+        case 13: return cgv_params.preDelay;
+        case 14: return cgv_params.stereoWidth;
+        case 15: return cgv_params.lowDamping;
     }
     return 0.0f;
 }

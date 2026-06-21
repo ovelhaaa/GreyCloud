@@ -98,6 +98,9 @@ public:
         float shimmer = 0.0f;      // 0.0 a 1.0 -> Placeholder para Pitch Shift (+1 OCT) no feedback (TODO)
         float inputGain = 1.0f;    // 0.0 a 2.0 -> Compensação / Excitação de entrada
         float outputGain = 1.0f;   // 0.0 a 2.0 -> Saída geral
+        float preDelay = 0.0f;     // 0.0 a 1.0 -> 0ms a 200ms
+        float stereoWidth = 1.0f;  // 0.0 a 2.0 -> 0=Mono, 1=Stereo, 2=Extra Wide
+        float lowDamping = 0.5f;   // 0.0 a 1.0 -> High-pass do feedback. 0=Thin (corta graves), 1=Full/Lama
     };
 
     // Utilitário de Presets Internos
@@ -159,6 +162,9 @@ private:
     dsp::DelayLine delayL_, delayR_;
     dsp::Allpass loopApL_, loopApR_;
     size_t mainDelaySize_ = 0;
+    
+    dsp::DelayLine preDelayMono_;
+    float preDelaySmoothed_ = 0.0f;
 
     // LFOs dedicados (Fases cruzadas para imagem estéreo larga)
     dsp::LFO lfo1_, lfo2_;
@@ -177,13 +183,15 @@ private:
     dsp::OnePoleRC hpFeedL_, hpFeedR_; // Filtro HP para secar o low end
     dsp::OnePoleRC toneL_, toneR_;
 
+    // Envelope Follower para Ducking do Reverb e do Shimmer
+    float duckingEnvState_ = 0.0f;
+
 #if CGV_ENABLE_SHIMMER
     ShimmerPitcher shimmer_;
     bool shimmerAvailable_ = false;
     dsp::OnePoleRC shimmerHp_;
     dsp::OnePoleRC shimmerLp_;
     dsp::OnePoleRC shimmerSmoother_;
-    float shimmerEnvState_ = 0.0f;
 #endif
 
     // Helpers
