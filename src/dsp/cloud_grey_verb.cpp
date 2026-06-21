@@ -253,6 +253,7 @@ void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferS
     // LFO Init
     lfo1_.setRate(0.5f, sampleRate_);
     lfo2_.setRate(0.5f, sampleRate_); // Forçaremos diferença de fase lendo desfasado ou drift
+    spinLfo_.setRate(1.1f, sampleRate_); // Spin LFO for micro-modulation
     
     initialized_ = true;
     reset();
@@ -287,7 +288,7 @@ void CloudGreyVerb::reset() {
     loopApL_.clear(); loopApR_.clear();
 #endif
     delayL_.clear(); delayR_.clear();
-    lfo1_.clear(); lfo2_.clear();
+    lfo1_.clear(); lfo2_.clear(); spinLfo_.clear();
     dampL_.clear(); dampR_.clear();
     hpFeedL_.clear(); hpFeedR_.clear();
     toneL_.clear(); toneR_.clear();
@@ -334,6 +335,7 @@ void CloudGreyVerb::setParams(const Params& p) {
     float lfoHz = dsp::lerp(0.05f, 2.0f, params_.modRate);
     lfo1_.setRate(lfoHz, sampleRate_);
     lfo2_.setRate(lfoHz * 0.87f, sampleRate_); // 13% offset estéreo
+    spinLfo_.setRate(0.5f + params_.modRate * 2.0f, sampleRate_);
 
     // Filtros
     float lpFreq = dsp::lerp(800.0f, 15000.0f, params_.damping);
@@ -474,6 +476,7 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     // LFOs (Calculados cedo para fornecer drift p/ motor Granular)
     float lfo1_val = lfo1_.process();
     float lfo2_val = lfo2_.process();
+    spinLfo_.process();
     
     // Modulation drift update
     float randL = prng_.randFloat() * 2.0f - 1.0f;
@@ -488,10 +491,16 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     // 3. Diffuser / Allpass Series (O núcleo Greyhole injeta Sum no Diffuser p/ smear)
     float diffCoef = dsp::lerp(0.1f, 0.75f, params_.diffusion);
     
+    // Micros-modulação nos allpasses de difusão p/ reduzir estaticidade inicial (Spin/Wander)
+    float spin1 = spinLfo_.getValue(0.0f) * 2.5f;
+    float spin2 = spinLfo_.getValue(0.25f) * 2.5f;
+    
     // Processamos apenas a média do estéreo aqui p/ reduzir CPU (Mono smear -> expansão em seguida)
-    float diffSignalMono = ap2_.process(ap1_.process((granOutL + granOutR) * 0.5f, diffCoef), diffCoef);
+    float diffSignalMono = ap2_.processModulated(ap1_.processModulated((granOutL + granOutR) * 0.5f, diffCoef, spin1), diffCoef, spin2);
 #if CGV_NUM_ALLPASS > 2
-    diffSignalMono = ap4_.process(ap3_.process(diffSignalMono, diffCoef), diffCoef);
+    float spin3 = spinLfo_.getValue(0.5f) * 2.5f;
+    float spin4 = spinLfo_.getValue(0.75f) * 2.5f;
+    diffSignalMono = ap4_.processModulated(ap3_.processModulated(diffSignalMono, diffCoef, spin3), diffCoef, spin4);
 #endif
     
     // Criamos a base injetável combinando o estéreo granular limpo + Diffusor Mono (pseudo-decorrelacionado)

@@ -49,6 +49,16 @@ inline float lerp(float a, float b, float t) {
     return a + (b - a) * t;
 }
 
+// Interpolação Hermite Cúbica para preservar altas frequências
+inline float hermite(float frac, float p0, float p1, float p2, float p3) {
+    float c = (p2 - p0) * 0.5f;
+    float v = p1 - p2;
+    float w = c + v;
+    float a = w + v + (p3 - p1) * 0.5f;
+    float b = w + a;
+    return ((((a * frac) - b) * frac + c) * frac + p1);
+}
+
 // Prevenção contra números denormais (evita picos extremos de CPU)
 inline void sanitize(float& val) {
     if (val != val) val = 0.0f;
@@ -75,9 +85,18 @@ public:
         }
         
         // Triângulo suave de -1 a 1
-        float tri = 4.0f * fabsf(phase_ - 0.5f) - 1.0f;
-        // Aproximação polinomial para senoidez (opcional, aqui mantemos triângulo para CPU leve)
-        return tri;
+        return 4.0f * fabsf(phase_ - 0.5f) - 1.0f;
+    }
+
+    // Leitura multipolifásica (Decorrelação) s/ avançar fase
+    float getValue(float phaseOffset) const {
+        float p = phase_ + phaseOffset;
+        if (p >= 1.0f) p -= 1.0f;
+        if (p < 0.0f || p >= 1.0f) {
+            p = fmodf(p, 1.0f);
+            if (p < 0.0f) p += 1.0f;
+        }
+        return 4.0f * fabsf(p - 0.5f) - 1.0f;
     }
 
 private:
@@ -110,11 +129,14 @@ public:
         if (writePos_ >= size_) writePos_ = 0;
     }
 
-    // Leitura com interpolação linear para suportar delays modulados fracionários
+    // Leitura com interpolação Hermite para preservar altas frequências
     float read(float delayFrames) const {
         if (!buffer_ || size_ == 0 || delayFrames != delayFrames) return 0.0f; // Check buffer and NaN
 
-        float readPos = static_cast<float>(writePos_) - delayFrames;
+        // Restringir entre 1 e size_-2 para interpolação Hermite (precisa de 4 pontos)
+        float fDelayed = fmaxf(1.0f, fminf(static_cast<float>(size_ - 3), delayFrames));
+
+        float readPos = static_cast<float>(writePos_) - fDelayed;
         float fSize = static_cast<float>(size_);
         
         // Wrap-around mais leve (presumindo no máximo um wraparound normal por sample)
@@ -124,11 +146,13 @@ public:
         }
 
         size_t idx1 = static_cast<size_t>(readPos);
-        size_t idx2 = idx1 + 1;
-        if (idx2 >= size_) idx2 = 0;
         float frac = readPos - static_cast<float>(idx1);
 
-        float val = lerp(buffer_[idx1], buffer_[idx2], frac);
+        size_t idx0 = (idx1 == 0) ? size_ - 1 : idx1 - 1;
+        size_t idx2 = (idx1 + 1 >= size_) ? 0 : idx1 + 1;
+        size_t idx3 = (idx2 + 1 >= size_) ? 0 : idx2 + 1;
+
+        float val = hermite(frac, buffer_[idx0], buffer_[idx1], buffer_[idx2], buffer_[idx3]);
         if (val != val) val = 0.0f; // Fix NaNs leaking
         return val;
     }
@@ -159,6 +183,24 @@ public:
         if (feedback != feedback) feedback = 0.0f; // NaN Protection
         sanitize(feedback);
         feedback = softClip(feedback); // Saturação musical protegendo O(INF) feedback em Allpass series
+        
+        delay_.write(feedback);
+        
+        float out = -input * g + delayed;
+        if (out != out) out = 0.0f;
+        return out;
+    }
+
+    float processModulated(float input, float g, float modSamples) {
+        // modSamples deve variar entre +- poucos samples
+        float delayT = static_cast<float>(delay_.getSize()) - 3.0f + modSamples;
+        if (delayT < 1.0f) delayT = 1.0f;
+        float delayed = delay_.read(delayT);
+        
+        float feedback = input + delayed * g;
+        if (feedback != feedback) feedback = 0.0f;
+        sanitize(feedback);
+        feedback = softClip(feedback);
         
         delay_.write(feedback);
         

@@ -162,6 +162,7 @@ private:
 
     // LFOs dedicados (Fases cruzadas para imagem estéreo larga)
     dsp::LFO lfo1_, lfo2_;
+    dsp::LFO spinLfo_;
     
     // Modulation drift state
     float modDriftL_ = 0.0f;
