@@ -32,17 +32,15 @@ CloudGreyVerbProcessor::CloudGreyVerbProcessor()
                       .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       parameters (*this, nullptr, juce::Identifier ("CloudGreyVerbVTS"), createParameterLayout())
 {
-    presets = {
-        { "SmallCloudRoom", 0.4f, 0.3f, 0.0f, 0.5f, 0.35f, 0.6f, 0.2f, 0.15f, 0.5f, 0.5f, 0.6f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f },
-        { "BassAmbientWash", 0.36f, 0.42f, 0.0f, 0.62f, 0.56f, 0.52f, 0.14f, 0.15f, 0.78f, 0.2f, 0.40f, 0.90f, 0.92f, 0.0f, 0.1f, 1.5f },
-        { "FrozenOrganPad", 0.7f, 0.85f, 1.0f, 0.65f, 0.7f, 0.8f, 0.4f, 0.05f, 0.4f, 0.6f, 0.45f, 1.0f, 1.0f, 0.0f, 0.0f, 1.2f },
-        { "GreyholeDelayVerb", 0.6f, 0.55f, 0.0f, 0.76f, 0.76f, 0.70f, 0.4f, 0.25f, 0.65f, 0.5f, 0.5f, 1.0f, 0.90f, 0.0f, 0.2f, 1.0f },
-        { "DarkLongCloud", 0.55f, 0.75f, 0.0f, 0.76f, 0.84f, 0.66f, 0.3f, 0.1f, 0.3f, 0.4f, 0.3f, 0.72f, 0.72f, 0.0f, 0.3f, 1.0f },
-        { "GlitchSmear", 0.5f, 0.05f, 0.0f, 0.5f, 0.25f, 0.2f, 0.9f, 0.8f, 0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f },
-        { "AlwaysOnSubtle", 0.25f, 0.2f, 0.0f, 0.3f, 0.2f, 0.4f, 0.1f, 0.1f, 0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 0.0f, 0.05f, 0.8f },
-        { "BrightCloud", 0.5f, 0.6f, 0.0f, 0.75f, 0.6f, 0.7f, 0.6f, 0.4f, 0.7f, 0.8f, 0.8f, 1.0f, 1.0f, 0.0f, 0.1f, 1.2f },
-        { "ShimmerCloud", 0.55f, 0.55f, 0.0f, 0.58f, 0.62f, 0.70f, 0.20f, 0.12f, 0.55f, 0.6f, 0.62f, 0.80f, 0.85f, 0.20f, 0.15f, 1.4f }
-    };
+    presets.push_back(BuiltInPreset("SmallCloudRoom", 0.4f, 0.3f, 0.0f, 0.5f, 0.35f, 0.6f, 0.2f, 0.15f, 0.5f, 0.5f, 0.6f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f));
+    presets.push_back(BuiltInPreset("BassAmbientWash", 0.36f, 0.42f, 0.0f, 0.62f, 0.56f, 0.52f, 0.14f, 0.15f, 0.78f, 0.2f, 0.40f, 0.90f, 0.92f, 0.0f, 0.1f, 1.5f));
+    presets.push_back(BuiltInPreset("FrozenOrganPad", 0.7f, 0.85f, 1.0f, 0.65f, 0.7f, 0.8f, 0.4f, 0.05f, 0.4f, 0.6f, 0.45f, 1.0f, 1.0f, 0.0f, 0.0f, 1.2f));
+    presets.push_back(BuiltInPreset("GreyholeDelayVerb", 0.6f, 0.55f, 0.0f, 0.76f, 0.76f, 0.70f, 0.4f, 0.25f, 0.65f, 0.5f, 0.5f, 1.0f, 0.90f, 0.0f, 0.2f, 1.0f));
+    presets.push_back(BuiltInPreset("DarkLongCloud", 0.55f, 0.75f, 0.0f, 0.76f, 0.84f, 0.66f, 0.3f, 0.1f, 0.3f, 0.4f, 0.3f, 0.72f, 0.72f, 0.0f, 0.3f, 1.0f));
+    presets.push_back(BuiltInPreset("GlitchSmear", 0.5f, 0.05f, 0.0f, 0.5f, 0.25f, 0.2f, 0.9f, 0.8f, 0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f));
+    presets.push_back(BuiltInPreset("AlwaysOnSubtle", 0.25f, 0.2f, 0.0f, 0.3f, 0.2f, 0.4f, 0.1f, 0.1f, 0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 0.0f, 0.05f, 0.8f));
+    presets.push_back(BuiltInPreset("BrightCloud", 0.5f, 0.6f, 0.0f, 0.75f, 0.6f, 0.7f, 0.6f, 0.4f, 0.7f, 0.8f, 0.8f, 1.0f, 1.0f, 0.0f, 0.1f, 1.2f));
+    presets.push_back(BuiltInPreset("ShimmerCloud", 0.55f, 0.55f, 0.0f, 0.58f, 0.62f, 0.70f, 0.20f, 0.12f, 0.55f, 0.6f, 0.62f, 0.80f, 0.85f, 0.20f, 0.15f, 1.4f));
     currentPresetIndex = 0;
 }
 
@@ -63,27 +61,27 @@ void CloudGreyVerbProcessor::setCurrentProgram (int index)
         currentPresetIndex = index;
         const auto& p = presets[index];
         
-        auto setParam = [&](const juce::String& id, float value) {
+        auto updateParameterValue = [&](const juce::String& id, float value) {
             if (auto* param = parameters.getParameter(id))
                 param->setValueNotifyingHost(param->convertTo0to1(value));
         };
         
-        setParam("mix", p.mix);
-        setParam("texture", p.texture);
-        setParam("freeze", p.freeze);
-        setParam("feedback", p.feedback);
-        setParam("size", p.size);
-        setParam("diffusion", p.diffusion);
-        setParam("modDepth", p.modDepth);
-        setParam("modRate", p.modRate);
-        setParam("damping", p.damping);
-        setParam("lowDamping", p.lowDamping);
-        setParam("tone", p.tone);
-        setParam("inputGain", p.inputGain);
-        setParam("outputGain", p.outputGain);
-        setParam("shimmer", p.shimmer);
-        setParam("preDelay", p.preDelay);
-        setParam("stereoWidth", p.stereoWidth);
+        updateParameterValue("mix", p.mix);
+        updateParameterValue("texture", p.texture);
+        updateParameterValue("freeze", p.freeze);
+        updateParameterValue("feedback", p.feedback);
+        updateParameterValue("size", p.size);
+        updateParameterValue("diffusion", p.diffusion);
+        updateParameterValue("modDepth", p.modDepth);
+        updateParameterValue("modRate", p.modRate);
+        updateParameterValue("damping", p.damping);
+        updateParameterValue("lowDamping", p.lowDamping);
+        updateParameterValue("tone", p.tone);
+        updateParameterValue("inputGain", p.inputGain);
+        updateParameterValue("outputGain", p.outputGain);
+        updateParameterValue("shimmer", p.shimmer);
+        updateParameterValue("preDelay", p.preDelay);
+        updateParameterValue("stereoWidth", p.stereoWidth);
     }
 }
 
