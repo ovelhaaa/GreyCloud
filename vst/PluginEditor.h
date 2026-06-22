@@ -26,6 +26,12 @@ private:
     std::vector<std::unique_ptr<PSlider>> sliders;
 
     void addDSPControl(const juce::String& paramID, const juce::String& name);
+    void loadJSONPreset();
+    void exportJSONPreset();
+
+    juce::TextButton importButton;
+    juce::TextButton exportButton;
+    std::unique_ptr<juce::FileChooser> fileChooser;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CloudGreyVerbEditor)
 };
