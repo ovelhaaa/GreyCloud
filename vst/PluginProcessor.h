@@ -2,6 +2,8 @@
 
 #include <JuceHeader.h>
 #include "cloud_grey_verb.hpp"
+#include <vector>
+#include <memory>
 
 class CloudGreyVerbProcessor : public juce::AudioProcessor
 {
