@@ -29,6 +29,8 @@ juce_add_plugin(NimbusReverbPlugin
     PRODUCT_NAME "Nimbus"
 )
 
+juce_generate_juce_header(NimbusReverbPlugin)
+
 target_sources(NimbusReverbPlugin
     PRIVATE
         PluginProcessor.cpp
