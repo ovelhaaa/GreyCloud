@@ -53,7 +53,7 @@ void CloudGreyVerbEditor::paint (juce::Graphics& g)
 
     g.setColour (juce::Colours::white);
     g.setFont (24.0f);
-    g.drawFittedText ("Cloud Grey Verb", getLocalBounds().removeFromTop(40), juce::Justification::centred, 1);
+    g.drawFittedText ("Nimbus Reverb", getLocalBounds().removeFromTop(40), juce::Justification::centred, 1);
 }
 
 void CloudGreyVerbEditor::resized()

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(CloudGreyVerbPlugin VERSION 1.0.0)
+project(NimbusReverbPlugin VERSION 1.0.0)
 
 # ==============================================================================
 # Fetch JUCE Framework (this will download JUCE when CMake runs)
@@ -15,7 +15,7 @@ FetchContent_MakeAvailable(juce)
 # ==============================================================================
 # Configure the JUCE Plugin
 # ==============================================================================
-juce_add_plugin(CloudGreyVerbPlugin
+juce_add_plugin(NimbusReverbPlugin
     COMPANY_NAME "Alexandre Lunelli"
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT FALSE
@@ -26,10 +26,10 @@ juce_add_plugin(CloudGreyVerbPlugin
     PLUGIN_MANUFACTURER_CODE AlxL
     PLUGIN_CODE ClGr
     FORMATS VST3 AU Standalone
-    PRODUCT_NAME "CloudGreyVerb"
+    PRODUCT_NAME "Nimbus"
 )
 
-target_sources(CloudGreyVerbPlugin
+target_sources(NimbusReverbPlugin
     PRIVATE
         PluginProcessor.cpp
         PluginProcessor.h
@@ -39,14 +39,14 @@ target_sources(CloudGreyVerbPlugin
         ../src/dsp/cloud_grey_verb.hpp
 )
 
-target_compile_definitions(CloudGreyVerbPlugin
+target_compile_definitions(NimbusReverbPlugin
     PUBLIC
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0
 )
 
-target_link_libraries(CloudGreyVerbPlugin
+target_link_libraries(NimbusReverbPlugin
     PRIVATE
         juce::juce_audio_plugin_client
         juce::juce_audio_utils
@@ -59,4 +59,4 @@ target_link_libraries(CloudGreyVerbPlugin
         juce::juce_recommended_warning_flags
 )
 
-target_include_directories(CloudGreyVerbPlugin PRIVATE ../src/dsp)
+target_include_directories(NimbusReverbPlugin PRIVATE ../src/dsp)

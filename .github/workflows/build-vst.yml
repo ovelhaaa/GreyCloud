@@ -33,9 +33,9 @@ jobs:
       - name: Upload VST3/AU Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: CloudGreyVerb-${{ matrix.os }}-Plugins
+          name: NimbusReverb-${{ matrix.os }}-Plugins
           path: |
-            vst/build/**/*CloudGreyVerb*.vst3
-            vst/build/**/*CloudGreyVerb*.component
-            vst/build/**/*CloudGreyVerb*.exe
-            vst/build/**/*CloudGreyVerb*.app
+            vst/build/**/*Nimbus*.vst3
+            vst/build/**/*Nimbus*.component
+            vst/build/**/*Nimbus*.exe
+            vst/build/**/*Nimbus*.app

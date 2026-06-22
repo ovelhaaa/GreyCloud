@@ -53,7 +53,7 @@ export default function App() {
         <div className="p-6">
           <div className="flex items-center gap-3 mb-2">
             <CircuitBoard className="text-emerald-400" size={28} />
-            <h1 className="text-xl font-semibold tracking-tight text-white">CloudGreyVerb</h1>
+            <h1 className="text-xl font-semibold tracking-tight text-white">Nimbus Reverb</h1>
           </div>
           <p className="text-xs text-gray-400 font-medium mb-6 uppercase tracking-widest">
             Embedded DSP Core
