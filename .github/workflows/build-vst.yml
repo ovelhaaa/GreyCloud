@@ -1,0 +1,41 @@
+name: Build VST Plugins
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch: # Permite rodar o build manualmente na aba Actions
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Linux Dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libx11-dev libxinerama-dev libxext-dev libfreetype6-dev libwebkit2gtk-4.0-dev libglu1-mesa-dev libcurl4-openssl-dev
+
+      - name: Configure CMake
+        run: cmake -B vst/build -S vst -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build Plugin
+        run: cmake --build vst/build --config Release --parallel 4
+
+      - name: Upload VST3/AU Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CloudGreyVerb-${{ matrix.os }}-Plugins
+          path: |
+            vst/build/**/*CloudGreyVerb*.vst3
+            vst/build/**/*CloudGreyVerb*.component
+            vst/build/**/*CloudGreyVerb*.exe
+            vst/build/**/*CloudGreyVerb*.app

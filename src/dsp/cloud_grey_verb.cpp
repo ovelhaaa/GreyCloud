@@ -502,6 +502,12 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     // Para simplificar e economizar CPU no granulador, usamos monoIn já com pre-delay. 
     monoIn = preDelayMono_.read(preDelaySmoothed_);
 
+    // Kill-Dry dinâmico na injeção da malha: permite solar por cima da nuvem travada,
+    // garantindo que as notas novas não alimentem nem deteriorem o feedback extremo.
+    float freezeKill = 1.0f - freezeSmoothed_;
+    freezeKill *= freezeKill; // Curva quadrática para um fade rápido e suave
+    monoIn *= freezeKill;
+
     // LFOs (Calculados cedo para fornecer drift p/ motor Granular)
     float lfo1_val = lfo1_.process();
     float lfo2_val = lfo2_.process();
@@ -589,17 +595,15 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     float sizeComp = dsp::lerp(1.0f, 0.88f, params_.size);
     float effectiveFeedback = params_.feedback * sizeComp;
 
+    // Quando o freeze atua, o feedback da nuvem estática aproxima-se de 1.0 lentamente
+    // para sustentar o latch sem perder a massa (já que a entrada foi cortada).
+    effectiveFeedback = dsp::lerp(effectiveFeedback, 0.98f, freezeSmoothed_);
+
     float feedbackProbeL = readR * effectiveFeedback;
     float feedbackProbeR = readL * effectiveFeedback;
 
     float feedLoopL = diffInL * inputInject + feedbackProbeL;
     float feedLoopR = diffInR * inputInject + feedbackProbeR;
-    
-    if (freezeSmoothed_ > 0.5f) {
-        float reduction = 1.0f - ((freezeSmoothed_ - 0.5f) * 2.0f * 0.2f); // up to 20% reduction
-        feedLoopL *= reduction;
-        feedLoopR *= reduction;
-    }
 
     float shimmerWetL = 0.0f;
     float shimmerWetR = 0.0f;
