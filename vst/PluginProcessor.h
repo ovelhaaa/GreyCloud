@@ -39,7 +39,7 @@ public:
 
 private:
     juce::AudioProcessorValueTreeState parameters;
-    cgv::CloudGreyVerb dspCore;
+    CloudGreyVerb dspCore;
     std::vector<float> dspMemory;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CloudGreyVerbProcessor)
