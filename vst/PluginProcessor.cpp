@@ -82,7 +82,7 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
         buffer.clear (i, 0, buffer.getNumSamples());
 
     // Update DSP parameters from VTS
-    cgv::Params p;
+    CloudGreyVerb::Params p;
     p.mix = parameters.getRawParameterValue("mix")->load();
     p.texture = parameters.getRawParameterValue("texture")->load();
     p.freeze = parameters.getRawParameterValue("freeze")->load();
@@ -113,7 +113,7 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
         float outL = 0.0f;
         float outR = 0.0f;
         
-        dspCore.process(inL, inR, outL, outR);
+        dspCore.processSample(inL, inR, outL, outR);
         
         channelL[i] = outL;
         if (channelR) channelR[i] = outR;
