@@ -1,146 +1,205 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
-// Factory function to create parameters
-juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
+CloudGreyVerbEditor::CloudGreyVerbEditor (CloudGreyVerbProcessor& p)
+    : AudioProcessorEditor (&p), audioProcessor (p)
 {
-    std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
+    addDSPControl("mix", "Mix");
+    addDSPControl("texture", "Texture");
+    addDSPControl("freeze", "Freeze");
+    addDSPControl("feedback", "Feedback");
+    addDSPControl("size", "Size");
+    addDSPControl("diffusion", "Diffusion");
+    addDSPControl("modDepth", "Mod Depth");
+    addDSPControl("modRate", "Mod Rate");
+    addDSPControl("damping", "Damping");
+    addDSPControl("lowDamping", "Low Damp");
+    addDSPControl("tone", "Tone");
+    addDSPControl("shimmer", "Shimmer");
+    addDSPControl("preDelay", "Pre-Delay");
+    addDSPControl("stereoWidth", "Stereo Width");
+    addDSPControl("inputGain", "Input");
+    addDSPControl("outputGain", "Output");
 
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"mix", 1}, "Mix", 0.0f, 1.0f, 0.5f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"texture", 1}, "Texture", 0.0f, 1.0f, 0.5f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"freeze", 1}, "Freeze", 0.0f, 1.0f, 0.0f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"feedback", 1}, "Feedback", 0.0f, 0.94f, 0.5f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"size", 1}, "Size", 0.0f, 1.0f, 0.5f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"diffusion", 1}, "Diffusion", 0.0f, 1.0f, 0.5f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"modDepth", 1}, "Mod Depth", 0.0f, 1.0f, 0.2f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"modRate", 1}, "Mod Rate", 0.0f, 1.0f, 0.2f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"damping", 1}, "Damping", 0.0f, 1.0f, 0.5f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"lowDamping", 1}, "Low Damp", 0.0f, 1.0f, 0.5f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"tone", 1}, "Tone", 0.0f, 1.0f, 0.5f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"shimmer", 1}, "Shimmer", 0.0f, 1.0f, 0.0f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"inputGain", 1}, "Input Gain", 0.0f, 2.0f, 1.0f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"outputGain", 1}, "Output Gain", 0.0f, 2.0f, 1.0f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"preDelay", 1}, "Pre-Delay", 0.0f, 1.0f, 0.0f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"stereoWidth", 1}, "Stereo Width", 0.0f, 2.0f, 1.0f));
+    importButton.setButtonText("Load WASM JSON Preset...");
+    importButton.onClick = [this] { loadJSONPreset(); };
+    addAndMakeVisible(importButton);
 
-    return { params.begin(), params.end() };
+    exportButton.setButtonText("Export to JSON...");
+    exportButton.onClick = [this] { exportJSONPreset(); };
+    addAndMakeVisible(exportButton);
+
+    // Dimensions: 4 columns x 4 rows + footer
+    setSize (600, 500);
 }
 
-CloudGreyVerbProcessor::CloudGreyVerbProcessor()
-    : AudioProcessor (BusesProperties()
-                      .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
-                      .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      parameters (*this, nullptr, juce::Identifier ("CloudGreyVerbVTS"), createParameterLayout())
+CloudGreyVerbEditor::~CloudGreyVerbEditor()
 {
 }
 
-CloudGreyVerbProcessor::~CloudGreyVerbProcessor() = default;
-
-const juce::String CloudGreyVerbProcessor::getName() const { return JucePlugin_Name; }
-bool CloudGreyVerbProcessor::acceptsMidi() const { return false; }
-bool CloudGreyVerbProcessor::producesMidi() const { return false; }
-bool CloudGreyVerbProcessor::isMidiEffect() const { return false; }
-double CloudGreyVerbProcessor::getTailLengthSeconds() const { return 0.0; }
-int CloudGreyVerbProcessor::getNumPrograms() { return 1; }
-int CloudGreyVerbProcessor::getCurrentProgram() { return 0; }
-void CloudGreyVerbProcessor::setCurrentProgram (int index) {}
-const juce::String CloudGreyVerbProcessor::getProgramName (int index) { return {}; }
-void CloudGreyVerbProcessor::changeProgramName (int index, const juce::String& newName) {}
-
-void CloudGreyVerbProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
-{
-    // Allocate DSP memory (~1.5MB for stereo 48k operations)
-    size_t requiredFloats = 800000; 
-    dspMemory.resize(requiredFloats, 0.0f);
+void CloudGreyVerbEditor::addDSPControl(const juce::String& paramID, const juce::String& name) {
+    auto wrapper = std::make_unique<PSlider>();
     
-    dspCore.init(static_cast<float>(sampleRate), dspMemory.data(), requiredFloats);
+    wrapper->slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    wrapper->slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 15);
+    addAndMakeVisible(wrapper->slider);
+
+    wrapper->label.setText(name, juce::dontSendNotification);
+    wrapper->label.setJustificationType(juce::Justification::centred);
+    wrapper->label.attachToComponent(&wrapper->slider, false);
+    addAndMakeVisible(wrapper->label);
+
+    wrapper->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        audioProcessor.getVTS(), paramID, wrapper->slider);
+
+    sliders.push_back(std::move(wrapper));
 }
 
-void CloudGreyVerbProcessor::releaseResources()
+void CloudGreyVerbEditor::paint (juce::Graphics& g)
 {
+    g.fillAll (juce::Colour(24, 24, 28));
+
+    g.setColour (juce::Colours::white);
+    g.setFont (24.0f);
+    g.drawFittedText ("Nimbus Reverb", getLocalBounds().removeFromTop(40), juce::Justification::centred, 1);
 }
 
-bool CloudGreyVerbProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
+void CloudGreyVerbEditor::resized()
 {
-    if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono()
-     && layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
-        return false;
+    auto bounds = getLocalBounds().reduced(20);
+    bounds.removeFromTop(30); // header spacing
+    
+    auto footer = bounds.removeFromBottom(40);
+    importButton.setBounds(footer.removeFromLeft(200).withSizeKeepingCentre(180, 30));
+    exportButton.setBounds(footer.removeFromRight(200).withSizeKeepingCentre(180, 30));
+    
+    int numCols = 4;
+    int numRows = 4;
+    
+    int w = bounds.getWidth() / numCols;
+    int h = bounds.getHeight() / numRows;
 
-    if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet())
-        return false;
-
-    return true;
-}
-
-void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
-{
-    juce::ScopedNoDenormals noDenormals;
-    auto totalNumInputChannels  = getTotalNumInputChannels();
-    auto totalNumOutputChannels = getTotalNumOutputChannels();
-
-    for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
-        buffer.clear (i, 0, buffer.getNumSamples());
-
-    // Update DSP parameters from VTS
-    CloudGreyVerb::Params p;
-    p.mix = parameters.getRawParameterValue("mix")->load();
-    p.texture = parameters.getRawParameterValue("texture")->load();
-    p.freeze = parameters.getRawParameterValue("freeze")->load();
-    p.feedback = parameters.getRawParameterValue("feedback")->load();
-    p.size = parameters.getRawParameterValue("size")->load();
-    p.diffusion = parameters.getRawParameterValue("diffusion")->load();
-    p.modDepth = parameters.getRawParameterValue("modDepth")->load();
-    p.modRate = parameters.getRawParameterValue("modRate")->load();
-    p.damping = parameters.getRawParameterValue("damping")->load();
-    p.lowDamping = parameters.getRawParameterValue("lowDamping")->load();
-    p.tone = parameters.getRawParameterValue("tone")->load();
-    p.shimmer = parameters.getRawParameterValue("shimmer")->load();
-    p.inputGain = parameters.getRawParameterValue("inputGain")->load();
-    p.outputGain = parameters.getRawParameterValue("outputGain")->load();
-    p.preDelay = parameters.getRawParameterValue("preDelay")->load();
-    p.stereoWidth = parameters.getRawParameterValue("stereoWidth")->load();
-
-    dspCore.setParams(p);
-
-    int numSamples = buffer.getNumSamples();
-    float* channelL = buffer.getWritePointer(0);
-    float* channelR = (totalNumOutputChannels > 1) ? buffer.getWritePointer(1) : nullptr;
-
-    for (int i = 0; i < numSamples; ++i) {
-        float inL = channelL[i];
-        float inR = channelR ? channelR[i] : inL;
+    for (int i = 0; i < (int)sliders.size(); ++i) {
+        int r = i / numCols;
+        int c = i % numCols;
         
-        float outL = 0.0f;
-        float outR = 0.0f;
-        
-        dspCore.processSample(inL, inR, outL, outR);
-        
-        channelL[i] = outL;
-        if (channelR) channelR[i] = outR;
+        auto cell = bounds.withTrimmedLeft(c * w).withTrimmedTop(r * h).withWidth(w).withHeight(h);
+        // Leave room for label that was attached at the top natively by juce
+        sliders[i]->slider.setBounds(cell.reduced(10).withTrimmedTop(15));
     }
 }
 
-bool CloudGreyVerbProcessor::hasEditor() const { return true; }
-
-juce::AudioProcessorEditor* CloudGreyVerbProcessor::createEditor()
+void CloudGreyVerbEditor::exportJSONPreset()
 {
-    return new CloudGreyVerbEditor (*this);
+    fileChooser = std::make_unique<juce::FileChooser>("Save GreyCloud Preset JSON",
+        juce::File::getSpecialLocation(juce::File::userDesktopDirectory).getChildFile("vst_preset.json"),
+        "*.json");
+        
+    auto folderChooserFlags = juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles;
+    
+    fileChooser->launchAsync(folderChooserFlags, [this] (const juce::FileChooser& chooser)
+    {
+        auto file = chooser.getResult();
+        if (file.isDirectory() || file.getFileName().isEmpty()) return;
+        
+        juce::DynamicObject::Ptr presetObj = new juce::DynamicObject();
+        presetObj->setProperty("name", "VST Export");
+        
+        juce::DynamicObject::Ptr paramsObj = new juce::DynamicObject();
+        auto* vts = &audioProcessor.getVTS();
+        
+        auto state = vts->copyState();
+        for (auto child : state)
+        {
+            if (child.hasType("PARAM"))
+            {
+                auto id = child.getProperty("id").toString();
+                double val = static_cast<double>(child.getProperty("value"));
+                paramsObj->setProperty(id, val);
+            }
+        }
+        
+        presetObj->setProperty("params", juce::var(paramsObj.get()));
+        
+        juce::Array<juce::var> presetsArray;
+        presetsArray.add(juce::var(presetObj.get()));
+        
+        juce::DynamicObject::Ptr rootObj = new juce::DynamicObject();
+        rootObj->setProperty("app", "GreyCloud");
+        rootObj->setProperty("version", 1);
+        rootObj->setProperty("presets", juce::var(presetsArray));
+        
+        juce::FileOutputStream fos(file);
+        if (fos.openedOk())
+        {
+            fos.setPosition(0);
+            fos.truncate();
+            juce::JSON::writeToStream(fos, juce::var(rootObj.get()));
+        }
+    });
 }
 
-void CloudGreyVerbProcessor::getStateInformation (juce::MemoryBlock& destData)
+void CloudGreyVerbEditor::loadJSONPreset()
 {
-    if (auto xmlState = parameters.copyState().createXml())
-        copyXmlToBinary (*xmlState, destData);
+    fileChooser = std::make_unique<juce::FileChooser>("Select GreyCloud Preset JSON",
+        juce::File::getSpecialLocation(juce::File::userDesktopDirectory),
+        "*.json");
+        
+    auto folderChooserFlags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
+    
+    fileChooser->launchAsync(folderChooserFlags, [this] (const juce::FileChooser& chooser)
+    {
+        auto file = chooser.getResult();
+        if (!file.existsAsFile()) return;
+        
+        juce::var jsonObject = juce::JSON::parse(file);
+        if (!jsonObject.isObject()) return;
+        
+        auto* obj = jsonObject.getDynamicObject();
+        if (!(obj && obj->hasProperty("presets") && jsonObject["presets"].isArray())) return;
+
+        auto* presetsArray = jsonObject["presets"].getArray();
+        if (!presetsArray || presetsArray->isEmpty()) return;
+
+        juce::PopupMenu m;
+        for (int i = 0; i < presetsArray->size(); ++i)
+        {
+            auto presetVar = presetsArray->getReference(i);
+            if (presetVar.isObject() && presetVar.getDynamicObject()->hasProperty("name"))
+            {
+                m.addItem(i + 1, presetVar.getDynamicObject()->getProperty("name").toString());
+            }
+        }
+        
+        if (m.getNumItems() == 0) return;
+        
+        // Pass jsonObject by value so its ref-count keeps the tree alive
+        m.showMenuAsync(juce::PopupMenu::Options(), [this, jsonObject] (int result)
+        {
+            if (result <= 0) return;
+            int idx = result - 1;
+            auto* pArray = jsonObject["presets"].getArray();
+            if (!pArray) return;
+            auto presetVar = pArray->getReference(idx);
+            if (presetVar.isObject() && presetVar.getDynamicObject()->hasProperty("params"))
+            {
+                auto paramsVar = presetVar.getDynamicObject()->getProperty("params");
+                if (paramsVar.isObject())
+                {
+                    auto* paramsObj = paramsVar.getDynamicObject();
+                    auto* vts = &audioProcessor.getVTS();
+                    for (auto& prop : paramsObj->getProperties())
+                    {
+                        auto id = prop.name.toString();
+                        if (auto* param = vts->getParameter(id))
+                        {
+                            float normalized = param->convertTo0to1(static_cast<float>(static_cast<double>(prop.value)));
+                            param->setValueNotifyingHost(normalized);
+                        }
+                    }
+                }
+            }
+        });
+    });
 }
 
-void CloudGreyVerbProcessor::setStateInformation (const void* data, int sizeInBytes)
-{
-    if (auto xmlState = getXmlFromBinary (data, sizeInBytes))
-        parameters.replaceState (juce::ValueTree::fromXml (*xmlState));
-}
-
-// This creates new instances of the plugin
-juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
-{
-    return new CloudGreyVerbProcessor();
-}
