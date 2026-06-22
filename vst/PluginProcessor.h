@@ -11,6 +11,14 @@ public:
     CloudGreyVerbProcessor();
     ~CloudGreyVerbProcessor() override;
 
+    struct BuiltInPreset {
+        juce::String name;
+        float mix, texture, freeze, feedback, size, diffusion, modDepth, modRate, damping, lowDamping, tone, inputGain, outputGain, shimmer, preDelay, stereoWidth;
+        
+        BuiltInPreset(juce::String n, float m, float t, float fr, float fb, float s, float d, float md, float mr, float da, float lda, float to, float ig, float og, float sh, float pd, float sw)
+            : name(n), mix(m), texture(t), freeze(fr), feedback(fb), size(s), diffusion(d), modDepth(md), modRate(mr), damping(da), lowDamping(lda), tone(to), inputGain(ig), outputGain(og), shimmer(sh), preDelay(pd), stereoWidth(sw) {}
+    };
+
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
 
@@ -41,6 +49,9 @@ private:
     juce::AudioProcessorValueTreeState parameters;
     CloudGreyVerb dspCore;
     std::vector<float> dspMemory;
+    
+    std::vector<BuiltInPreset> presets;
+    int currentPresetIndex = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CloudGreyVerbProcessor)
 };
