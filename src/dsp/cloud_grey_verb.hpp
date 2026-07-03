@@ -73,7 +73,7 @@ private:
     float phaseB_ = 0.5f;
     float phaseInc_ = 0.0f;
     float targetPhaseInc_ = 0.0f;
-    dsp::OnePoleRC phaseIncSmoother_;
+    cgv_dsp::OnePoleRC phaseIncSmoother_;
 
     float minDelaySamples_ = 0.0f;
     float depthSamples_ = 0.0f;
@@ -160,26 +160,26 @@ private:
     float grainPhase_ = 0.0f;
     
     // Controle Granular Estendido
-    dsp::FastPRNG prng_;
+    cgv_dsp::FastPRNG prng_;
     float grainJitter_[CGV_NUM_GRAINS] = {0.0f};
     float grainPan_[CGV_NUM_GRAINS] = {0.5f};
     float grainOffsetMs_[CGV_NUM_GRAINS] = {0.0f};
     float freezeSmoothed_ = 0.0f;
 
     // Núcleo Diffuser (Smear Allpasses pré-delay)
-    dsp::Allpass diffuserAp_[CGV_NUM_ALLPASS];
+    cgv_dsp::Allpass diffuserAp_[CGV_NUM_ALLPASS];
 
     // Rede Greyhole (Long Modulated delays + Allpasses no Loop)
-    dsp::DelayLine delayL_, delayR_;
-    dsp::Allpass loopApL_, loopApR_;
+    cgv_dsp::DelayLine delayL_, delayR_;
+    cgv_dsp::Allpass loopApL_, loopApR_;
     size_t mainDelaySize_ = 0;
     
-    dsp::DelayLine preDelayMono_;
+    cgv_dsp::DelayLine preDelayMono_;
     float preDelaySmoothed_ = 0.0f;
 
     // LFOs dedicados (Fases cruzadas para imagem estéreo larga)
-    dsp::LFO lfo1_, lfo2_;
-    dsp::LFO spinLfo_;
+    cgv_dsp::LFO lfo1_, lfo2_;
+    cgv_dsp::LFO spinLfo_;
     
     // Modulation drift state
     float modDriftL_ = 0.0f;
@@ -190,17 +190,17 @@ private:
     float lastSafetyGain_ = 1.0f;
 
     // Filtros
-    dsp::OnePoleRC dampL_, dampR_;
-    dsp::OnePoleRC hpFeedL_, hpFeedR_; // Filtro HP para secar o low end
-    dsp::OnePoleRC toneL_, toneR_;
+    cgv_dsp::OnePoleRC dampL_, dampR_;
+    cgv_dsp::OnePoleRC hpFeedL_, hpFeedR_; // Filtro HP para secar o low end
+    cgv_dsp::OnePoleRC toneL_, toneR_;
 
     // Suavizadores de Parâmetros
-    dsp::OnePoleRC smoothSize_;
-    dsp::OnePoleRC smoothFeedback_;
-    dsp::OnePoleRC smoothDiffusion_;
-    dsp::OnePoleRC smoothDamping_;
-    dsp::OnePoleRC smoothLowDamping_;
-    dsp::OnePoleRC smoothTone_;
+    cgv_dsp::OnePoleRC smoothSize_;
+    cgv_dsp::OnePoleRC smoothFeedback_;
+    cgv_dsp::OnePoleRC smoothDiffusion_;
+    cgv_dsp::OnePoleRC smoothDamping_;
+    cgv_dsp::OnePoleRC smoothLowDamping_;
+    cgv_dsp::OnePoleRC smoothTone_;
 
     // Variáveis de estado para recálculo condicional de coeficientes
     float lastSmoothedDamping_ = -1.0f;
@@ -215,9 +215,9 @@ private:
 #if CGV_ENABLE_SHIMMER
     ShimmerPitcher shimmer_;
     bool shimmerAvailable_ = false;
-    dsp::OnePoleRC shimmerHp_;
-    dsp::OnePoleRC shimmerLp_;
-    dsp::OnePoleRC shimmerSmoother_;
+    cgv_dsp::OnePoleRC shimmerHp_;
+    cgv_dsp::OnePoleRC shimmerLp_;
+    cgv_dsp::OnePoleRC shimmerSmoother_;
 #endif
 
     // Helpers

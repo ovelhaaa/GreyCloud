@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <cstddef>
 
-namespace dsp {
+namespace cgv_dsp {
 
 constexpr float PI = 3.14159265358979323846f;
 
@@ -278,4 +278,4 @@ private:
     float z_ = 0.0f;
 };
 
-} // namespace dsp
+} // namespace cgv_dsp

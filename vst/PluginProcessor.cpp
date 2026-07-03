@@ -85,7 +85,7 @@ void CloudGreyVerbProcessor::setCurrentProgram (int index)
         updateParameterValue("inputGain", p.inputGain);
         updateParameterValue("outputGain", p.outputGain);
         updateParameterValue("shimmer", p.shimmer);
-        updateParameterValue("shimmerRatio", p.shimmerRatioIndex);
+        updateParameterValue("shimmerRatio", static_cast<float>(p.shimmerRatioIndex));
         updateParameterValue("preDelay", p.preDelay);
         updateParameterValue("stereoWidth", p.stereoWidth);
         updateParameterValue("hqMode", p.hqMode ? 1.0f : 0.0f);
@@ -123,7 +123,7 @@ void CloudGreyVerbProcessor::prepareToPlay (double sampleRate, int samplesPerBlo
     
     // Latency reporting
     currentLatencySamples = oversampling->getLatencyInSamples();
-    setLatencySamples(std::round(currentLatencySamples));
+    setLatencySamples(static_cast<int>(std::round(currentLatencySamples)));
     
     // Set up delay line for PDC
     juce::dsp::ProcessSpec spec;
@@ -176,7 +176,7 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     p.lowDamping = parameters.getRawParameterValue("lowDamping")->load();
     p.tone = parameters.getRawParameterValue("tone")->load();
     p.shimmer = parameters.getRawParameterValue("shimmer")->load();
-    p.shimmerRatioIndex = parameters.getRawParameterValue("shimmerRatio")->load();
+    p.shimmerRatioIndex = static_cast<int>(parameters.getRawParameterValue("shimmerRatio")->load());
     p.inputGain = parameters.getRawParameterValue("inputGain")->load();
     p.outputGain = parameters.getRawParameterValue("outputGain")->load();
     p.preDelay = parameters.getRawParameterValue("preDelay")->load();
@@ -197,7 +197,7 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
         float* channelL = osBlock.getChannelPointer(0);
         float* channelR = (osBlock.getNumChannels() > 1) ? osBlock.getChannelPointer(1) : nullptr;
         
-        int numOsSamples = osBlock.getNumSamples();
+        int numOsSamples = static_cast<int>(osBlock.getNumSamples());
         for (int i = 0; i < numOsSamples; ++i) {
             float inL = channelL[i];
             float inR = channelR ? channelR[i] : inL;
