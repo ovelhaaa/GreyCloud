@@ -263,6 +263,7 @@ public:
     }
 
     void clear() { z_ = 0.0f; }
+    void setValue(float v) { z_ = v; }
 
     float process(float in) {
         if (in != in) in = 0.0f; // Input NaN

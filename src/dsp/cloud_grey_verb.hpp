@@ -17,7 +17,7 @@
 
 // --- Perfis de Compilação STM32H5 ---
 // Use flags no compilador para definir (-DCLOUD_GREY_PROFILE_H5_LOW_CPU=1)
-#if !defined(CLOUD_GREY_PROFILE_H5_LOW_CPU) && !defined(CLOUD_GREY_PROFILE_H7_HIGH_QUALITY) && !defined(CLOUD_GREY_PROFILE_H5_BALANCED)
+#if !defined(CLOUD_GREY_PROFILE_H5_LOW_CPU) && !defined(CLOUD_GREY_PROFILE_H7_HIGH_QUALITY) && !defined(CLOUD_GREY_PROFILE_H5_BALANCED) && !defined(CLOUD_GREY_PROFILE_DESKTOP_STUDIO)
     // Default = Balanced
     #define CLOUD_GREY_PROFILE_H5_BALANCED 1
 #endif
@@ -31,6 +31,13 @@
     #endif
 #elif CLOUD_GREY_PROFILE_H7_HIGH_QUALITY
     #define CGV_NUM_GRAINS 4
+    #define CGV_NUM_ALLPASS 4
+    #define CGV_NUM_LOOP_ALLPASS 2
+    #ifndef CGV_ENABLE_SHIMMER
+        #define CGV_ENABLE_SHIMMER 1
+    #endif
+#elif CLOUD_GREY_PROFILE_DESKTOP_STUDIO
+    #define CGV_NUM_GRAINS 6
     #define CGV_NUM_ALLPASS 4
     #define CGV_NUM_LOOP_ALLPASS 2
     #ifndef CGV_ENABLE_SHIMMER
@@ -52,6 +59,7 @@ public:
     void reset();
     float process(float input);
     void processStereo(float input, float& outL, float& outR);
+    void setRatio(float ratio);
 
 private:
     float readDelay(float delaySamples) const;
@@ -64,6 +72,8 @@ private:
     float phaseA_ = 0.0f;
     float phaseB_ = 0.5f;
     float phaseInc_ = 0.0f;
+    float targetPhaseInc_ = 0.0f;
+    dsp::OnePoleRC phaseIncSmoother_;
 
     float minDelaySamples_ = 0.0f;
     float depthSamples_ = 0.0f;
@@ -96,6 +106,7 @@ public:
         float damping = 0.5f;      // 0.0 a 1.0 -> Absorção de altas frequências no feedback (Dark -> Bright)
         float tone = 0.5f;         // 0.0 a 1.0 -> Filtro Tilt no Wet: <0.5 Dark, >0.5 Bright
         float shimmer = 0.0f;      // 0.0 a 1.0 -> Placeholder para Pitch Shift (+1 OCT) no feedback (TODO)
+        int shimmerRatioIndex = 2; // 0=-1oct, 1=+5th, 2=+1oct, 3=+1oct+5th, 4=+2oct
         float inputGain = 1.0f;    // 0.0 a 2.0 -> Compensação / Excitação de entrada
         float outputGain = 1.0f;   // 0.0 a 2.0 -> Saída geral
         float preDelay = 0.0f;     // 0.0 a 1.0 -> 0ms a 200ms
@@ -156,7 +167,7 @@ private:
     float freezeSmoothed_ = 0.0f;
 
     // Núcleo Diffuser (Smear Allpasses pré-delay)
-    dsp::Allpass ap1_, ap2_, ap3_, ap4_;
+    dsp::Allpass diffuserAp_[CGV_NUM_ALLPASS];
 
     // Rede Greyhole (Long Modulated delays + Allpasses no Loop)
     dsp::DelayLine delayL_, delayR_;
@@ -182,6 +193,21 @@ private:
     dsp::OnePoleRC dampL_, dampR_;
     dsp::OnePoleRC hpFeedL_, hpFeedR_; // Filtro HP para secar o low end
     dsp::OnePoleRC toneL_, toneR_;
+
+    // Suavizadores de Parâmetros
+    dsp::OnePoleRC smoothSize_;
+    dsp::OnePoleRC smoothFeedback_;
+    dsp::OnePoleRC smoothDiffusion_;
+    dsp::OnePoleRC smoothDamping_;
+    dsp::OnePoleRC smoothLowDamping_;
+    dsp::OnePoleRC smoothTone_;
+
+    // Variáveis de estado para recálculo condicional de coeficientes
+    float lastSmoothedDamping_ = -1.0f;
+    float lastSmoothedLowDamping_ = -1.0f;
+    float lastSmoothedTone_ = -1.0f;
+    float lastModRate_ = -1.0f;
+    float lastDynamicLpFreq_ = -1.0f;
 
     // Envelope Follower para Ducking do Reverb e do Shimmer
     float duckingEnvState_ = 0.0f;

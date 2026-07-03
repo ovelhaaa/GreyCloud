@@ -46,6 +46,7 @@ target_compile_definitions(NimbusReverbPlugin
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0
+        CLOUD_GREY_PROFILE_DESKTOP_STUDIO=1
 )
 
 target_link_libraries(NimbusReverbPlugin
@@ -55,6 +56,7 @@ target_link_libraries(NimbusReverbPlugin
         juce::juce_audio_processors
         juce::juce_gui_basics
         juce::juce_gui_extra
+        juce::juce_dsp
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags

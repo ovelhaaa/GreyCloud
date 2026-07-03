@@ -50,7 +50,7 @@ CloudGreyVerb::Params CloudGreyVerb::getPreset(Preset preset) {
         case Preset::ShimmerCloud:
             p.mix = 0.55f; p.texture = 0.55f; p.freeze = 0.0f; p.feedback = 0.58f;
             p.size = 0.62f; p.diffusion = 0.70f; p.modDepth = 0.20f; p.modRate = 0.12f;
-            p.damping = 0.55f; p.tone = 0.62f; p.shimmer = 0.20f; p.inputGain = 0.80f; p.outputGain = 0.85f;
+            p.damping = 0.55f; p.tone = 0.62f; p.shimmer = 0.20f; p.shimmerRatioIndex = 2; p.inputGain = 0.80f; p.outputGain = 0.85f;
             break;
     }
     return p;
@@ -73,9 +73,21 @@ bool ShimmerPitcher::init(float sampleRate, float* buffer, uint32_t bufferSize) 
     
     if (depthSamples_ < 10.0f) return false;
     
-    phaseInc_ = (ratio - 1.0f) / depthSamples_;
+    phaseIncSmoother_.clear();
+    phaseIncSmoother_.setFreq(5.0f, sampleRate_);
+    
+    setRatio(2.0f); // Default to one octave up
+    phaseInc_ = targetPhaseInc_;
+    phaseIncSmoother_.setValue(targetPhaseInc_); // Snap to target
+    
     reset();
     return true;
+}
+
+void ShimmerPitcher::setRatio(float ratio) {
+    if (depthSamples_ > 0.0f) {
+        targetPhaseInc_ = (ratio - 1.0f) / depthSamples_;
+    }
 }
 
 void ShimmerPitcher::reset() {
@@ -85,6 +97,9 @@ void ShimmerPitcher::reset() {
     writePos_ = 0;
     phaseA_ = 0.0f;
     phaseB_ = 0.5f;
+    
+    phaseIncSmoother_.setValue(targetPhaseInc_);
+    phaseInc_ = targetPhaseInc_;
 }
 
 float ShimmerPitcher::readDelay(float delaySamples) const {
@@ -139,11 +154,15 @@ float ShimmerPitcher::process(float input) {
     
     out = dsp::softClip(out);
     
+    phaseInc_ = phaseIncSmoother_.process(targetPhaseInc_);
+    
     phaseA_ += phaseInc_;
     if (phaseA_ >= 1.0f) phaseA_ -= 1.0f;
+    if (phaseA_ < 0.0f) phaseA_ += 1.0f;
     
     phaseB_ += phaseInc_;
     if (phaseB_ >= 1.0f) phaseB_ -= 1.0f;
+    if (phaseB_ < 0.0f) phaseB_ += 1.0f;
     
     return out;
 }
@@ -175,11 +194,15 @@ void ShimmerPitcher::processStereo(float input, float& outL, float& outR) {
     outL = dsp::softClip(outL);
     outR = dsp::softClip(outR);
     
+    phaseInc_ = phaseIncSmoother_.process(targetPhaseInc_);
+    
     phaseA_ += phaseInc_;
     if (phaseA_ >= 1.0f) phaseA_ -= 1.0f;
+    if (phaseA_ < 0.0f) phaseA_ += 1.0f;
     
     phaseB_ += phaseInc_;
     if (phaseB_ >= 1.0f) phaseB_ -= 1.0f;
+    if (phaseB_ < 0.0f) phaseB_ += 1.0f;
 }
 #endif
 
@@ -196,14 +219,12 @@ void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferS
     // Repartição do buffer contínuo (Divisão amigável e segura para a memória entregue).
     // O Granulador usa cerca de 20%, APs pequenos ~10%, L/R Delays o resto.
     size_t granulSize = static_cast<size_t>(bufferSize * 0.20f);
-    size_t ap1Size    = dsp::nextPrime(static_cast<size_t>(bufferSize * 0.015f)) + 1; // ~13ms @48k
-    size_t ap2Size    = dsp::nextPrime(static_cast<size_t>(bufferSize * 0.02f)) + 1;  // ~20ms
+    size_t apSizes[4] = {0};
+    apSizes[0] = dsp::nextPrime(static_cast<size_t>(bufferSize * 0.015f)) + 1; // ~13ms @48k
+    apSizes[1] = dsp::nextPrime(static_cast<size_t>(bufferSize * 0.02f)) + 1;  // ~20ms
 #if CGV_NUM_ALLPASS > 2
-    size_t ap3Size    = dsp::nextPrime(static_cast<size_t>(bufferSize * 0.025f)) + 1; // ~25ms
-    size_t ap4Size    = dsp::nextPrime(static_cast<size_t>(bufferSize * 0.035f)) + 1; // ~35ms
-#else
-    size_t ap3Size    = 0;
-    size_t ap4Size    = 0;
+    apSizes[2] = dsp::nextPrime(static_cast<size_t>(bufferSize * 0.025f)) + 1; // ~25ms
+    apSizes[3] = dsp::nextPrime(static_cast<size_t>(bufferSize * 0.035f)) + 1; // ~35ms
 #endif
 
 #if CGV_NUM_LOOP_ALLPASS > 0
@@ -227,7 +248,7 @@ void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferS
     }
     
     // O restante vai para main delays (~58-66%)
-    size_t remaining = bufferSize - (granulSize + ap1Size + ap2Size + ap3Size + ap4Size + lapLSize + lapRSize + shimmerSize + predelaySize);
+    size_t remaining = bufferSize - (granulSize + apSizes[0] + apSizes[1] + apSizes[2] + apSizes[3] + lapLSize + lapRSize + shimmerSize + predelaySize);
     mainDelaySize_ = remaining / 2;
 
     // Atribuição sequencial s/ alocação
@@ -238,12 +259,10 @@ void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferS
     grainMemory_ = ptr; ptr += granulSize;
     grainMemorySize_ = granulSize;
 
-    ap1_.init(ptr, ap1Size); ptr += ap1Size;
-    ap2_.init(ptr, ap2Size); ptr += ap2Size;
-#if CGV_NUM_ALLPASS > 2
-    ap3_.init(ptr, ap3Size); ptr += ap3Size;
-    ap4_.init(ptr, ap4Size); ptr += ap4Size;
-#endif
+    for (int i = 0; i < CGV_NUM_ALLPASS; ++i) {
+        diffuserAp_[i].init(ptr, apSizes[i]); 
+        ptr += apSizes[i];
+    }
     
 #if CGV_NUM_LOOP_ALLPASS > 0
     loopApL_.init(ptr, lapLSize); ptr += lapLSize;
@@ -288,10 +307,10 @@ void CloudGreyVerb::reset() {
     loopEnergy_ = 0.0f;
     lastSafetyGain_ = 1.0f;
     
-    ap1_.clear(); ap2_.clear(); 
-#if CGV_NUM_ALLPASS > 2
-    ap3_.clear(); ap4_.clear();
-#endif
+
+    for (int i = 0; i < CGV_NUM_ALLPASS; ++i) {
+        diffuserAp_[i].clear();
+    }
 #if CGV_NUM_LOOP_ALLPASS > 0
     loopApL_.clear(); loopApR_.clear();
 #endif
@@ -302,11 +321,35 @@ void CloudGreyVerb::reset() {
     hpFeedL_.clear(); hpFeedR_.clear();
     toneL_.clear(); toneR_.clear();
     duckingEnvState_ = 0.0f;
+    
+    float smoothHz = 15.0f;
+    smoothSize_.clear(); smoothSize_.setFreq(smoothHz, sampleRate_); smoothSize_.setValue(params_.size);
+    smoothFeedback_.clear(); smoothFeedback_.setFreq(smoothHz, sampleRate_); smoothFeedback_.setValue(params_.feedback);
+    smoothDiffusion_.clear(); smoothDiffusion_.setFreq(smoothHz, sampleRate_); smoothDiffusion_.setValue(params_.diffusion);
+    smoothDamping_.clear(); smoothDamping_.setFreq(smoothHz, sampleRate_); smoothDamping_.setValue(params_.damping);
+    smoothLowDamping_.clear(); smoothLowDamping_.setFreq(smoothHz, sampleRate_); smoothLowDamping_.setValue(params_.lowDamping);
+    smoothTone_.clear(); smoothTone_.setFreq(smoothHz, sampleRate_); smoothTone_.setValue(params_.tone);
+    
+    lastSmoothedDamping_ = -1.0f;
+    lastSmoothedLowDamping_ = -1.0f;
+    lastSmoothedTone_ = -1.0f;
+    lastModRate_ = -1.0f;
+    lastDynamicLpFreq_ = -1.0f;
+
+    // Tone: Tilt EQ Muscial fixo em 800Hz
+    toneL_.setFreq(800.0f, sampleRate_); 
+    toneR_.setFreq(800.0f, sampleRate_);
+
+
 #if CGV_ENABLE_SHIMMER
     shimmerHp_.clear();
     shimmerLp_.clear();
-    shimmer_.reset();
     shimmerSmoother_.clear();
+    if (shimmerAvailable_) {
+        const float ratioMap[5] = {0.5f, 1.5f, 2.0f, 3.0f, 4.0f};
+        shimmer_.setRatio(ratioMap[params_.shimmerRatioIndex]);
+        shimmer_.reset();
+    }
     shimmerSmoother_.setFreq(8.0f, sampleRate_); // 8 Hz smoothing for faster but smooth response
 #endif
 }
@@ -331,6 +374,8 @@ void CloudGreyVerb::setParams(const Params& p) {
     params_.damping = clampParam(params_.damping, 0.0f, 1.0f);
     params_.tone = clampParam(params_.tone, 0.0f, 1.0f);
     params_.shimmer = clampParam(params_.shimmer, 0.0f, 1.0f);
+    if (params_.shimmerRatioIndex < 0) params_.shimmerRatioIndex = 0;
+    if (params_.shimmerRatioIndex > 4) params_.shimmerRatioIndex = 4;
     params_.inputGain = clampParam(params_.inputGain, 0.0f, 2.0f);
     params_.outputGain = clampParam(params_.outputGain, 0.0f, 2.0f);
     params_.preDelay = clampParam(params_.preDelay, 0.0f, 1.0f);
@@ -342,33 +387,8 @@ void CloudGreyVerb::setParams(const Params& p) {
     gainDry_ = sqrtf(1.0f - m);
     gainWet_ = sqrtf(m);
 
-    
-    // LFO Mapping (0.05 Hz slow drift - 2Hz chorus speed)
-    float lfoHz = dsp::lerp(0.05f, 2.0f, params_.modRate);
-    lfo1_.setRate(lfoHz, sampleRate_);
-    lfo2_.setRate(lfoHz * 0.87f, sampleRate_); // 13% offset estéreo
-    spinLfo_.setRate(0.5f + params_.modRate * 2.0f, sampleRate_);
+    // O resto será recalculado condicionalmente no processSample() para o smoothing
 
-    // Filtros
-    float lpFreq = dsp::lerp(800.0f, 15000.0f, params_.damping);
-    dampL_.setFreq(lpFreq, sampleRate_);
-    dampR_.setFreq(lpFreq, sampleRate_);
-    
-    // Highpass no Feedback (Crucial para Bass/Guitars, evita lama 150hz)
-    float hpFreq = dsp::lerp(20.0f, 400.0f, params_.lowDamping); 
-    hpFeedL_.setFreq(hpFreq, sampleRate_);
-    hpFeedR_.setFreq(hpFreq, sampleRate_);
-    
-    // Tone: Tilt EQ Muscial (pré-calcula as bandas de 800Hz)
-    toneL_.setFreq(800.0f, sampleRate_); 
-    toneR_.setFreq(800.0f, sampleRate_);
-    if (params_.tone < 0.5f) {
-        toneGainLow_ = 1.0f;
-        toneGainHigh_ = params_.tone * 2.0f; // Atenua agudos
-    } else {
-        toneGainLow_ = (1.0f - (params_.tone - 0.5f) * 2.0f); // Atenua graves
-        toneGainHigh_ = 1.0f;
-    }
 
 #if CGV_ENABLE_SHIMMER
     shimmerHp_.setFreq(300.0f, sampleRate_);
@@ -478,6 +498,48 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
         return;
     }
 
+    // --- Smoothing Update per-sample ---
+    float sSize = smoothSize_.process(params_.size);
+    float sFeedback = smoothFeedback_.process(params_.feedback);
+    float sDiff = smoothDiffusion_.process(params_.diffusion);
+    float sDamp = smoothDamping_.process(params_.damping);
+    float sLowDamp = smoothLowDamping_.process(params_.lowDamping);
+    float sTone = smoothTone_.process(params_.tone);
+
+    // --- Conditional Recalculation (cheap eps check) ---
+    if (fabsf(params_.modRate - lastModRate_) > 0.001f) {
+        lastModRate_ = params_.modRate;
+        float lfoHz = dsp::lerp(0.05f, 2.0f, params_.modRate);
+        lfo1_.setRate(lfoHz, sampleRate_);
+        lfo2_.setRate(lfoHz * 0.87f, sampleRate_);
+        spinLfo_.setRate(0.5f + params_.modRate * 2.0f, sampleRate_);
+    }
+
+    if (fabsf(sLowDamp - lastSmoothedLowDamping_) > 0.001f) {
+        lastSmoothedLowDamping_ = sLowDamp;
+        float hpFreq = dsp::lerp(20.0f, 400.0f, sLowDamp);
+        hpFeedL_.setFreq(hpFreq, sampleRate_);
+        hpFeedR_.setFreq(hpFreq, sampleRate_);
+    }
+
+    if (fabsf(sTone - lastSmoothedTone_) > 0.001f) {
+        lastSmoothedTone_ = sTone;
+        if (sTone < 0.5f) {
+            toneGainLow_ = 1.0f;
+            toneGainHigh_ = sTone * 2.0f;
+        } else {
+            toneGainLow_ = (1.0f - (sTone - 0.5f) * 2.0f);
+            toneGainHigh_ = 1.0f;
+        }
+    }
+
+#if CGV_ENABLE_SHIMMER
+    if (shimmerAvailable_) {
+        const float ratioMap[5] = {0.5f, 1.5f, 2.0f, 3.0f, 4.0f};
+        shimmer_.setRatio(ratioMap[params_.shimmerRatioIndex]);
+    }
+#endif
+
     // 1. Excitação Mono Interna
     float monoIn = (inL + inR) * 0.5f * params_.inputGain;
     
@@ -524,19 +586,18 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     processGranular(monoIn, lfo1_val, granOutL, granOutR);
 
     // 3. Diffuser / Allpass Series (O núcleo Greyhole injeta Sum no Diffuser p/ smear)
-    float diffCoef = dsp::lerp(0.1f, 0.75f, params_.diffusion);
-    
-    // Micros-modulação nos allpasses de difusão p/ reduzir estaticidade inicial (Spin/Wander)
+    float diffCoef = dsp::lerp(0.1f, 0.75f, sDiff);
     float spin1 = spinLfo_.getValue(0.0f) * 2.5f;
     float spin2 = spinLfo_.getValue(0.25f) * 2.5f;
-    
-    // Processamos apenas a média do estéreo aqui p/ reduzir CPU (Mono smear -> expansão em seguida)
-    float diffSignalMono = ap2_.processModulated(ap1_.processModulated((granOutL + granOutR) * 0.5f, diffCoef, spin1), diffCoef, spin2);
-#if CGV_NUM_ALLPASS > 2
     float spin3 = spinLfo_.getValue(0.5f) * 2.5f;
     float spin4 = spinLfo_.getValue(0.75f) * 2.5f;
-    diffSignalMono = ap4_.processModulated(ap3_.processModulated(diffSignalMono, diffCoef, spin3), diffCoef, spin4);
-#endif
+    float spinVals[4] = { spin1, spin2, spin3, spin4 };
+
+    // Processamos apenas a média do estéreo aqui p/ reduzir CPU (Mono smear -> expansão em seguida)
+    float diffSignalMono = (granOutL + granOutR) * 0.5f;
+    for (int i = 0; i < CGV_NUM_ALLPASS; ++i) {
+        diffSignalMono = diffuserAp_[i].processModulated(diffSignalMono, diffCoef, spinVals[i]);
+    }
     
     // Criamos a base injetável combinando o estéreo granular limpo + Diffusor Mono (pseudo-decorrelacionado)
     float diffInL = granOutL * 0.4f + diffSignalMono * 0.8f;
@@ -546,7 +607,7 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
 
     // Size range: 10% a 95% do buffer total disponivel
     float maxDelayBase = static_cast<float>(mainDelaySize_) * 0.95f;
-    float baseDelayTimeL = dsp::lerp(sampleRate_ * 0.05f, maxDelayBase, params_.size);
+    float baseDelayTimeL = dsp::lerp(sampleRate_ * 0.05f, maxDelayBase, sSize);
     float baseDelayTimeR = baseDelayTimeL * 0.81f; // Assimetria crucial em reverb
     
     // Modulação (drift) convertida para frames. Depth ~ 0 a 15ms
@@ -567,7 +628,7 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     float readR = delayR_.read(timeR);
 
     // Damping intrínseco e Dinâmico do ambiente (Ducking Tone)
-    float baseLpFreq = dsp::lerp(800.0f, 15000.0f, params_.damping);
+    float baseLpFreq = dsp::lerp(800.0f, 15000.0f, sDamp);
     float duckFactor = 1.0f / (1.0f + duckingEnvState_ * 8.0f); // Fast decay de high frequencies no ataque
     float dynamicLpFreq = baseLpFreq * duckFactor;
     if (dynamicLpFreq < 300.0f) dynamicLpFreq = 300.0f; 
@@ -584,16 +645,15 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     
     // Difusão DENTRO do feedback (Acumula densidade como algoritmos Lexicon/Greyhole)
 #if CGV_NUM_LOOP_ALLPASS > 0
-    float inLoopDiff = diffCoef * 0.6f;
-    readL = loopApL_.process(readL, inLoopDiff);
-    readR = loopApR_.process(readR, inLoopDiff);
+    readL = loopApL_.processModulated(readL, 0.5f, spin1 * 0.5f);
+    readR = loopApR_.processModulated(readR, 0.5f, spin2 * 0.5f);
 #endif
 
     // Injeção de volta à linha de atraso (CROSS-FEEDBACK Matrix L/R)
-    float inputInject = dsp::lerp(0.28f, 0.40f, params_.diffusion);
+    float inputInject = dsp::lerp(0.28f, 0.40f, sDiff);
 
-    float sizeComp = dsp::lerp(1.0f, 0.88f, params_.size);
-    float effectiveFeedback = params_.feedback * sizeComp;
+    float sizeComp = dsp::lerp(1.0f, 0.88f, sSize);
+    float effectiveFeedback = sFeedback * sizeComp;
 
     // Quando o freeze atua, o feedback da nuvem estática aproxima-se de 1.0 lentamente
     // para sustentar o latch sem perder a massa (já que a entrada foi cortada).
@@ -685,7 +745,7 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
 
     // 5. Tonalidade Global (Tilt EQ)
     // Mistura frações do difusor de entrada na cauda p/ colar ataques
-    float wetGlue = dsp::lerp(0.38f, 0.50f, params_.diffusion);
+    float wetGlue = dsp::lerp(0.38f, 0.50f, sDiff);
     float wetL = readL + diffInL * wetGlue;
     float wetR = readR + diffInR * wetGlue;
 

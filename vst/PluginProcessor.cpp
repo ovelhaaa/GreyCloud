@@ -23,6 +23,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"preDelay", 1}, "Pre-Delay", 0.0f, 1.0f, 0.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"stereoWidth", 1}, "Stereo Width", 0.0f, 2.0f, 1.0f));
 
+    juce::StringArray shimmerChoices = { "-1 Oct", "+5th", "+1 Oct", "+1 Oct & 5th", "+2 Oct" };
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"shimmerRatio", 1}, "Shimmer Ratio", shimmerChoices, 2));
+    
+    params.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"hqMode", 1}, "HQ Mode", false));
+
     return { params.begin(), params.end() };
 }
 
@@ -40,7 +45,7 @@ CloudGreyVerbProcessor::CloudGreyVerbProcessor()
     presets.push_back(BuiltInPreset("GlitchSmear", 0.5f, 0.05f, 0.0f, 0.5f, 0.25f, 0.2f, 0.9f, 0.8f, 0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f));
     presets.push_back(BuiltInPreset("AlwaysOnSubtle", 0.25f, 0.2f, 0.0f, 0.3f, 0.2f, 0.4f, 0.1f, 0.1f, 0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 0.0f, 0.05f, 0.8f));
     presets.push_back(BuiltInPreset("BrightCloud", 0.5f, 0.6f, 0.0f, 0.75f, 0.6f, 0.7f, 0.6f, 0.4f, 0.7f, 0.8f, 0.8f, 1.0f, 1.0f, 0.0f, 0.1f, 1.2f));
-    presets.push_back(BuiltInPreset("ShimmerCloud", 0.55f, 0.55f, 0.0f, 0.58f, 0.62f, 0.70f, 0.20f, 0.12f, 0.55f, 0.6f, 0.62f, 0.80f, 0.85f, 0.20f, 0.15f, 1.4f));
+    presets.push_back(BuiltInPreset("ShimmerCloud", 0.55f, 0.55f, 0.0f, 0.58f, 0.62f, 0.70f, 0.20f, 0.12f, 0.55f, 0.6f, 0.62f, 0.80f, 0.85f, 0.20f, 0.15f, 1.4f, 2, true));
     currentPresetIndex = 0;
 }
 
@@ -80,8 +85,10 @@ void CloudGreyVerbProcessor::setCurrentProgram (int index)
         updateParameterValue("inputGain", p.inputGain);
         updateParameterValue("outputGain", p.outputGain);
         updateParameterValue("shimmer", p.shimmer);
+        updateParameterValue("shimmerRatio", p.shimmerRatioIndex);
         updateParameterValue("preDelay", p.preDelay);
         updateParameterValue("stereoWidth", p.stereoWidth);
+        updateParameterValue("hqMode", p.hqMode ? 1.0f : 0.0f);
     }
 }
 
@@ -102,9 +109,32 @@ void CloudGreyVerbProcessor::prepareToPlay (double sampleRate, int samplesPerBlo
 {
     // Allocate DSP memory (~1.5MB for stereo 48k operations)
     size_t requiredFloats = 800000; 
-    dspMemory.resize(requiredFloats, 0.0f);
+    dspMemoryNormal.resize(requiredFloats, 0.0f);
     
-    dspCore.init(static_cast<float>(sampleRate), dspMemory.data(), requiredFloats);
+    // For HQ mode (2x oversampling), we need to handle 2x sample rate without halving max delay times.
+    size_t requiredFloatsHQ = requiredFloats * 2;
+    dspMemoryHQ.resize(requiredFloatsHQ, 0.0f);
+    
+    dspCoreNormal.init(static_cast<float>(sampleRate), dspMemoryNormal.data(), requiredFloats);
+    dspCoreHQ.init(static_cast<float>(sampleRate * 2.0), dspMemoryHQ.data(), requiredFloatsHQ);
+    
+    oversampling = std::make_unique<juce::dsp::Oversampling<float>> (2, 1, juce::dsp::Oversampling<float>::filterHalfBandFIREquiripple, true);
+    oversampling->initProcessing (samplesPerBlock);
+    
+    // Latency reporting
+    currentLatencySamples = oversampling->getLatencyInSamples();
+    setLatencySamples(std::round(currentLatencySamples));
+    
+    // Set up delay line for PDC
+    juce::dsp::ProcessSpec spec;
+    spec.sampleRate = sampleRate;
+    spec.maximumBlockSize = samplesPerBlock;
+    spec.numChannels = 1;
+    
+    latencyCompensationL.prepare(spec);
+    latencyCompensationR.prepare(spec);
+    latencyCompensationL.setDelay(currentLatencySamples);
+    latencyCompensationR.setDelay(currentLatencySamples);
 }
 
 void CloudGreyVerbProcessor::releaseResources()
@@ -146,28 +176,69 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     p.lowDamping = parameters.getRawParameterValue("lowDamping")->load();
     p.tone = parameters.getRawParameterValue("tone")->load();
     p.shimmer = parameters.getRawParameterValue("shimmer")->load();
+    p.shimmerRatioIndex = parameters.getRawParameterValue("shimmerRatio")->load();
     p.inputGain = parameters.getRawParameterValue("inputGain")->load();
     p.outputGain = parameters.getRawParameterValue("outputGain")->load();
     p.preDelay = parameters.getRawParameterValue("preDelay")->load();
     p.stereoWidth = parameters.getRawParameterValue("stereoWidth")->load();
+    
+    bool hqMode = parameters.getRawParameterValue("hqMode")->load() > 0.5f;
 
-    dspCore.setParams(p);
+    if (hqMode) {
+        dspCoreHQ.setParams(p);
+    } else {
+        dspCoreNormal.setParams(p);
+    }
 
-    int numSamples = buffer.getNumSamples();
-    float* channelL = buffer.getWritePointer(0);
-    float* channelR = (totalNumOutputChannels > 1) ? buffer.getWritePointer(1) : nullptr;
+    if (hqMode) {
+        juce::dsp::AudioBlock<float> block (buffer);
+        juce::dsp::AudioBlock<float> osBlock = oversampling->processSamplesUp (block);
+        
+        float* channelL = osBlock.getChannelPointer(0);
+        float* channelR = (osBlock.getNumChannels() > 1) ? osBlock.getChannelPointer(1) : nullptr;
+        
+        int numOsSamples = osBlock.getNumSamples();
+        for (int i = 0; i < numOsSamples; ++i) {
+            float inL = channelL[i];
+            float inR = channelR ? channelR[i] : inL;
+            
+            float outL = 0.0f;
+            float outR = 0.0f;
+            
+            dspCoreHQ.processSample(inL, inR, outL, outR);
+            
+            channelL[i] = outL;
+            if (channelR) channelR[i] = outR;
+        }
+        
+        oversampling->processSamplesDown (block);
+    } else {
+        int numSamples = buffer.getNumSamples();
+        float* channelL = buffer.getWritePointer(0);
+        float* channelR = (totalNumOutputChannels > 1) ? buffer.getWritePointer(1) : nullptr;
 
-    for (int i = 0; i < numSamples; ++i) {
-        float inL = channelL[i];
-        float inR = channelR ? channelR[i] : inL;
-        
-        float outL = 0.0f;
-        float outR = 0.0f;
-        
-        dspCore.processSample(inL, inR, outL, outR);
-        
-        channelL[i] = outL;
-        if (channelR) channelR[i] = outR;
+        for (int i = 0; i < numSamples; ++i) {
+            float inL = channelL[i];
+            float inR = channelR ? channelR[i] : inL;
+            
+            float outL = 0.0f;
+            float outR = 0.0f;
+            
+            dspCoreNormal.processSample(inL, inR, outL, outR);
+            
+            float delayedL = latencyCompensationL.popSample(0);
+            latencyCompensationL.pushSample(0, outL);
+            outL = delayedL;
+            
+            if (channelR) {
+                float delayedR = latencyCompensationR.popSample(0);
+                latencyCompensationR.pushSample(0, outR);
+                outR = delayedR;
+            }
+            
+            channelL[i] = outL;
+            if (channelR) channelR[i] = outR;
+        }
     }
 }
 

@@ -263,6 +263,7 @@ int main() {
         p.mix = 1.0f; 
         p.modDepth = 0.8f;
         cgv.setParams(p);
+        cgv.reset();
 
         int burstFrames = 4800; // 100ms burst
         int tailFrames = 48000 * 3; // 3 secs decay check
@@ -340,6 +341,7 @@ int main() {
         p.mix = 1.0f; 
         p.modDepth = 0.9f;
         cgv.setParams(p);
+        cgv.reset();
 
         int burstFrames = 12000; // 250ms burst
         int tailFrames = 48000 * 12; // 12 secs decay check
@@ -396,6 +398,81 @@ int main() {
         if (runLongTailTest(shm, 1.0f)) passedCount++;
         totalTests++;
     }
+
+    cout << string(90, '-') << endl;
+    
+    cout << "\n--- PARAMETER JUMP STRESS TEST ---" << endl;
+    cout << left << setw(20) << "TEST NAME"
+         << setw(10) << "PASSED"
+         << setw(12) << "PEAK"
+         << setw(15) << "CLIP %"
+         << "NaN?" << endl;
+         
+    auto runJumpTest = [&]() {
+        TestResult result;
+        result.presetName = "ParameterJumpStress";
+        
+        vector<float> extBuffer(BUFFER_SIZE, 0.0f);
+        CloudGreyVerb cgv;
+        cgv.init(SAMPLE_RATE, extBuffer.data(), BUFFER_SIZE);
+
+        CloudGreyVerb::Params p = CloudGreyVerb::getPreset(CloudGreyVerb::Preset::BrightCloud);
+        cgv.setParams(p);
+        
+        int totalFrames = 48000 * 5; // 5 seconds
+        result.numSamples = totalFrames;
+        int chunkFrames = 512;
+        int numChunks = totalFrames / chunkFrames;
+        
+        float lastL = 0.0f;
+        float lastR = 0.0f;
+        
+        for (int c = 0; c < numChunks; c++) {
+            // Randomly jump parameters
+            p.size = (float)rand() / RAND_MAX;
+            p.feedback = (float)rand() / RAND_MAX * 0.94f;
+            p.diffusion = (float)rand() / RAND_MAX;
+            p.damping = (float)rand() / RAND_MAX;
+            p.lowDamping = (float)rand() / RAND_MAX;
+            p.tone = (float)rand() / RAND_MAX;
+            cgv.setParams(p);
+            
+            float left[512] = {0};
+            float right[512] = {0};
+            for(int i=0; i<512; i++) {
+                left[i] = right[i] = sinf((c*512+i) * 0.05f) * 0.5f + ((float)rand()/RAND_MAX * 2.0f - 1.0f) * 0.1f;
+            }
+            
+            cgv.processBlock(left, right, chunkFrames);
+            
+            for(int i=0; i<512; i++) {
+                if (isnan(left[i]) || isnan(right[i])) result.hadNaN = true;
+                
+                float peak = max(fabs(left[i]), fabs(right[i]));
+                if (peak > result.maxPeak) result.maxPeak = peak;
+                if (peak > 1.0f) result.numClips++;
+                
+                // Zip noise / pop derivative check
+                if (fabs(left[i] - lastL) > 0.8f) result.passed = false;
+                
+                lastL = left[i]; 
+                lastR = right[i];
+            }
+        }
+        
+        if (result.hadNaN || result.maxPeak > 5.0f) result.passed = false;
+        
+        cout << left << setw(20) << result.presetName 
+             << setw(10) << (result.passed ? "YES" : "NO")
+             << setw(12) << fixed << setprecision(4) << result.maxPeak
+             << setw(15) << fixed << setprecision(3) << ((float)result.numClips / result.numSamples * 100.0f)
+             << (result.hadNaN ? "YES" : "NO") << endl;
+             
+        return result.passed;
+    };
+    
+    if (runJumpTest()) passedCount++;
+    totalTests++;
 
     cout << string(90, '-') << endl;
     cout << "Testes passando: " << passedCount << "/" << totalTests << endl;

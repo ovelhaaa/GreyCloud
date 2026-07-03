@@ -4,6 +4,7 @@
 #include "cloud_grey_verb.hpp"
 #include <vector>
 #include <memory>
+#include <juce_dsp/juce_dsp.h>
 
 class CloudGreyVerbProcessor : public juce::AudioProcessor
 {
@@ -14,9 +15,11 @@ public:
     struct BuiltInPreset {
         juce::String name;
         float mix, texture, freeze, feedback, size, diffusion, modDepth, modRate, damping, lowDamping, tone, inputGain, outputGain, shimmer, preDelay, stereoWidth;
+        int shimmerRatioIndex;
+        bool hqMode;
         
-        BuiltInPreset(juce::String n, float m, float t, float fr, float fb, float s, float d, float md, float mr, float da, float lda, float to, float ig, float og, float sh, float pd, float sw)
-            : name(n), mix(m), texture(t), freeze(fr), feedback(fb), size(s), diffusion(d), modDepth(md), modRate(mr), damping(da), lowDamping(lda), tone(to), inputGain(ig), outputGain(og), shimmer(sh), preDelay(pd), stereoWidth(sw) {}
+        BuiltInPreset(juce::String n, float m, float t, float fr, float fb, float s, float d, float md, float mr, float da, float lda, float to, float ig, float og, float sh, float pd, float sw, int sri = 2, bool hq = false)
+            : name(n), mix(m), texture(t), freeze(fr), feedback(fb), size(s), diffusion(d), modDepth(md), modRate(mr), damping(da), lowDamping(lda), tone(to), inputGain(ig), outputGain(og), shimmer(sh), preDelay(pd), stereoWidth(sw), shimmerRatioIndex(sri), hqMode(hq) {}
     };
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
@@ -47,8 +50,16 @@ public:
 
 private:
     juce::AudioProcessorValueTreeState parameters;
-    CloudGreyVerb dspCore;
-    std::vector<float> dspMemory;
+    
+    CloudGreyVerb dspCoreNormal;
+    CloudGreyVerb dspCoreHQ;
+    std::vector<float> dspMemoryNormal;
+    std::vector<float> dspMemoryHQ;
+    
+    std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;
+    juce::dsp::DelayLine<float> latencyCompensationL { 1024 };
+    juce::dsp::DelayLine<float> latencyCompensationR { 1024 };
+    float currentLatencySamples = 0.0f;
     
     std::vector<BuiltInPreset> presets;
     int currentPresetIndex = 0;
