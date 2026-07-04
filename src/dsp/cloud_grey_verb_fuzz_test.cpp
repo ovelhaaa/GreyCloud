@@ -46,9 +46,18 @@ void runFuzzTest() {
         p.stereoCore = (prng.randFloat() > 0.5f);
         p.hardFreeze = (prng.randFloat() > 0.95f); // 5% chance of hard freeze
         
-        // Critical fuzz target: reverse logic combinations
-        p.reverseMix = prng.randFloat();
-        p.grainScan = prng.randFloat();
+        // Critical fuzz target: reverse logic combinations + extremes
+        if (i % 10 == 0) {
+            // Force maximum stress on the reverse buffers and anchors
+            p.reverseMix = (prng.randFloat() > 0.5f) ? 1.0f : 0.0f;
+            p.grainScan = (prng.randFloat() > 0.5f) ? 1.0f : 0.0f;
+            p.freeze = 1.0f;
+            p.texture = 1.0f;
+            p.size = 0.01f; // small buffer forces wrapping stress
+        } else {
+            p.reverseMix = prng.randFloat();
+            p.grainScan = prng.randFloat();
+        }
 
         fx.setParams(p);
         
