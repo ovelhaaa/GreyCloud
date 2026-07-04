@@ -489,7 +489,7 @@ void CloudGreyVerb::processGranular(float inL, float inR, float lfoDrift, float&
         if (readPos != readPos) readPos = 0.0f; // NaN check evasion
 
         if (readPos < 0.0f || readPos >= fGranSize) {
-            readPos = fmodf(readPos + fGranSize * 10.0f, fGranSize);
+            readPos = fmodf(readPos, fGranSize);
             if (readPos < 0.0f) readPos += fGranSize;
         }
 
