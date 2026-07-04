@@ -216,14 +216,14 @@ void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferS
     sampleRate_ = sampleRate;
 
     // Repartição do buffer contínuo (Divisão amigável e segura para a memória entregue).
-    // O Granulador usa cerca de 20%, APs pequenos ~10%, L/R Delays o resto.
-    size_t granulSize = static_cast<size_t>(bufferSize * 0.20f);
+    // O Granulador usa cerca de 10% por canal, APs pequenos ~10%, L/R Delays o resto.
+    size_t granulSize = static_cast<size_t>(bufferSize * 0.10f);
     size_t apSizes[4] = {0};
-    apSizes[0] = cgv_dsp::nextPrime(static_cast<size_t>(bufferSize * 0.015f)) + 1; // ~13ms @48k
-    apSizes[1] = cgv_dsp::nextPrime(static_cast<size_t>(bufferSize * 0.02f)) + 1;  // ~20ms
+    apSizes[0] = cgv_dsp::nextPrime(static_cast<size_t>(bufferSize * 0.0075f)) + 1;
+    apSizes[1] = cgv_dsp::nextPrime(static_cast<size_t>(bufferSize * 0.01f)) + 1;
 #if CGV_NUM_ALLPASS > 2
-    apSizes[2] = cgv_dsp::nextPrime(static_cast<size_t>(bufferSize * 0.025f)) + 1; // ~25ms
-    apSizes[3] = cgv_dsp::nextPrime(static_cast<size_t>(bufferSize * 0.035f)) + 1; // ~35ms
+    apSizes[2] = cgv_dsp::nextPrime(static_cast<size_t>(bufferSize * 0.0125f)) + 1;
+    apSizes[3] = cgv_dsp::nextPrime(static_cast<size_t>(bufferSize * 0.0175f)) + 1;
 #endif
 
 #if CGV_NUM_LOOP_ALLPASS > 0
@@ -240,27 +240,31 @@ void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferS
     size_t shimmerSize = 0;
 #endif
     
-    // Allocate 8% for predelay (~80ms @48k if 48000 frames total, but probably a bit better to use a fixed max, let's use 6-8%)
-    size_t predelaySize = static_cast<size_t>(sampleRate_ * 0.2f); // up to 200ms
-    if (predelaySize > bufferSize * 0.2f) {
-        predelaySize = static_cast<size_t>(bufferSize * 0.2f);
+    // Allocate predelay (up to 200ms per channel)
+    size_t predelaySize = static_cast<size_t>(sampleRate_ * 0.2f);
+    if (predelaySize > bufferSize * 0.1f) {
+        predelaySize = static_cast<size_t>(bufferSize * 0.1f);
     }
     
-    // O restante vai para main delays (~58-66%)
-    size_t remaining = bufferSize - (granulSize + apSizes[0] + apSizes[1] + apSizes[2] + apSizes[3] + lapLSize + lapRSize + shimmerSize + predelaySize);
+    // O restante vai para main delays
+    size_t diffTotal = 2 * (apSizes[0] + apSizes[1] + apSizes[2] + apSizes[3]);
+    size_t remaining = bufferSize - (2 * granulSize + diffTotal + lapLSize + lapRSize + shimmerSize + 2 * predelaySize);
     mainDelaySize_ = remaining / 2;
 
     // Atribuição sequencial s/ alocação
     float* ptr = externalBuffer;
 
-    preDelayMono_.init(ptr, predelaySize); ptr += predelaySize;
+    preDelayL_.init(ptr, predelaySize); ptr += predelaySize;
+    preDelayR_.init(ptr, predelaySize); ptr += predelaySize;
 
-    grainMemory_ = ptr; ptr += granulSize;
+    grainMemoryL_ = ptr; ptr += granulSize;
+    grainMemoryR_ = ptr; ptr += granulSize;
     grainMemorySize_ = granulSize;
 
     for (int i = 0; i < CGV_NUM_ALLPASS; ++i) {
-        diffuserAp_[i].init(ptr, apSizes[i]); 
-        ptr += apSizes[i];
+        diffuserApL_[i].init(ptr, apSizes[i]); ptr += apSizes[i];
+        size_t rSize = cgv_dsp::nextPrime(apSizes[i] + 5);
+        diffuserApR_[i].init(ptr, rSize); ptr += rSize;
     }
     
 #if CGV_NUM_LOOP_ALLPASS > 0
@@ -297,19 +301,21 @@ void CloudGreyVerb::reset() {
         grainOffsetMs_[i] = 5.0f + prng_.randFloat() * 35.0f;
     }
     
-    if (grainMemory_) {
-        for(size_t i = 0; i < grainMemorySize_; ++i) grainMemory_[i] = 0.0f;
+    if (grainMemoryL_) {
+        for (size_t i = 0; i < grainMemorySize_; ++i) {
+            grainMemoryL_[i] = 0.0f;
+            grainMemoryR_[i] = 0.0f;
+        }
     }
-    
-    modDriftL_ = 0.0f;
-    modDriftR_ = 0.0f;
-    loopEnergy_ = 0.0f;
-    lastSafetyGain_ = 1.0f;
-    
+    grainWritePos_ = 0;
 
     for (int i = 0; i < CGV_NUM_ALLPASS; ++i) {
-        diffuserAp_[i].clear();
+        diffuserApL_[i].clear();
+        diffuserApR_[i].clear();
     }
+    
+    preDelayL_.clear();
+    preDelayR_.clear();
 #if CGV_NUM_LOOP_ALLPASS > 0
     loopApL_.clear(); loopApR_.clear();
 #endif
@@ -400,16 +406,22 @@ void CloudGreyVerb::setParams(const Params& p) {
 #endif
 }
 
-void CloudGreyVerb::processGranular(float input, float lfoDrift, float& outL, float& outR) {
+void CloudGreyVerb::processGranular(float inL, float inR, float lfoDrift, float& outL, float& outR) {
     // FREEZE Smoothed: Transição musical (Real buffer freeze misturado)
     freezeSmoothed_ = cgv_dsp::lerp(freezeSmoothed_, params_.freeze, 0.005f);
 
-    float oldVal = grainMemory_[grainWritePos_];
-    // Se freeze = 1.0, mantemos 100% de oldVal preservando a nuvem estática,
-    // mas deixamos o ponteiro de gravação avançar para que os grãos girem.
     float writeGain = 1.0f - freezeSmoothed_;
     writeGain *= writeGain; // curva quadrática: menos vazamento perto de freeze 1
-    grainMemory_[grainWritePos_] = input * writeGain + oldVal * (1.0f - writeGain);
+    
+    if (params_.hardFreeze) {
+        writeGain = 0.0f;
+    }
+
+    float oldValL = grainMemoryL_[grainWritePos_];
+    float oldValR = grainMemoryR_[grainWritePos_];
+    
+    grainMemoryL_[grainWritePos_] = inL * writeGain + oldValL * (1.0f - writeGain);
+    grainMemoryR_[grainWritePos_] = inR * writeGain + oldValR * (1.0f - writeGain);
     
     grainWritePos_ = (grainWritePos_ + 1) % grainMemorySize_;
 
@@ -473,15 +485,24 @@ void CloudGreyVerb::processGranular(float input, float lfoDrift, float& outL, fl
         size_t idx2 = (idx1 + 1) % grainMemorySize_;
         float frac = readPos - static_cast<float>(idx1);
 
-        float sample = cgv_dsp::lerp(grainMemory_[idx1], grainMemory_[idx2], frac);
+        float sampleL = cgv_dsp::lerp(grainMemoryL_[idx1], grainMemoryL_[idx2], frac);
+        float sampleR = cgv_dsp::lerp(grainMemoryR_[idx1], grainMemoryR_[idx2], frac);
         
         // Espalhamento L/R variável (orgânico)
         float pan = grainPan_[i];
         float panL = 0.25f + (1.0f - pan) * 0.75f;
         float panR = 0.25f + pan * 0.75f;
 
-        accL += sample * window * panL;
-        accR += sample * window * panR;
+        if (params_.stereoCore) {
+            // Strictly preserve L/R image
+            accL += sampleL * window;
+            accR += sampleR * window;
+        } else {
+            // Synthetic width from mono mixdown
+            float monoSample = (sampleL + sampleR) * 0.5f;
+            accL += monoSample * window * panL;
+            accR += monoSample * window * panR;
+        }
     }
 
     // Normalize output based on grain count
@@ -539,8 +560,9 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     }
 #endif
 
-    // 1. Excitação Mono Interna
-    float monoIn = (inL + inR) * 0.5f * params_.inputGain;
+    // 1. Excitação e Roteamento
+    inL *= params_.inputGain;
+    inR *= params_.inputGain;
     
     // Envelope tracking of input magnitude para Ducking Tonal e Shimmer
     float inMag = (fabsf(inL) + fabsf(inR)) * 0.5f;
@@ -551,23 +573,32 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     }
     
     // Proteção rigorosa contra NaN do input:
-    if (monoIn != monoIn) monoIn = 0.0f; // NaN check
-    cgv_dsp::sanitize(monoIn);
+    cgv_dsp::sanitize(inL);
+    cgv_dsp::sanitize(inR);
     
     // 1.5. Pre-Delay
     float targetPredelayFrames = params_.preDelay * 0.2f * sampleRate_;
     preDelaySmoothed_ += 0.005f * (targetPredelayFrames - preDelaySmoothed_); 
     if (preDelaySmoothed_ < 1.0f) preDelaySmoothed_ = 1.0f; // minimum 1 sample delay
     
-    preDelayMono_.write(monoIn);
-    // Para simplificar e economizar CPU no granulador, usamos monoIn já com pre-delay. 
-    monoIn = preDelayMono_.read(preDelaySmoothed_);
+    preDelayL_.write(inL);
+    preDelayR_.write(inR);
+    
+    float pdL = preDelayL_.read(preDelaySmoothed_);
+    float pdR = preDelayR_.read(preDelaySmoothed_);
+    float pdMono = (pdL + pdR) * 0.5f;
 
-    // Kill-Dry dinâmico na injeção da malha: permite solar por cima da nuvem travada,
-    // garantindo que as notas novas não alimentem nem deteriorem o feedback extremo.
+    // Kill-Dry dinâmico na injeção da malha: permite solar por cima da nuvem travada
     float freezeKill = 1.0f - freezeSmoothed_;
     freezeKill *= freezeKill; // Curva quadrática para um fade rápido e suave
-    monoIn *= freezeKill;
+    
+    if (params_.hardFreeze) {
+        freezeKill = 0.0f;
+    }
+    
+    pdL *= freezeKill;
+    pdR *= freezeKill;
+    pdMono *= freezeKill;
 
     // LFOs (Calculados cedo para fornecer drift p/ motor Granular)
     float lfo1_val = lfo1_.process();
@@ -582,9 +613,13 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
 
     // 2. Núcleo Granular Estéreo (Clouds-ish smear/freeze)
     float granOutL = 0.0f, granOutR = 0.0f;
-    processGranular(monoIn, lfo1_val, granOutL, granOutR);
+    if (params_.stereoCore) {
+        processGranular(pdL, pdR, lfo1_val, granOutL, granOutR);
+    } else {
+        processGranular(pdMono, pdMono, lfo1_val, granOutL, granOutR);
+    }
 
-    // 3. Diffuser / Allpass Series (O núcleo Greyhole injeta Sum no Diffuser p/ smear)
+    // 3. Diffuser / Allpass Series
     float diffCoef = cgv_dsp::lerp(0.1f, 0.75f, sDiff);
     float spin1 = spinLfo_.getValue(0.0f) * 2.5f;
     float spin2 = spinLfo_.getValue(0.25f) * 2.5f;
@@ -592,17 +627,30 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     float spin4 = spinLfo_.getValue(0.75f) * 2.5f;
     float spinVals[4] = { spin1, spin2, spin3, spin4 };
 
-    // Processamos apenas a média do estéreo aqui p/ reduzir CPU (Mono smear -> expansão em seguida)
-    float diffSignalMono = (granOutL + granOutR) * 0.5f;
-    for (int i = 0; i < CGV_NUM_ALLPASS; ++i) {
-        diffSignalMono = diffuserAp_[i].processModulated(diffSignalMono, diffCoef, spinVals[i]);
+    float diffInL = 0.0f;
+    float diffInR = 0.0f;
+
+    if (params_.stereoCore) {
+        diffInL = granOutL;
+        diffInR = granOutR;
+        for (int i = 0; i < CGV_NUM_ALLPASS; ++i) {
+            diffInL = diffuserApL_[i].processModulated(diffInL, diffCoef, spinVals[i]);
+            diffInR = diffuserApR_[i].processModulated(diffInR, diffCoef, spinVals[i]);
+        }
+    } else {
+        float diffSignalMono = (granOutL + granOutR) * 0.5f;
+        for (int i = 0; i < CGV_NUM_ALLPASS; ++i) {
+            diffSignalMono = diffuserApL_[i].processModulated(diffSignalMono, diffCoef, spinVals[i]);
+        }
+        // Criamos a base injetável combinando o estéreo granular limpo + Diffusor Mono (pseudo-decorrelacionado)
+        diffInL = granOutL * 0.4f + diffSignalMono * 0.8f;
+        diffInR = granOutR * 0.4f - diffSignalMono * 0.8f;
     }
-    
-    // Criamos a base injetável combinando o estéreo granular limpo + Diffusor Mono (pseudo-decorrelacionado)
-    float diffInL = granOutL * 0.4f + diffSignalMono * 0.8f;
-    float diffInR = granOutR * 0.4f - diffSignalMono * 0.8f;
 
     // 4. Rede Recirculante (Greyhole Wash Loop)
+    
+    delayL_.setFrozen(params_.hardFreeze);
+    delayR_.setFrozen(params_.hardFreeze);
 
     // Size range: 10% a 95% do buffer total disponivel
     float maxDelayBase = static_cast<float>(mainDelaySize_) * 0.95f;

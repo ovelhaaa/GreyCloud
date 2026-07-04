@@ -26,6 +26,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     juce::StringArray shimmerChoices = { "-1 Oct", "+5th", "+1 Oct", "+1 Oct & 5th", "+2 Oct" };
     params.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"shimmerRatio", 1}, "Shimmer Ratio", shimmerChoices, 2));
     
+    params.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"stereoCore", 1}, "Stereo Core", true));
+    params.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"hardFreeze", 1}, "Hard Freeze", false));
     params.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"hqMode", 1}, "HQ Mode", false));
 
     return { params.begin(), params.end() };
@@ -107,8 +109,8 @@ void CloudGreyVerbProcessor::changeProgramName (int index, const juce::String& n
 
 void CloudGreyVerbProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    // Allocate DSP memory (~1.5MB for stereo 48k operations)
-    size_t requiredFloats = 800000; 
+    // Allocate DSP memory (~3.0MB for true stereo 48k operations)
+    size_t requiredFloats = 1600000; 
     dspMemoryNormal.resize(requiredFloats, 0.0f);
     
     // For HQ mode (2x oversampling), we need to handle 2x sample rate without halving max delay times.
@@ -181,6 +183,8 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     p.outputGain = parameters.getRawParameterValue("outputGain")->load();
     p.preDelay = parameters.getRawParameterValue("preDelay")->load();
     p.stereoWidth = parameters.getRawParameterValue("stereoWidth")->load();
+    p.stereoCore = parameters.getRawParameterValue("stereoCore")->load() > 0.5f;
+    p.hardFreeze = parameters.getRawParameterValue("hardFreeze")->load() > 0.5f;
     
     bool hqMode = parameters.getRawParameterValue("hqMode")->load() > 0.5f;
 

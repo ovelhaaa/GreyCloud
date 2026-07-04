@@ -112,6 +112,8 @@ public:
         float preDelay = 0.0f;     // 0.0 a 1.0 -> 0ms a 200ms
         float stereoWidth = 1.0f;  // 0.0 a 2.0 -> 0=Mono, 1=Stereo, 2=Extra Wide
         float lowDamping = 0.5f;   // 0.0 a 1.0 -> High-pass do feedback. 0=Thin (corta graves), 1=Full/Lama
+        bool stereoCore = true;    // True: Processa grãos e diffusor em estéreo discreto
+        bool hardFreeze = false;   // True: Corta input 100% e congela estado instantaneamente
     };
 
     // Utilitário de Presets Internos
@@ -154,7 +156,8 @@ private:
     float toneGainHigh_ = 1.0f;
 
     // Buffer handling para o micro-kernel granulador
-    float* grainMemory_ = nullptr;
+    float* grainMemoryL_ = nullptr;
+    float* grainMemoryR_ = nullptr;
     size_t grainMemorySize_ = 0;
     size_t grainWritePos_ = 0;
     float grainPhase_ = 0.0f;
@@ -167,14 +170,15 @@ private:
     float freezeSmoothed_ = 0.0f;
 
     // Núcleo Diffuser (Smear Allpasses pré-delay)
-    cgv_dsp::Allpass diffuserAp_[CGV_NUM_ALLPASS];
+    cgv_dsp::Allpass diffuserApL_[CGV_NUM_ALLPASS];
+    cgv_dsp::Allpass diffuserApR_[CGV_NUM_ALLPASS];
 
     // Rede Greyhole (Long Modulated delays + Allpasses no Loop)
     cgv_dsp::DelayLine delayL_, delayR_;
     cgv_dsp::Allpass loopApL_, loopApR_;
     size_t mainDelaySize_ = 0;
     
-    cgv_dsp::DelayLine preDelayMono_;
+    cgv_dsp::DelayLine preDelayL_, preDelayR_;
     float preDelaySmoothed_ = 0.0f;
 
     // LFOs dedicados (Fases cruzadas para imagem estéreo larga)
@@ -221,5 +225,5 @@ private:
 #endif
 
     // Helpers
-    void processGranular(float input, float lfoDrift, float& outL, float& outR);
+    void processGranular(float inL, float inR, float lfoDrift, float& outL, float& outR);
 };

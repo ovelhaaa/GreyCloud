@@ -121,8 +121,12 @@ public:
             if (phase_ < 0.0f) phase_ += 1.0f;
         }
         
-        // Triângulo suave de -1 a 1
-        return 4.0f * fabsf(phase_ - 0.5f) - 1.0f;
+        // Parabolic sine approximation (Bhaskara I style, C1 continuous)
+        // Matches the phase of the old triangle (starts at +1.0 for phase=0)
+        float p = phase_ + 0.25f;
+        if (p >= 1.0f) p -= 1.0f;
+        float x = p - 0.5f;
+        return -16.0f * x * (0.5f - fabsf(x));
     }
 
     // Leitura multipolifásica (Decorrelação) s/ avançar fase
@@ -133,7 +137,11 @@ public:
             p = fmodf(p, 1.0f);
             if (p < 0.0f) p += 1.0f;
         }
-        return 4.0f * fabsf(p - 0.5f) - 1.0f;
+        
+        float p_sine = p + 0.25f;
+        if (p_sine >= 1.0f) p_sine -= 1.0f;
+        float x = p_sine - 0.5f;
+        return -16.0f * x * (0.5f - fabsf(x));
     }
 
 private:
@@ -161,9 +169,13 @@ public:
 
     void write(float sample) {
         if (!buffer_ || size_ == 0) return;
-        buffer_[writePos_] = sample;
+        if (!frozen_) buffer_[writePos_] = sample;
         writePos_++;
         if (writePos_ >= size_) writePos_ = 0;
+    }
+    
+    void setFrozen(bool frozen) {
+        frozen_ = frozen;
     }
 
     // Leitura com interpolação Hermite para preservar altas frequências
@@ -201,6 +213,7 @@ private:
     float* buffer_ = nullptr;
     size_t size_ = 0;
     size_t writePos_ = 0;
+    bool frozen_ = false;
 };
 
 // Allpass Filter - usado para a rede de difusão (Smear / Densidade)
