@@ -20,7 +20,9 @@ const PARAM_IDS = {
   lowDamping: 15,
   shimmerRatio: 16,
   stereoCore: 17,
-  hardFreeze: 18
+  hardFreeze: 18,
+  reverseMix: 19,
+  grainScan: 20
 };
 
 class CloudGreyWorkletProcessor extends AudioWorkletProcessor {

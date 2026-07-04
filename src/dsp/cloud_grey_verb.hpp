@@ -114,7 +114,12 @@ public:
         float lowDamping = 0.5f;   // 0.0 a 1.0 -> High-pass do feedback. 0=Thin (corta graves), 1=Full/Lama
         bool stereoCore = true;    // True: Processa grãos e diffusor em estéreo discreto
         bool hardFreeze = false;   // True: Corta input 100% e congela estado instantaneamente
+        float reverseMix = 0.0f;   // 0.0 a 1.0 -> Direção do grão (Forward -> Reverse)
+        float grainScan = 0.0f;    // 0.0 a 1.0 -> Janela estática vs varredura real completa
     };
+    
+    static constexpr float kSizeMinFrameRatio = 0.05f;
+    static constexpr float kSizeMaxFrameRatio = 0.95f;
 
     // Utilitário de Presets Internos
     static Params getPreset(Preset preset);
@@ -140,9 +145,11 @@ public:
     void processSample(float inL, float inR, float& outL, float& outR);
 
     // Status / Monitoramento
+    // Status / Monitoramento
     float getFreezeState() const { return freezeSmoothed_; }
     float getLoopEnergy() const { return loopEnergy_; }
     float getSafetyGain() const { return lastSafetyGain_; }
+    size_t getMainDelayFrames() const { return mainDelaySize_; }
 
 private:
     bool initialized_ = false;
@@ -167,6 +174,7 @@ private:
     float grainJitter_[CGV_NUM_GRAINS] = {0.0f};
     float grainPan_[CGV_NUM_GRAINS] = {0.5f};
     float grainOffsetMs_[CGV_NUM_GRAINS] = {0.0f};
+    float grainAnchorPos_[CGV_NUM_GRAINS] = {0.0f};
     float freezeSmoothed_ = 0.0f;
 
     // Núcleo Diffuser (Smear Allpasses pré-delay)

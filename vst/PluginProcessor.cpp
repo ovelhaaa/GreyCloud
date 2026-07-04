@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "TempoSyncUtils.h"
 
 // Factory function to create parameters
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
@@ -30,6 +31,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     params.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"hardFreeze", 1}, "Hard Freeze", false));
     params.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"hqMode", 1}, "HQ Mode", false));
 
+    params.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"preDelaySync", 1}, "Pre-Delay Sync", false));
+    params.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"sizeSync", 1}, "Size Sync", false));
+    
+    juce::StringArray syncChoices = { "1/32", "1/16", "1/16T", "1/16D", "1/8", "1/8T", "1/8D", "1/4", "1/4T", "1/4D", "1/2", "1/1", "2/1" };
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"syncDivision", 1}, "Sync Division", syncChoices, 7)); // Default "1/4"
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"reverseMix", 1}, "Reverse Mix", 0.0f, 1.0f, 0.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"grainScan", 1}, "Grain Scan", 0.0f, 1.0f, 0.0f));
+
     return { params.begin(), params.end() };
 }
 
@@ -48,6 +58,7 @@ CloudGreyVerbProcessor::CloudGreyVerbProcessor()
     presets.push_back(BuiltInPreset("AlwaysOnSubtle", 0.25f, 0.2f, 0.0f, 0.3f, 0.2f, 0.4f, 0.1f, 0.1f, 0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 0.0f, 0.05f, 0.8f));
     presets.push_back(BuiltInPreset("BrightCloud", 0.5f, 0.6f, 0.0f, 0.75f, 0.6f, 0.7f, 0.6f, 0.4f, 0.7f, 0.8f, 0.8f, 1.0f, 1.0f, 0.0f, 0.1f, 1.2f));
     presets.push_back(BuiltInPreset("ShimmerCloud", 0.55f, 0.55f, 0.0f, 0.58f, 0.62f, 0.70f, 0.20f, 0.12f, 0.55f, 0.6f, 0.62f, 0.80f, 0.85f, 0.20f, 0.15f, 1.4f, 2, true));
+    presets.push_back(BuiltInPreset("ReverseSmear", 0.65f, 0.6f, 0.0f, 0.70f, 0.5f, 0.6f, 0.4f, 0.2f, 0.6f, 0.5f, 0.5f, 1.0f, 1.0f, 0.0f, 0.0f, 1.2f, 2, false, 1.0f, 1.0f));
     currentPresetIndex = 0;
 }
 
@@ -185,8 +196,48 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     p.stereoWidth = parameters.getRawParameterValue("stereoWidth")->load();
     p.stereoCore = parameters.getRawParameterValue("stereoCore")->load() > 0.5f;
     p.hardFreeze = parameters.getRawParameterValue("hardFreeze")->load() > 0.5f;
+    p.reverseMix = parameters.getRawParameterValue("reverseMix")->load();
+    p.grainScan = parameters.getRawParameterValue("grainScan")->load();
     
     bool hqMode = parameters.getRawParameterValue("hqMode")->load() > 0.5f;
+    bool preDelaySync = parameters.getRawParameterValue("preDelaySync")->load() > 0.5f;
+    bool sizeSync = parameters.getRawParameterValue("sizeSync")->load() > 0.5f;
+    int syncDivision = static_cast<int>(parameters.getRawParameterValue("syncDivision")->load());
+
+    if (preDelaySync || sizeSync) {
+        float bpm = 120.0f;
+        if (auto* playHead = getPlayHead()) {
+            if (auto pos = playHead->getPosition()) {
+                if (pos->getBpm().hasValue()) {
+                    bpm = static_cast<float>(*pos->getBpm());
+                }
+            }
+        }
+        
+        float syncMs = TempoSyncUtils::getMsFromBpm(bpm, syncDivision);
+        
+        if (preDelaySync) {
+            // max predelay is 200ms based on engine logic
+            // normalized preDelay: ms / 200.0f
+            // silently clamped as 200ms is the physical buffer limit of the engine
+            float normalized = syncMs / 200.0f;
+            p.preDelay = juce::jlimit(0.0f, 1.0f, normalized);
+        }
+        
+        if (sizeSync) {
+            float sr = static_cast<float>(getSampleRate());
+            if (hqMode) sr *= 2.0f;
+            
+            float targetFrames = syncMs * (sr / 1000.0f);
+            size_t mainDelaySize = hqMode ? dspCoreHQ.getMainDelayFrames() : dspCoreNormal.getMainDelayFrames();
+            
+            float minFrames = sr * CloudGreyVerb::kSizeMinFrameRatio;
+            float maxFrames = static_cast<float>(mainDelaySize) * CloudGreyVerb::kSizeMaxFrameRatio;
+            
+            float normalizedSize = (targetFrames - minFrames) / (maxFrames - minFrames);
+            p.size = juce::jlimit(0.0f, 1.0f, normalizedSize);
+        }
+    }
 
     if (hqMode) {
         dspCoreHQ.setParams(p);

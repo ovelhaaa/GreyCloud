@@ -299,6 +299,7 @@ void CloudGreyVerb::reset() {
         grainJitter_[i] = 0.0f;
         grainPan_[i] = prng_.randFloat();
         grainOffsetMs_[i] = 5.0f + prng_.randFloat() * 35.0f;
+        grainAnchorPos_[i] = 0.0f;
     }
     
     if (grainMemoryL_) {
@@ -320,7 +321,6 @@ void CloudGreyVerb::reset() {
     loopApL_.clear(); loopApR_.clear();
 #endif
     delayL_.clear(); delayR_.clear();
-    preDelayMono_.clear();
     lfo1_.clear(); lfo2_.clear(); spinLfo_.clear();
     dampL_.clear(); dampR_.clear();
     hpFeedL_.clear(); hpFeedR_.clear();
@@ -454,10 +454,18 @@ void CloudGreyVerb::processGranular(float inL, float inR, float lfoDrift, float&
         float oldP = p - increment;
         if (oldP < 0.0f) oldP += 1.0f;
         
+        float fGranSize = static_cast<float>(grainMemorySize_);
+        
         if (p < increment || p < oldP) {
             grainJitter_[i] = prng_.randFloat() * params_.texture * 45.0f; // Jitter máx 45ms
             grainPan_[i] = cgv_dsp::lerp(grainPan_[i], prng_.randFloat(), 0.25f);
             grainOffsetMs_[i] = cgv_dsp::lerp(grainOffsetMs_[i], 5.0f + prng_.randFloat() * 45.0f, 0.25f);
+            
+            float snapReadMs = grainOffsetMs_[i] + grainJitter_[i] + driftMs;
+            float snapReadFrames = snapReadMs * (sampleRate_ / 1000.0f);
+            snapReadFrames = fmodf(snapReadFrames, fGranSize - 4.0f);
+            if (snapReadFrames < 2.0f) snapReadFrames = 2.0f;
+            grainAnchorPos_[i] = static_cast<float>(grainWritePos_) - snapReadFrames;
         }
 
         // Janela Parabólica Otimizada (Cheap e suave como Cosine) -> 4 * p * (1 - p)
@@ -467,20 +475,25 @@ void CloudGreyVerb::processGranular(float inL, float inR, float lfoDrift, float&
         float readMs = grainOffsetMs_[i] + grainJitter_[i] + driftMs;
         float readFrames = readMs * (sampleRate_ / 1000.0f);
         
-        float fGranSize = static_cast<float>(grainMemorySize_);
         // Envolve o delay pacificamente para reutilizar o buffer circular sem empilhar grãos no limite
         readFrames = fmodf(readFrames, fGranSize - 4.0f);
         if (readFrames < 2.0f) readFrames = 2.0f;
         
-        float readPos = static_cast<float>(grainWritePos_) - readFrames;
+        float tapFixoOriginal = static_cast<float>(grainWritePos_) - readFrames;
+        float anchorScanCompleto = grainAnchorPos_[i] + p * phaseFramesTotal;
+        float readPosReverse = grainAnchorPos_[i] - p * phaseFramesTotal;
+        
+        float readPosForward = cgv_dsp::lerp(tapFixoOriginal, anchorScanCompleto, params_.grainScan);
+        float readPos = cgv_dsp::lerp(readPosForward, readPosReverse, params_.reverseMix);
 
         if (readPos != readPos) readPos = 0.0f; // NaN check evasion
 
         if (readPos < 0.0f || readPos >= fGranSize) {
-            readPos = fmodf(readPos, fGranSize);
+            readPos = fmodf(readPos + fGranSize * 10.0f, fGranSize);
             if (readPos < 0.0f) readPos += fGranSize;
         }
 
+        // Interpolação fracionária (Hermite/Linear mix)
         size_t idx1 = static_cast<size_t>(readPos);
         size_t idx2 = (idx1 + 1) % grainMemorySize_;
         float frac = readPos - static_cast<float>(idx1);
@@ -653,8 +666,8 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     delayR_.setFrozen(params_.hardFreeze);
 
     // Size range: 10% a 95% do buffer total disponivel
-    float maxDelayBase = static_cast<float>(mainDelaySize_) * 0.95f;
-    float baseDelayTimeL = cgv_dsp::lerp(sampleRate_ * 0.05f, maxDelayBase, sSize);
+    float maxDelayBase = static_cast<float>(mainDelaySize_) * kSizeMaxFrameRatio;
+    float baseDelayTimeL = cgv_dsp::lerp(sampleRate_ * kSizeMinFrameRatio, maxDelayBase, sSize);
     float baseDelayTimeR = baseDelayTimeL * 0.81f; // Assimetria crucial em reverb
     
     // Modulação (drift) convertida para frames. Depth ~ 0 a 15ms

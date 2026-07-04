@@ -17,9 +17,10 @@ public:
         float mix, texture, freeze, feedback, size, diffusion, modDepth, modRate, damping, lowDamping, tone, inputGain, outputGain, shimmer, preDelay, stereoWidth;
         int shimmerRatioIndex;
         bool hqMode;
+        float reverseMix, grainScan;
         
-        BuiltInPreset(juce::String n, float m, float t, float fr, float fb, float s, float d, float md, float mr, float da, float lda, float to, float ig, float og, float sh, float pd, float sw, int sri = 2, bool hq = false)
-            : name(n), mix(m), texture(t), freeze(fr), feedback(fb), size(s), diffusion(d), modDepth(md), modRate(mr), damping(da), lowDamping(lda), tone(to), inputGain(ig), outputGain(og), shimmer(sh), preDelay(pd), stereoWidth(sw), shimmerRatioIndex(sri), hqMode(hq) {}
+        BuiltInPreset(juce::String n, float m, float t, float fr, float fb, float s, float d, float md, float mr, float da, float lda, float to, float ig, float og, float sh, float pd, float sw, int sri = 2, bool hq = false, float revMix = 0.0f, float gScan = 0.0f)
+            : name(n), mix(m), texture(t), freeze(fr), feedback(fb), size(s), diffusion(d), modDepth(md), modRate(mr), damping(da), lowDamping(lda), tone(to), inputGain(ig), outputGain(og), shimmer(sh), preDelay(pd), stereoWidth(sw), shimmerRatioIndex(sri), hqMode(hq), reverseMix(revMix), grainScan(gScan) {}
     };
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;

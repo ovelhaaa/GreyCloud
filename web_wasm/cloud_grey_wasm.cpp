@@ -48,6 +48,8 @@ void cgv_set_param(int paramId, float value) {
         case 16: cgv_params.shimmerRatioIndex = (int)value; break;
         case 17: cgv_params.stereoCore = (value > 0.5f); break;
         case 18: cgv_params.hardFreeze = (value > 0.5f); break;
+        case 19: cgv_params.reverseMix = value; break;
+        case 20: cgv_params.grainScan = value; break;
     }
     if (isInit) cgv.setParams(cgv_params);
 }
@@ -73,6 +75,8 @@ float cgv_get_param(int paramId) {
         case 16: return (float)cgv_params.shimmerRatioIndex;
         case 17: return cgv_params.stereoCore ? 1.0f : 0.0f;
         case 18: return cgv_params.hardFreeze ? 1.0f : 0.0f;
+        case 19: return cgv_params.reverseMix;
+        case 20: return cgv_params.grainScan;
     }
     return 0.0f;
 }
