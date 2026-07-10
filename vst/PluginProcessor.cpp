@@ -102,6 +102,13 @@ void CloudGreyVerbProcessor::setCurrentProgram (int index)
         updateParameterValue("preDelay", p.preDelay);
         updateParameterValue("stereoWidth", p.stereoWidth);
         updateParameterValue("hqMode", p.hqMode ? 1.0f : 0.0f);
+        updateParameterValue("reverseMix", p.reverseMix);
+        updateParameterValue("grainScan", p.grainScan);
+        updateParameterValue("stereoCore", p.stereoCoreOn ? 1.0f : 0.0f);
+        updateParameterValue("hardFreeze", p.hardFreezeOn ? 1.0f : 0.0f);
+        updateParameterValue("preDelaySync", p.preDelaySyncOn ? 1.0f : 0.0f);
+        updateParameterValue("sizeSync", p.sizeSyncOn ? 1.0f : 0.0f);
+        updateParameterValue("syncDivision", static_cast<float>(p.syncDivisionIndex));
     }
 }
 

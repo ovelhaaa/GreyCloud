@@ -37,6 +37,7 @@ target_sources(NimbusReverbPlugin
         PluginProcessor.h
         PluginEditor.cpp
         PluginEditor.h
+        LookAndFeel.cpp
         ../src/dsp/cloud_grey_verb.cpp
         ../src/dsp/cloud_grey_verb.hpp
 )
