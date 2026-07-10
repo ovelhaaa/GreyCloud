@@ -22,6 +22,21 @@ private:
     juce::String name;
 };
 
+class SubgroupComponent : public juce::Component
+{
+public:
+    SubgroupComponent(const juce::String& title) : name(title) {}
+    void paint(juce::Graphics& g) override {
+        auto bounds = getLocalBounds().toFloat();
+        g.setColour(juce::Colour(245, 158, 11)); // Amber accent colour
+        g.drawRoundedRectangle(bounds, 4.0f, 1.0f);
+        g.setFont(11.0f);
+        g.drawText(name.toUpperCase(), bounds.withTrimmedTop(2).withHeight(14), juce::Justification::centredTop, false);
+    }
+private:
+    juce::String name;
+};
+
 class CloudGreyVerbEditor  : public juce::AudioProcessorEditor, private juce::AudioProcessorParameter::Listener
 {
 public:
@@ -59,10 +74,12 @@ private:
     std::vector<std::unique_ptr<ToggleControl>> toggleControls;
     std::vector<std::unique_ptr<ChoiceControl>> choiceControls;
     std::vector<std::unique_ptr<CardComponent>> cards;
+    std::unique_ptr<SubgroupComponent> freezeSubgroup;
 
     juce::ComboBox presetSelector;
 
     void addRotaryControl(const juce::String& paramID, const juce::String& name);
+    void addFaderControl(const juce::String& paramID, const juce::String& name);
     void addToggleControl(const juce::String& paramID, const juce::String& name);
     void addChoiceControl(const juce::String& paramID, const juce::String& name, bool hideLabel = false);
     

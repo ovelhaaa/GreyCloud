@@ -108,3 +108,26 @@ void GreyCloudLookAndFeel::drawComboBox (juce::Graphics& g, int width, int heigh
     g.setColour(box.isEnabled() ? accentColour : juce::Colours::grey);
     g.strokePath(path, juce::PathStrokeType(2.0f));
 }
+
+void GreyCloudLookAndFeel::drawLinearSlider(juce::Graphics& g, int x, int y, int width, int height,
+                                             float sliderPos, float minSliderPos, float maxSliderPos,
+                                             const juce::Slider::SliderStyle style, juce::Slider& slider)
+{
+    auto trackH = 5.0f;
+    auto trackY = y + (height - trackH) * 0.5f;
+    juce::Rectangle<float> track(x, trackY, width, trackH);
+
+    g.setColour(outlineColour);
+    g.fillRoundedRectangle(track, trackH * 0.5f);
+
+    if (slider.isEnabled())
+    {
+        juce::Rectangle<float> fill(x, trackY, sliderPos - x, trackH);
+        g.setColour(accentColour);
+        g.fillRoundedRectangle(fill, trackH * 0.5f);
+    }
+
+    auto thumbW = 3.0f;
+    g.setColour(slider.isEnabled() ? juce::Colours::white : juce::Colours::grey);
+    g.fillRoundedRectangle(sliderPos - thumbW * 0.5f, y + 1.0f, thumbW, height - 2.0f, 1.5f);
+}

@@ -21,12 +21,14 @@ CloudGreyVerbEditor::CloudGreyVerbEditor (CloudGreyVerbProcessor& p)
 
     cards.push_back(std::make_unique<CardComponent>("Grain / Diffuser"));
     addAndMakeVisible(cards.back().get());
+    freezeSubgroup = std::make_unique<SubgroupComponent>("Freeze");
+    addAndMakeVisible(freezeSubgroup.get());
     addRotaryControl("diffusion", "Diffusion");
     addRotaryControl("grainScan", "Grain Scan");
     addRotaryControl("reverseMix", "Rev Mix");
     addToggleControl("freeze", "Freeze");
     addToggleControl("hardFreeze", "Hard Frz");
-    addToggleControl("stereoCore", "St Core");
+    addToggleControl("stereoCore", "Stereo Core");
 
     cards.push_back(std::make_unique<CardComponent>("Tone / Decay"));
     addAndMakeVisible(cards.back().get());
@@ -48,8 +50,8 @@ CloudGreyVerbEditor::CloudGreyVerbEditor (CloudGreyVerbProcessor& p)
     addToggleControl("preDelaySync", "Sync");
     addChoiceControl("syncDivision", "Div", true);
     addRotaryControl("stereoWidth", "Width");
-    addRotaryControl("inputGain", "In");
-    addRotaryControl("outputGain", "Out");
+    addFaderControl("inputGain", "In");
+    addFaderControl("outputGain", "Out");
     
     addToggleControl("hqMode", "HQ");
 
@@ -136,6 +138,25 @@ void CloudGreyVerbEditor::addRotaryControl(const juce::String& paramID, const ju
     rotaryControls.push_back(std::move(wrapper));
 }
 
+void CloudGreyVerbEditor::addFaderControl(const juce::String& paramID, const juce::String& name) {
+    auto wrapper = std::make_unique<RotaryControl>();
+    wrapper->slider.setName(paramID);
+    wrapper->slider.setSliderStyle(juce::Slider::LinearHorizontal);
+    wrapper->slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    wrapper->slider.setPopupDisplayEnabled(true, true, this);
+    addAndMakeVisible(wrapper->slider);
+
+    wrapper->label.setText(name, juce::dontSendNotification);
+    wrapper->label.setJustificationType(juce::Justification::centredRight);
+    wrapper->label.setFont(12.0f);
+    addAndMakeVisible(wrapper->label);
+
+    wrapper->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        audioProcessor.getVTS(), paramID, wrapper->slider);
+
+    rotaryControls.push_back(std::move(wrapper));
+}
+
 void CloudGreyVerbEditor::addToggleControl(const juce::String& paramID, const juce::String& name) {
     auto wrapper = std::make_unique<ToggleControl>();
     wrapper->button.setName(paramID);
@@ -181,102 +202,119 @@ void CloudGreyVerbEditor::paint (juce::Graphics& g)
 void CloudGreyVerbEditor::resized()
 {
     auto bounds = getLocalBounds();
-    float scale = bounds.getWidth() / 720.0f;
+    float scale = juce::jlimit(0.6f, 2.0f, (float) bounds.getWidth() / 720.0f);
     auto scaled = [scale](float v) { return juce::roundToInt(v * scale); };
+    auto labelKnobGap = [](int knobDiameter) { return juce::jmax(6, static_cast<int>(knobDiameter * 0.35f)); };
 
     auto header = bounds.removeFromTop(scaled(40));
-    presetSelector.setBounds(header.withSizeKeepingCentre(scaled(200), scaled(24)));
+    presetSelector.setBounds(header.removeFromLeft(scaled(220)).withSizeKeepingCentre(scaled(200), scaled(24)));
     if (auto* hq = getToggle("hqMode"))
         hq->button.setBounds(header.removeFromRight(scaled(80)).withSizeKeepingCentre(scaled(60), scaled(22)));
 
     auto footer = bounds.removeFromBottom(scaled(70));
-    
-    auto placeRotaryWithLabel = [scaled](RotaryControl* c, juce::Rectangle<int> b) {
+
+    auto placeRotary = [scaled, labelKnobGap](RotaryControl* c, juce::Rectangle<int> b, int knobBaseSize, int labelHeight) {
         if (!c) return;
-        auto labelArea = b.removeFromTop(scaled(16));
+        int knobDiameter = scaled(knobBaseSize);
+        int gap = labelKnobGap(knobDiameter);
+        int totalHeight = knobDiameter + gap + scaled(labelHeight);
+        auto centerBox = b.withSizeKeepingCentre(juce::jmax(knobDiameter, scaled(knobBaseSize + 10)), totalHeight);
+        
+        auto labelArea = centerBox.removeFromTop(scaled(labelHeight));
         c->label.setBounds(labelArea.expanded(scaled(20), 0));
-        c->slider.setBounds(b.withSizeKeepingCentre(scaled(36), scaled(36)));
+        
+        centerBox.removeFromTop(gap);
+        c->slider.setBounds(centerBox.withSizeKeepingCentre(knobDiameter, knobDiameter));
     };
 
-    auto f1 = footer.removeFromLeft(footer.getWidth() / 6);
-    placeRotaryWithLabel(getRotary("preDelay"), f1);
+    auto fBtns = footer.removeFromLeft(scaled(130)).reduced(scaled(5));
+    importButton.setBounds(fBtns.removeFromTop(fBtns.getHeight() / 2).reduced(scaled(2)));
+    exportButton.setBounds(fBtns.reduced(scaled(2)));
     
-    auto f2 = footer.removeFromLeft(footer.getWidth() / 5);
-    if (auto* syncDiv = getChoice("syncDivision")) syncDiv->comboBox.setBounds(f2.withSizeKeepingCentre(scaled(70), scaled(22)).translated(0, scaled(5)));
-    if (auto* pdSync = getToggle("preDelaySync")) pdSync->button.setBounds(f2.withSizeKeepingCentre(scaled(70), scaled(22)).translated(0, scaled(-20)));
+    auto fPre = footer.removeFromLeft(scaled(140));
+    placeRotary(getRotary("preDelay"), fPre.removeFromLeft(scaled(70)), 36, 16);
+    auto fSync = fPre;
+    if (auto* syncDiv = getChoice("syncDivision")) syncDiv->comboBox.setBounds(fSync.withSizeKeepingCentre(scaled(65), scaled(22)).translated(0, scaled(5)));
+    if (auto* pdSync = getToggle("preDelaySync")) pdSync->button.setBounds(fSync.withSizeKeepingCentre(scaled(65), scaled(22)).translated(0, scaled(-20)));
 
-    auto f3 = footer.removeFromLeft(footer.getWidth() / 4);
-    placeRotaryWithLabel(getRotary("stereoWidth"), f3);
+    auto fWid = footer.removeFromLeft(scaled(80));
+    placeRotary(getRotary("stereoWidth"), fWid, 36, 16);
 
-    auto f4 = footer.removeFromLeft(footer.getWidth() / 3);
-    placeRotaryWithLabel(getRotary("inputGain"), f4.removeFromLeft(f4.getWidth()/2));
-    placeRotaryWithLabel(getRotary("outputGain"), f4);
+    auto fCore = footer.removeFromLeft(scaled(100));
+    if (auto* sc = getToggle("stereoCore")) sc->button.setBounds(fCore.withSizeKeepingCentre(scaled(90), scaled(22)));
 
-    auto fb = footer.reduced(scaled(10));
-    importButton.setBounds(fb.removeFromTop(fb.getHeight() / 2).reduced(scaled(2)));
-    exportButton.setBounds(fb.reduced(scaled(2)));
+    auto fInOut = footer.removeFromRight(scaled(120)).reduced(0, scaled(10));
+    auto placeFader = [scaled](RotaryControl* c, juce::Rectangle<int> b) {
+        if (!c) return;
+        c->label.setBounds(b.removeFromLeft(scaled(30)));
+        c->slider.setBounds(b.reduced(0, scaled(4)));
+    };
+    placeFader(getRotary("inputGain"), fInOut.removeFromTop(fInOut.getHeight() / 2));
+    placeFader(getRotary("outputGain"), fInOut);
 
     auto macroRow = bounds.removeFromTop(scaled(120));
     int mw = macroRow.getWidth() / 4;
     
-    auto placeMacroWithLabel = [scaled](RotaryControl* c, juce::Rectangle<int> b) {
-        if (!c) return;
-        auto labelArea = b.removeFromTop(scaled(20));
-        c->label.setBounds(labelArea.expanded(scaled(20), 0));
-        c->slider.setBounds(b.withSizeKeepingCentre(scaled(70), scaled(70)));
-    };
-
     auto m1 = macroRow.removeFromLeft(mw);
-    placeMacroWithLabel(getRotary("mix"), m1);
+    placeRotary(getRotary("mix"), m1, 70, 20);
 
     auto m2 = macroRow.removeFromLeft(mw);
     auto m2Sync = m2.removeFromBottom(scaled(22));
-    placeMacroWithLabel(getRotary("size"), m2);
+    placeRotary(getRotary("size"), m2, 70, 20);
     if (auto* szSync = getToggle("sizeSync")) szSync->button.setBounds(m2Sync.withSizeKeepingCentre(scaled(50), scaled(18)));
 
     auto m3 = macroRow.removeFromLeft(mw);
-    placeMacroWithLabel(getRotary("feedback"), m3);
+    placeRotary(getRotary("feedback"), m3, 70, 20);
 
     auto m4 = macroRow;
-    placeMacroWithLabel(getRotary("texture"), m4);
+    placeRotary(getRotary("texture"), m4, 70, 20);
 
     bounds.reduce(scaled(10), scaled(10));
-    int cw = bounds.getWidth() / 2;
-    int ch = bounds.getHeight() / 2;
+    auto leftCol = bounds.removeFromLeft(juce::roundToInt(bounds.getWidth() * 0.32f));
+    bounds.removeFromLeft(scaled(10));
+    auto rightCol = bounds;
 
-    auto placeToggle = [scaled](ToggleControl* c, juce::Rectangle<int> b) { if (c) c->button.setBounds(b.withSizeKeepingCentre(scaled(60), scaled(22))); };
-
-    auto c1 = bounds.withSize(cw, ch).reduced(scaled(5));
-    cards[0]->setBounds(c1);
-    c1.removeFromTop(scaled(20));
-    auto c1_top = c1.removeFromTop(c1.getHeight() / 2);
-    placeRotaryWithLabel(getRotary("diffusion"), c1_top.removeFromLeft(c1_top.getWidth() / 3));
-    placeRotaryWithLabel(getRotary("grainScan"), c1_top.removeFromLeft(c1_top.getWidth() / 2));
-    placeRotaryWithLabel(getRotary("reverseMix"), c1_top);
+    cards[0]->setBounds(leftCol);
+    auto c1Inner = leftCol.reduced(scaled(5));
+    c1Inner.removeFromTop(scaled(20));
     
-    auto c1_bot = c1;
-    placeToggle(getToggle("freeze"), c1_bot.removeFromLeft(c1_bot.getWidth() / 3));
-    placeToggle(getToggle("hardFreeze"), c1_bot.removeFromLeft(c1_bot.getWidth() / 2));
-    placeToggle(getToggle("stereoCore"), c1_bot);
+    auto freezeBounds = c1Inner.removeFromBottom(scaled(80));
+    if (freezeSubgroup) freezeSubgroup->setBounds(freezeBounds);
+    auto fzInner = freezeBounds.reduced(scaled(4));
+    fzInner.removeFromTop(scaled(16));
+    if (auto* frz = getToggle("freeze")) frz->button.setBounds(fzInner.removeFromTop(fzInner.getHeight()/2).withSizeKeepingCentre(scaled(70), scaled(22)));
+    if (auto* hFrz = getToggle("hardFreeze")) hFrz->button.setBounds(fzInner.withSizeKeepingCentre(scaled(70), scaled(22)));
+    
+    int knobH = c1Inner.getHeight() / 3;
+    placeRotary(getRotary("diffusion"), c1Inner.removeFromTop(knobH), 36, 16);
+    placeRotary(getRotary("grainScan"), c1Inner.removeFromTop(knobH), 36, 16);
+    placeRotary(getRotary("reverseMix"), c1Inner, 36, 16);
 
-    auto c2 = bounds.withTrimmedLeft(cw).withSize(cw, ch).reduced(scaled(5));
+    int cardH = (rightCol.getHeight() - scaled(20)) / 3;
+    
+    auto c2 = rightCol.removeFromTop(cardH);
     cards[1]->setBounds(c2);
-    c2.removeFromTop(scaled(20));
-    placeRotaryWithLabel(getRotary("damping"), c2.removeFromLeft(c2.getWidth() / 3));
-    placeRotaryWithLabel(getRotary("lowDamping"), c2.removeFromLeft(c2.getWidth() / 2));
-    placeRotaryWithLabel(getRotary("tone"), c2);
+    auto c2Inner = c2.reduced(scaled(5));
+    c2Inner.removeFromTop(scaled(20));
+    placeRotary(getRotary("damping"), c2Inner.removeFromLeft(c2Inner.getWidth() / 3), 36, 16);
+    placeRotary(getRotary("lowDamping"), c2Inner.removeFromLeft(c2Inner.getWidth() / 2), 36, 16);
+    placeRotary(getRotary("tone"), c2Inner, 36, 16);
 
-    auto c3 = bounds.withTrimmedTop(ch).withSize(cw, ch).reduced(scaled(5));
+    rightCol.removeFromTop(scaled(10));
+    auto c3 = rightCol.removeFromTop(cardH);
     cards[2]->setBounds(c3);
-    c3.removeFromTop(scaled(20));
-    placeRotaryWithLabel(getRotary("modDepth"), c3.removeFromLeft(c3.getWidth() / 2));
-    placeRotaryWithLabel(getRotary("modRate"), c3);
+    auto c3Inner = c3.reduced(scaled(5));
+    c3Inner.removeFromTop(scaled(20));
+    placeRotary(getRotary("modDepth"), c3Inner.removeFromLeft(c3Inner.getWidth() / 2), 36, 16);
+    placeRotary(getRotary("modRate"), c3Inner, 36, 16);
 
-    auto c4 = bounds.withTrimmedTop(ch).withTrimmedLeft(cw).withSize(cw, ch).reduced(scaled(5));
+    rightCol.removeFromTop(scaled(10));
+    auto c4 = rightCol;
     cards[3]->setBounds(c4);
-    c4.removeFromTop(scaled(20));
-    placeRotaryWithLabel(getRotary("shimmer"), c4.removeFromLeft(c4.getWidth() / 2));
-    if (auto* sRat = getChoice("shimmerRatio")) sRat->comboBox.setBounds(c4.withSizeKeepingCentre(scaled(90), scaled(24)));
+    auto c4Inner = c4.reduced(scaled(5));
+    c4Inner.removeFromTop(scaled(20));
+    placeRotary(getRotary("shimmer"), c4Inner.removeFromLeft(c4Inner.getWidth() / 2), 36, 16);
+    if (auto* sRat = getChoice("shimmerRatio")) sRat->comboBox.setBounds(c4Inner.withSizeKeepingCentre(scaled(90), scaled(24)));
 }
 
 void CloudGreyVerbEditor::exportJSONPreset()
