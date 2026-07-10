@@ -195,8 +195,8 @@ void CloudGreyVerbEditor::paint (juce::Graphics& g)
 {
     g.fillAll (juce::Colour(24, 24, 28));
     g.setColour (juce::Colours::white);
-    g.setFont (20.0f);
-    g.drawText ("Nimbus Reverb", 20, 0, 150, 40, juce::Justification::centredLeft, true);
+    g.setFont (juce::Font(20.0f, juce::Font::bold));
+    g.drawText ("NIMBUS", 20, 0, 150, 40, juce::Justification::centredLeft, true);
 }
 
 void CloudGreyVerbEditor::resized()
@@ -207,9 +207,9 @@ void CloudGreyVerbEditor::resized()
     auto labelKnobGap = [](int knobDiameter) { return juce::jmax(6, static_cast<int>(knobDiameter * 0.35f)); };
 
     auto header = bounds.removeFromTop(scaled(40));
-    presetSelector.setBounds(header.removeFromLeft(scaled(220)).withSizeKeepingCentre(scaled(200), scaled(24)));
     if (auto* hq = getToggle("hqMode"))
         hq->button.setBounds(header.removeFromRight(scaled(80)).withSizeKeepingCentre(scaled(60), scaled(22)));
+    presetSelector.setBounds(header.removeFromRight(scaled(220)).withSizeKeepingCentre(scaled(200), scaled(24)));
 
     auto footer = bounds.removeFromBottom(scaled(70));
 
