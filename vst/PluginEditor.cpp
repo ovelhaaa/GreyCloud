@@ -2,12 +2,120 @@
 #include "PluginEditor.h"
 #include "BinaryData.h"
 
+#include <cmath>
+
+namespace
+{
+class NimbusAnimatedLogo final : public juce::Component, private juce::Timer
+{
+public:
+    NimbusAnimatedLogo()
+    {
+        setInterceptsMouseClicks(false, false);
+        loadParticlesFromSvg();
+        startTimerHz(30);
+    }
+
+    void paint(juce::Graphics& g) override
+    {
+        auto area = getLocalBounds().toFloat();
+        g.setColour(juce::Colour(17, 17, 17));
+        g.fillRoundedRectangle(area, 5.0f);
+
+        if (particles.empty())
+            return;
+
+        auto logoArea = area.reduced(1.0f);
+        const float drawScale = juce::jmin(logoArea.getWidth(), logoArea.getHeight()) / 1024.0f;
+        const float xOffset = logoArea.getCentreX() - 512.0f * drawScale;
+        const float yOffset = logoArea.getCentreY() - 512.0f * drawScale;
+        const auto nowSeconds = (juce::Time::getMillisecondCounterHiRes() - startTimeMs) * 0.001;
+        const auto gold = juce::Colour(221, 191, 114);
+
+        for (const auto& particle : particles)
+        {
+            float alpha = 1.0f;
+            float radiusScale = 1.0f;
+
+            if (particle.animated)
+            {
+                const auto phase = std::fmod(nowSeconds - (double) particle.delaySeconds + 3.0, 3.0) / 3.0;
+                const auto pulse = 0.5 - 0.5 * std::cos(phase * juce::MathConstants<double>::twoPi);
+                alpha = (float) (1.0 - 0.5 * pulse);
+                radiusScale = (float) (1.0 - 0.2 * pulse);
+            }
+
+            const auto radius = particle.radius * radiusScale * drawScale;
+            const auto x = xOffset + particle.x * drawScale;
+            const auto y = yOffset + particle.y * drawScale;
+
+            g.setColour(gold.withAlpha(alpha));
+            g.fillEllipse(x - radius, y - radius, radius * 2.0f, radius * 2.0f);
+        }
+    }
+
+private:
+    struct Particle
+    {
+        float x = 0.0f;
+        float y = 0.0f;
+        float radius = 0.0f;
+        float delaySeconds = 0.0f;
+        bool animated = false;
+    };
+
+    void loadParticlesFromSvg()
+    {
+        auto svg = juce::String::fromUTF8(BinaryData::nimbus_logo_custom_svg,
+                                          BinaryData::nimbus_logo_custom_svgSize);
+        juce::XmlDocument document(svg);
+
+        if (auto root = document.getDocumentElement())
+            parseElement(*root);
+    }
+
+    void parseElement(const juce::XmlElement& element)
+    {
+        if (element.hasTagName("circle"))
+        {
+            Particle particle;
+            particle.x = (float) element.getDoubleAttribute("cx");
+            particle.y = (float) element.getDoubleAttribute("cy");
+            particle.radius = (float) element.getDoubleAttribute("r");
+            particle.animated = element.getStringAttribute("class").contains("particle-organic");
+            particle.delaySeconds = parseDelay(element.getStringAttribute("style"));
+            particles.push_back(particle);
+        }
+
+        forEachXmlChildElement(element, child)
+            parseElement(*child);
+    }
+
+    static float parseDelay(const juce::String& style)
+    {
+        const auto delayKey = "animation-delay:";
+        const auto delayStart = style.indexOf(delayKey);
+
+        if (delayStart < 0)
+            return 0.0f;
+
+        return (float) style.substring(delayStart + juce::String(delayKey).length())
+                            .trimStart()
+                            .upToFirstOccurrenceOf("s", false, false)
+                            .getDoubleValue();
+    }
+
+    std::vector<Particle> particles;
+    double startTimeMs = juce::Time::getMillisecondCounterHiRes();
+};
+}
+
 CloudGreyVerbEditor::CloudGreyVerbEditor (CloudGreyVerbProcessor& p)
     : AudioProcessorEditor (&p), audioProcessor (p)
 {
     setLookAndFeel(&customLookAndFeel);
-    nimbusLogo = juce::Drawable::createFromImageData(BinaryData::nimbus_logo_custom_svg,
-                                                     BinaryData::nimbus_logo_custom_svgSize);
+    nimbusLogo = std::make_unique<NimbusAnimatedLogo>();
+    addAndMakeVisible(nimbusLogo.get());
 
     addAndMakeVisible(presetSelector);
     for (int i = 0; i < p.getNumPrograms(); ++i) {
@@ -200,11 +308,12 @@ void CloudGreyVerbEditor::paint (juce::Graphics& g)
     const auto headerColour = juce::Colour(17, 17, 17);
     const auto accentColour = juce::Colour(221, 191, 114);
     const auto outlineColour = juce::Colour(42, 42, 47);
+    const auto panelOutlineColour = juce::Colour(60, 60, 65);
 
     auto bounds = getLocalBounds();
     const float scale = juce::jlimit(0.6f, 2.0f, (float) bounds.getWidth() / 720.0f);
     auto scaled = [scale](float v) { return juce::roundToInt(v * scale); };
-    auto header = bounds.removeFromTop(scaled(48));
+    auto header = bounds.removeFromTop(scaled(60));
 
     g.fillAll(backgroundColour);
     g.setColour(headerColour);
@@ -212,28 +321,35 @@ void CloudGreyVerbEditor::paint (juce::Graphics& g)
     g.setColour(outlineColour);
     g.drawHorizontalLine(header.getBottom() - 1, 0.0f, (float) getWidth());
 
-    auto logoBounds = header.withTrimmedLeft(scaled(20))
-                            .withSizeKeepingCentre(scaled(30), scaled(30))
-                            .toFloat();
-
-    if (nimbusLogo != nullptr)
-    {
-        nimbusLogo->drawWithin(g, logoBounds, juce::RectanglePlacement::centred, 1.0f);
-    }
-    else
-    {
-        g.setColour(accentColour);
-        g.fillEllipse(logoBounds.reduced(8.0f * scale));
-    }
-
-    auto textArea = header.withTrimmedLeft(scaled(60)).withWidth(scaled(160));
+    auto textArea = header.withTrimmedLeft(scaled(74)).withWidth(scaled(170));
     g.setColour(juce::Colours::white);
-    g.setFont(juce::Font(20.0f * scale, juce::Font::bold));
-    g.drawText("NIMBUS", textArea.removeFromTop(scaled(28)), juce::Justification::centredLeft, true);
+    g.setFont(juce::Font(22.0f * scale, juce::Font::bold));
+    g.drawText("NIMBUS", textArea.removeFromTop(scaled(34)), juce::Justification::centredLeft, true);
 
     g.setColour(accentColour.withAlpha(0.82f));
     g.setFont(juce::Font(9.0f * scale, juce::Font::bold));
     g.drawText("REVERB", textArea, juce::Justification::centredLeft, true);
+
+    auto footer = getLocalBounds().removeFromBottom(scaled(82));
+    footer.removeFromLeft(scaled(130));
+
+    auto drawFooterGroup = [&](juce::Rectangle<int> groupBounds, const juce::String& title)
+    {
+        groupBounds = groupBounds.reduced(scaled(4), scaled(5));
+        g.setColour(panelOutlineColour.withAlpha(0.75f));
+        g.drawRoundedRectangle(groupBounds.toFloat(), 4.0f, 1.0f);
+
+        auto titleArea = groupBounds.removeFromTop(scaled(16));
+        g.setColour(accentColour.withAlpha(0.18f));
+        g.fillRoundedRectangle(titleArea.toFloat().reduced(1.0f, 1.0f), 3.0f);
+        g.setColour(accentColour);
+        g.setFont(juce::Font(9.5f * scale, juce::Font::bold));
+        g.drawText(title, titleArea, juce::Justification::centred, true);
+    };
+
+    drawFooterGroup(footer.removeFromLeft(scaled(170)), "PRE DELAY");
+    drawFooterGroup(footer.removeFromLeft(scaled(190)), "STEREO FIELD");
+    drawFooterGroup(footer.removeFromRight(scaled(150)), "GAIN");
 }
 
 void CloudGreyVerbEditor::resized()
@@ -241,19 +357,25 @@ void CloudGreyVerbEditor::resized()
     auto bounds = getLocalBounds();
     float scale = juce::jlimit(0.6f, 2.0f, (float) bounds.getWidth() / 720.0f);
     auto scaled = [scale](float v) { return juce::roundToInt(v * scale); };
-    auto labelKnobGap = [](int knobDiameter) { return juce::jmax(6, static_cast<int>(knobDiameter * 0.35f)); };
+    const auto controlLabelGap = scaled(3);
 
-    auto header = bounds.removeFromTop(scaled(48));
+    auto header = bounds.removeFromTop(scaled(60));
+    if (nimbusLogo != nullptr)
+        nimbusLogo->setBounds(header.getX() + scaled(16),
+                              header.getCentreY() - scaled(22),
+                              scaled(44),
+                              scaled(44));
+
     if (auto* hq = getToggle("hqMode"))
         hq->button.setBounds(header.removeFromRight(scaled(80)).withSizeKeepingCentre(scaled(60), scaled(22)));
     presetSelector.setBounds(header.removeFromRight(scaled(220)).withSizeKeepingCentre(scaled(200), scaled(24)));
 
-    auto footer = bounds.removeFromBottom(scaled(70));
+    auto footer = bounds.removeFromBottom(scaled(82));
 
-    auto placeRotary = [scaled, labelKnobGap](RotaryControl* c, juce::Rectangle<int> b, int knobBaseSize, int labelHeight) {
+    auto placeRotary = [scaled, controlLabelGap](RotaryControl* c, juce::Rectangle<int> b, int knobBaseSize, int labelHeight) {
         if (!c) return;
         int knobDiameter = scaled(knobBaseSize);
-        int gap = labelKnobGap(knobDiameter);
+        int gap = controlLabelGap;
         int totalHeight = knobDiameter + gap + scaled(labelHeight);
         auto centerBox = b.withSizeKeepingCentre(juce::jmax(knobDiameter, scaled(knobBaseSize + 10)), totalHeight);
         
@@ -268,19 +390,20 @@ void CloudGreyVerbEditor::resized()
     importButton.setBounds(fBtns.removeFromTop(fBtns.getHeight() / 2).reduced(scaled(2)));
     exportButton.setBounds(fBtns.reduced(scaled(2)));
     
-    auto fPre = footer.removeFromLeft(scaled(140));
-    placeRotary(getRotary("preDelay"), fPre.removeFromLeft(scaled(70)), 36, 16);
-    auto fSync = fPre;
-    if (auto* syncDiv = getChoice("syncDivision")) syncDiv->comboBox.setBounds(fSync.withSizeKeepingCentre(scaled(65), scaled(22)).translated(0, scaled(5)));
-    if (auto* pdSync = getToggle("preDelaySync")) pdSync->button.setBounds(fSync.withSizeKeepingCentre(scaled(65), scaled(22)).translated(0, scaled(-20)));
+    auto fPre = footer.removeFromLeft(scaled(170)).reduced(scaled(4), scaled(5));
+    auto fPreControls = fPre.withTrimmedTop(scaled(16));
+    placeRotary(getRotary("preDelay"), fPreControls.removeFromLeft(scaled(72)), 36, 14);
+    fPreControls.removeFromLeft(scaled(4));
+    auto pdSyncTop = fPreControls.removeFromTop(fPreControls.getHeight() / 2);
+    if (auto* pdSync = getToggle("preDelaySync")) pdSync->button.setBounds(pdSyncTop.withSizeKeepingCentre(scaled(65), scaled(22)));
+    if (auto* syncDiv = getChoice("syncDivision")) syncDiv->comboBox.setBounds(fPreControls.withSizeKeepingCentre(scaled(65), scaled(22)));
 
-    auto fWid = footer.removeFromLeft(scaled(80));
-    placeRotary(getRotary("stereoWidth"), fWid, 36, 16);
+    auto fStereo = footer.removeFromLeft(scaled(190)).reduced(scaled(4), scaled(5));
+    auto fStereoControls = fStereo.withTrimmedTop(scaled(16));
+    placeRotary(getRotary("stereoWidth"), fStereoControls.removeFromLeft(scaled(78)), 36, 14);
+    if (auto* sc = getToggle("stereoCore")) sc->button.setBounds(fStereoControls.withSizeKeepingCentre(scaled(96), scaled(22)));
 
-    auto fCore = footer.removeFromLeft(scaled(100));
-    if (auto* sc = getToggle("stereoCore")) sc->button.setBounds(fCore.withSizeKeepingCentre(scaled(90), scaled(22)));
-
-    auto fInOut = footer.removeFromRight(scaled(120)).reduced(0, scaled(10));
+    auto fInOut = footer.removeFromRight(scaled(150)).reduced(scaled(5), scaled(5)).withTrimmedTop(scaled(16));
     auto placeFader = [scaled](RotaryControl* c, juce::Rectangle<int> b) {
         if (!c) return;
         c->label.setBounds(b.removeFromLeft(scaled(30)));
@@ -289,11 +412,11 @@ void CloudGreyVerbEditor::resized()
     placeFader(getRotary("inputGain"), fInOut.removeFromTop(fInOut.getHeight() / 2));
     placeFader(getRotary("outputGain"), fInOut);
 
-    auto macroRow = bounds.removeFromTop(scaled(120));
+    auto macroRow = bounds.removeFromTop(scaled(118));
     int mw = macroRow.getWidth() / 4;
     
     auto m1 = macroRow.removeFromLeft(mw);
-    placeRotary(getRotary("mix"), m1, 70, 20);
+    placeRotary(getRotary("mix"), m1.withTrimmedBottom(scaled(22)), 70, 20);
 
     auto m2 = macroRow.removeFromLeft(mw);
     auto m2Sync = m2.removeFromBottom(scaled(22));
@@ -301,10 +424,10 @@ void CloudGreyVerbEditor::resized()
     if (auto* szSync = getToggle("sizeSync")) szSync->button.setBounds(m2Sync.withSizeKeepingCentre(scaled(50), scaled(18)));
 
     auto m3 = macroRow.removeFromLeft(mw);
-    placeRotary(getRotary("feedback"), m3, 70, 20);
+    placeRotary(getRotary("feedback"), m3.withTrimmedBottom(scaled(22)), 70, 20);
 
     auto m4 = macroRow;
-    placeRotary(getRotary("texture"), m4, 70, 20);
+    placeRotary(getRotary("texture"), m4.withTrimmedBottom(scaled(22)), 70, 20);
 
     bounds.reduce(scaled(10), scaled(10));
     auto leftCol = bounds.removeFromLeft(juce::roundToInt(bounds.getWidth() * 0.32f));

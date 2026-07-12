@@ -12,11 +12,16 @@ public:
     CardComponent(const juce::String& title) : name(title) {}
     void paint(juce::Graphics& g) override {
         auto bounds = getLocalBounds().toFloat();
+        auto titleArea = bounds.withHeight(20.0f).reduced(1.0f, 1.0f);
+
         g.setColour(juce::Colour(60, 60, 65));
         g.drawRoundedRectangle(bounds, 4.0f, 1.0f);
-        g.setColour(juce::Colours::white);
-        g.setFont(12.0f);
-        g.drawText(name.toLowerCase(), bounds.withTrimmedTop(4).withHeight(16), juce::Justification::centredTop, false);
+        g.setColour(juce::Colour(34, 34, 39));
+        g.fillRoundedRectangle(titleArea, 3.0f);
+        g.setColour(juce::Colour(221, 191, 114));
+        g.drawHorizontalLine(20, bounds.getX() + 7.0f, bounds.getRight() - 7.0f);
+        g.setFont(juce::Font(11.0f, juce::Font::bold));
+        g.drawText(name.toUpperCase(), titleArea.toNearestInt(), juce::Justification::centred, false);
     }
 private:
     juce::String name;
@@ -28,10 +33,15 @@ public:
     SubgroupComponent(const juce::String& title) : name(title) {}
     void paint(juce::Graphics& g) override {
         auto bounds = getLocalBounds().toFloat();
+        auto titleArea = bounds.withHeight(18.0f).reduced(1.0f, 1.0f);
+
         g.setColour(juce::Colour(221, 191, 114));
         g.drawRoundedRectangle(bounds, 4.0f, 1.0f);
-        g.setFont(11.0f);
-        g.drawText(name.toUpperCase(), bounds.withTrimmedTop(2).withHeight(14), juce::Justification::centredTop, false);
+        g.setColour(juce::Colour(221, 191, 114).withAlpha(0.16f));
+        g.fillRoundedRectangle(titleArea, 3.0f);
+        g.setColour(juce::Colour(221, 191, 114));
+        g.setFont(juce::Font(10.5f, juce::Font::bold));
+        g.drawText(name.toUpperCase(), titleArea.toNearestInt(), juce::Justification::centred, false);
     }
 private:
     juce::String name;
@@ -75,7 +85,7 @@ private:
     std::vector<std::unique_ptr<ChoiceControl>> choiceControls;
     std::vector<std::unique_ptr<CardComponent>> cards;
     std::unique_ptr<SubgroupComponent> freezeSubgroup;
-    std::unique_ptr<juce::Drawable> nimbusLogo;
+    std::unique_ptr<juce::Component> nimbusLogo;
 
     juce::ComboBox presetSelector;
 
