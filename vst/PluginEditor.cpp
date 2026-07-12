@@ -87,8 +87,13 @@ private:
             particles.push_back(particle);
         }
 
-        forEachXmlChildElement(element, child)
+        for (auto* child = element.getFirstChildElement(); child != nullptr; child = child->getNextElement())
             parseElement(*child);
+    }
+
+    void timerCallback() override
+    {
+        repaint();
     }
 
     static float parseDelay(const juce::String& style)
