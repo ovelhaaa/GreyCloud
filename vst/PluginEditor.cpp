@@ -1,10 +1,13 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "BinaryData.h"
 
 CloudGreyVerbEditor::CloudGreyVerbEditor (CloudGreyVerbProcessor& p)
     : AudioProcessorEditor (&p), audioProcessor (p)
 {
     setLookAndFeel(&customLookAndFeel);
+    nimbusLogo = juce::Drawable::createFromImageData(BinaryData::nimbus_logo_custom_svg,
+                                                     BinaryData::nimbus_logo_custom_svgSize);
 
     addAndMakeVisible(presetSelector);
     for (int i = 0; i < p.getNumPrograms(); ++i) {
@@ -193,10 +196,44 @@ void CloudGreyVerbEditor::addChoiceControl(const juce::String& paramID, const ju
 
 void CloudGreyVerbEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (juce::Colour(24, 24, 28));
-    g.setColour (juce::Colours::white);
-    g.setFont (juce::Font(20.0f, juce::Font::bold));
-    g.drawText ("NIMBUS", 20, 0, 150, 40, juce::Justification::centredLeft, true);
+    const auto backgroundColour = juce::Colour(24, 24, 28);
+    const auto headerColour = juce::Colour(17, 17, 17);
+    const auto accentColour = juce::Colour(221, 191, 114);
+    const auto outlineColour = juce::Colour(42, 42, 47);
+
+    auto bounds = getLocalBounds();
+    const float scale = juce::jlimit(0.6f, 2.0f, (float) bounds.getWidth() / 720.0f);
+    auto scaled = [scale](float v) { return juce::roundToInt(v * scale); };
+    auto header = bounds.removeFromTop(scaled(48));
+
+    g.fillAll(backgroundColour);
+    g.setColour(headerColour);
+    g.fillRect(header);
+    g.setColour(outlineColour);
+    g.drawHorizontalLine(header.getBottom() - 1, 0.0f, (float) getWidth());
+
+    auto logoBounds = header.withTrimmedLeft(scaled(20))
+                            .withSizeKeepingCentre(scaled(30), scaled(30))
+                            .toFloat();
+
+    if (nimbusLogo != nullptr)
+    {
+        nimbusLogo->drawWithin(g, logoBounds, juce::RectanglePlacement::centred, 1.0f);
+    }
+    else
+    {
+        g.setColour(accentColour);
+        g.fillEllipse(logoBounds.reduced(8.0f * scale));
+    }
+
+    auto textArea = header.withTrimmedLeft(scaled(60)).withWidth(scaled(160));
+    g.setColour(juce::Colours::white);
+    g.setFont(juce::Font(20.0f * scale, juce::Font::bold));
+    g.drawText("NIMBUS", textArea.removeFromTop(scaled(28)), juce::Justification::centredLeft, true);
+
+    g.setColour(accentColour.withAlpha(0.82f));
+    g.setFont(juce::Font(9.0f * scale, juce::Font::bold));
+    g.drawText("REVERB", textArea, juce::Justification::centredLeft, true);
 }
 
 void CloudGreyVerbEditor::resized()
@@ -206,7 +243,7 @@ void CloudGreyVerbEditor::resized()
     auto scaled = [scale](float v) { return juce::roundToInt(v * scale); };
     auto labelKnobGap = [](int knobDiameter) { return juce::jmax(6, static_cast<int>(knobDiameter * 0.35f)); };
 
-    auto header = bounds.removeFromTop(scaled(40));
+    auto header = bounds.removeFromTop(scaled(48));
     if (auto* hq = getToggle("hqMode"))
         hq->button.setBounds(header.removeFromRight(scaled(80)).withSizeKeepingCentre(scaled(60), scaled(22)));
     presetSelector.setBounds(header.removeFromRight(scaled(220)).withSizeKeepingCentre(scaled(200), scaled(24)));

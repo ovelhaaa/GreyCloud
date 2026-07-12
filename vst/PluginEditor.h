@@ -28,7 +28,7 @@ public:
     SubgroupComponent(const juce::String& title) : name(title) {}
     void paint(juce::Graphics& g) override {
         auto bounds = getLocalBounds().toFloat();
-        g.setColour(juce::Colour(245, 158, 11)); // Amber accent colour
+        g.setColour(juce::Colour(221, 191, 114));
         g.drawRoundedRectangle(bounds, 4.0f, 1.0f);
         g.setFont(11.0f);
         g.drawText(name.toUpperCase(), bounds.withTrimmedTop(2).withHeight(14), juce::Justification::centredTop, false);
@@ -75,6 +75,7 @@ private:
     std::vector<std::unique_ptr<ChoiceControl>> choiceControls;
     std::vector<std::unique_ptr<CardComponent>> cards;
     std::unique_ptr<SubgroupComponent> freezeSubgroup;
+    std::unique_ptr<juce::Drawable> nimbusLogo;
 
     juce::ComboBox presetSelector;
 

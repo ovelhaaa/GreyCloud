@@ -3,7 +3,7 @@
 GreyCloudLookAndFeel::GreyCloudLookAndFeel()
 {
     backgroundColour = juce::Colour(24, 24, 28);
-    accentColour = juce::Colour(245, 158, 11); // Amber/Orange
+    accentColour = juce::Colour(221, 191, 114); // Nimbus logo gold
     outlineColour = juce::Colour(60, 60, 65);
 
     setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);

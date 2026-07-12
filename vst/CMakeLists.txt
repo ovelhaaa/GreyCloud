@@ -31,6 +31,11 @@ juce_add_plugin(NimbusReverbPlugin
 
 juce_generate_juce_header(NimbusReverbPlugin)
 
+juce_add_binary_data(NimbusAssets
+    SOURCES
+        nimbus_logo_custom.svg
+)
+
 target_sources(NimbusReverbPlugin
     PRIVATE
         PluginProcessor.cpp
@@ -52,6 +57,7 @@ target_compile_definitions(NimbusReverbPlugin
 
 target_link_libraries(NimbusReverbPlugin
     PRIVATE
+        NimbusAssets
         juce::juce_audio_plugin_client
         juce::juce_audio_utils
         juce::juce_audio_processors
