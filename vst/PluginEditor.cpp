@@ -142,8 +142,8 @@ CloudGreyVerbEditor::CloudGreyVerbEditor (CloudGreyVerbProcessor& p)
     addRotaryControl("diffusion", "Diffusion");
     addRotaryControl("grainScan", "Grain Scan");
     addRotaryControl("reverseMix", "Rev Mix");
-    addToggleControl("freeze", "Freeze");
-    addToggleControl("hardFreeze", "Hard Frz");
+    addToggleControl("freeze", "Soft");
+    addToggleControl("hardFreeze", "Hard");
     addToggleControl("stereoCore", "Stereo Core");
 
     cards.push_back(std::make_unique<CardComponent>("Tone / Decay"));
@@ -468,12 +468,14 @@ void CloudGreyVerbEditor::resized()
     auto c1Inner = leftCol.reduced(scaled(5));
     c1Inner.removeFromTop(scaled(20));
     
-    auto freezeBounds = c1Inner.removeFromBottom(scaled(80));
+    auto freezeBounds = c1Inner.removeFromBottom(scaled(48));
     if (freezeSubgroup) freezeSubgroup->setBounds(freezeBounds);
     auto fzInner = freezeBounds.reduced(scaled(4));
     fzInner.removeFromTop(scaled(16));
-    if (auto* frz = getToggle("freeze")) frz->button.setBounds(fzInner.removeFromTop(fzInner.getHeight()/2).withSizeKeepingCentre(scaled(70), scaled(22)));
-    if (auto* hFrz = getToggle("hardFreeze")) hFrz->button.setBounds(fzInner.withSizeKeepingCentre(scaled(70), scaled(22)));
+    auto softArea = fzInner.removeFromLeft(fzInner.getWidth() / 2).reduced(scaled(2), 0);
+    auto hardArea = fzInner.reduced(scaled(2), 0);
+    if (auto* frz = getToggle("freeze")) frz->button.setBounds(softArea.withSizeKeepingCentre(scaled(58), scaled(22)));
+    if (auto* hFrz = getToggle("hardFreeze")) hFrz->button.setBounds(hardArea.withSizeKeepingCentre(scaled(58), scaled(22)));
     
     int knobH = c1Inner.getHeight() / 3;
     placeRotary(getRotary("diffusion"), c1Inner.removeFromTop(knobH), 36, 16);
