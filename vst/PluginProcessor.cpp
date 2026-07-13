@@ -77,6 +77,7 @@ void CloudGreyVerbProcessor::setCurrentProgram (int index)
     if (index >= 0 && index < presets.size())
     {
         currentPresetIndex = index;
+        requestPresetTransition();
         const auto& p = presets[index];
         
         auto updateParameterValue = [&](const juce::String& id, float value) {
@@ -127,6 +128,12 @@ void CloudGreyVerbProcessor::changeProgramName (int index, const juce::String& n
 
 void CloudGreyVerbProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    currentSampleRate = sampleRate;
+    presetTransitionRequested.store (false, std::memory_order_release);
+    presetTransitionStage.store (static_cast<int> (PresetTransitionStage::idle), std::memory_order_release);
+    presetTransitionSamplesRemaining = 0;
+    presetTransitionSamplesTotal = 0;
+
     // Allocate DSP memory (~3.0MB for true stereo 48k operations)
     size_t requiredFloats = 1600000; 
     dspMemoryNormal.resize(requiredFloats, 0.0f);
@@ -157,6 +164,91 @@ void CloudGreyVerbProcessor::prepareToPlay (double sampleRate, int samplesPerBlo
     latencyCompensationR.setDelay(currentLatencySamples);
 }
 
+void CloudGreyVerbProcessor::requestPresetTransition()
+{
+    presetTransitionRequested.store (true, std::memory_order_release);
+}
+
+int CloudGreyVerbProcessor::getPresetTransitionLengthInSamples (double seconds) const
+{
+    return juce::jmax (1, juce::roundToInt (currentSampleRate * seconds));
+}
+
+void CloudGreyVerbProcessor::resetDspStateForPresetChange()
+{
+    dspCoreNormal.reset();
+    dspCoreHQ.reset();
+    latencyCompensationL.reset();
+    latencyCompensationR.reset();
+
+    if (oversampling != nullptr)
+        oversampling->reset();
+}
+
+void CloudGreyVerbProcessor::applyPresetTransition (juce::AudioBuffer<float>& buffer)
+{
+    auto stage = static_cast<PresetTransitionStage> (presetTransitionStage.load (std::memory_order_acquire));
+    if (stage == PresetTransitionStage::idle || buffer.getNumSamples() == 0)
+        return;
+
+    if (presetTransitionSamplesRemaining <= 0)
+    {
+        const auto fadeSeconds = (stage == PresetTransitionStage::fadeOut) ? 0.012 : 0.008;
+        presetTransitionSamplesTotal = getPresetTransitionLengthInSamples (fadeSeconds);
+        presetTransitionSamplesRemaining = presetTransitionSamplesTotal;
+    }
+
+    bool shouldResetDsp = false;
+    auto numSamples = buffer.getNumSamples();
+    auto numChannels = buffer.getNumChannels();
+
+    for (int sample = 0; sample < numSamples; ++sample)
+    {
+        float gain = 1.0f;
+
+        if (stage == PresetTransitionStage::fadeOut)
+        {
+            gain = static_cast<float> (presetTransitionSamplesRemaining)
+                 / static_cast<float> (presetTransitionSamplesTotal);
+        }
+        else if (stage == PresetTransitionStage::fadeIn)
+        {
+            gain = 1.0f - (static_cast<float> (presetTransitionSamplesRemaining)
+                         / static_cast<float> (presetTransitionSamplesTotal));
+        }
+
+        for (int channel = 0; channel < numChannels; ++channel)
+            buffer.getWritePointer (channel)[sample] *= gain;
+
+        --presetTransitionSamplesRemaining;
+
+        if (presetTransitionSamplesRemaining <= 0)
+        {
+            if (stage == PresetTransitionStage::fadeOut)
+            {
+                shouldResetDsp = true;
+                for (int restSample = sample + 1; restSample < numSamples; ++restSample)
+                    for (int channel = 0; channel < numChannels; ++channel)
+                        buffer.getWritePointer (channel)[restSample] = 0.0f;
+            }
+            else
+            {
+                presetTransitionStage.store (static_cast<int> (PresetTransitionStage::idle), std::memory_order_release);
+            }
+
+            break;
+        }
+    }
+
+    if (shouldResetDsp)
+    {
+        resetDspStateForPresetChange();
+        presetTransitionSamplesTotal = getPresetTransitionLengthInSamples (0.008);
+        presetTransitionSamplesRemaining = presetTransitionSamplesTotal;
+        presetTransitionStage.store (static_cast<int> (PresetTransitionStage::fadeIn), std::memory_order_release);
+    }
+}
+
 void CloudGreyVerbProcessor::releaseResources()
 {
 }
@@ -178,6 +270,13 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     juce::ScopedNoDenormals noDenormals;
     auto totalNumInputChannels  = getTotalNumInputChannels();
     auto totalNumOutputChannels = getTotalNumOutputChannels();
+
+    if (presetTransitionRequested.exchange (false, std::memory_order_acq_rel))
+    {
+        presetTransitionSamplesRemaining = 0;
+        presetTransitionSamplesTotal = 0;
+        presetTransitionStage.store (static_cast<int> (PresetTransitionStage::fadeOut), std::memory_order_release);
+    }
 
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, buffer.getNumSamples());
@@ -246,13 +345,24 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
         }
     }
 
-    if (hqMode) {
-        dspCoreHQ.setParams(p);
-    } else {
-        dspCoreNormal.setParams(p);
+    auto transitionStage = static_cast<PresetTransitionStage> (presetTransitionStage.load (std::memory_order_acquire));
+    const bool holdPreviousDspState = transitionStage == PresetTransitionStage::fadeOut;
+    const auto paramsToProcess = holdPreviousDspState ? currentDspParams : p;
+    const auto hqModeToProcess = holdPreviousDspState ? currentDspHqMode : hqMode;
+
+    if (! holdPreviousDspState)
+    {
+        currentDspParams = p;
+        currentDspHqMode = hqMode;
     }
 
-    if (hqMode) {
+    if (hqModeToProcess) {
+        dspCoreHQ.setParams(paramsToProcess);
+    } else {
+        dspCoreNormal.setParams(paramsToProcess);
+    }
+
+    if (hqModeToProcess) {
         juce::dsp::AudioBlock<float> block (buffer);
         juce::dsp::AudioBlock<float> osBlock = oversampling->processSamplesUp (block);
         
@@ -302,6 +412,8 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
             if (channelR) channelR[i] = outR;
         }
     }
+
+    applyPresetTransition (buffer);
 }
 
 bool CloudGreyVerbProcessor::hasEditor() const { return true; }
@@ -320,7 +432,10 @@ void CloudGreyVerbProcessor::getStateInformation (juce::MemoryBlock& destData)
 void CloudGreyVerbProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     if (auto xmlState = getXmlFromBinary (data, sizeInBytes))
+    {
+        requestPresetTransition();
         parameters.replaceState (juce::ValueTree::fromXml (*xmlState));
+    }
 }
 
 // This creates new instances of the plugin

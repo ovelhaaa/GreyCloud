@@ -608,6 +608,7 @@ void CloudGreyVerbEditor::loadJSONPreset()
                 {
                     auto* paramsObj = paramsVar.getDynamicObject();
                     auto* vts = &audioProcessor.getVTS();
+                    audioProcessor.requestPresetTransition();
                     for (auto& prop : paramsObj->getProperties())
                     {
                         auto id = prop.name.toString();

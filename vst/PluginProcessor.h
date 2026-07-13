@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 #include "cloud_grey_verb.hpp"
+#include <atomic>
 #include <vector>
 #include <memory>
 #include <juce_dsp/juce_dsp.h>
@@ -53,8 +54,20 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
 
     juce::AudioProcessorValueTreeState& getVTS() { return parameters; }
+    void requestPresetTransition();
 
 private:
+    enum class PresetTransitionStage
+    {
+        idle = 0,
+        fadeOut,
+        fadeIn
+    };
+
+    void applyPresetTransition (juce::AudioBuffer<float>& buffer);
+    void resetDspStateForPresetChange();
+    int getPresetTransitionLengthInSamples (double seconds) const;
+
     juce::AudioProcessorValueTreeState parameters;
     
     CloudGreyVerb dspCoreNormal;
@@ -69,6 +82,13 @@ private:
     
     std::vector<BuiltInPreset> presets;
     int currentPresetIndex = 0;
+    double currentSampleRate = 44100.0;
+    CloudGreyVerb::Params currentDspParams;
+    bool currentDspHqMode = false;
+    std::atomic<bool> presetTransitionRequested { false };
+    std::atomic<int> presetTransitionStage { static_cast<int> (PresetTransitionStage::idle) };
+    int presetTransitionSamplesRemaining = 0;
+    int presetTransitionSamplesTotal = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CloudGreyVerbProcessor)
 };
