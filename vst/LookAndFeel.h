@@ -21,6 +21,11 @@ public:
     void drawComboBox (juce::Graphics& g, int width, int height, bool isButtonDown,
                        int buttonX, int buttonY, int buttonW, int buttonH, juce::ComboBox& box) override;
 
+    juce::Font getComboBoxFont(juce::ComboBox& box);
+    void positionComboBoxText(juce::ComboBox& box, juce::Label& label);
+    juce::Font getPopupMenuFont();
+    juce::Font getSliderPopupFont(juce::Slider& slider);
+
     void drawButtonBackground(juce::Graphics& g, juce::Button& button,
                               const juce::Colour& backgroundColour,
                               bool shouldDrawButtonAsHighlighted,

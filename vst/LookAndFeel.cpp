@@ -109,6 +109,30 @@ void GreyCloudLookAndFeel::drawComboBox (juce::Graphics& g, int width, int heigh
     g.strokePath(path, juce::PathStrokeType(2.0f));
 }
 
+juce::Font GreyCloudLookAndFeel::getComboBoxFont(juce::ComboBox& box)
+{
+    juce::ignoreUnused(box);
+    return juce::Font(11.5f, juce::Font::plain);
+}
+
+void GreyCloudLookAndFeel::positionComboBoxText(juce::ComboBox& box, juce::Label& label)
+{
+    label.setBounds(juce::Rectangle<int>(6, 1, box.getWidth() - 26, box.getHeight() - 2));
+    label.setFont(getComboBoxFont(box));
+    label.setJustificationType(juce::Justification::centredLeft);
+}
+
+juce::Font GreyCloudLookAndFeel::getPopupMenuFont()
+{
+    return juce::Font(11.5f, juce::Font::plain);
+}
+
+juce::Font GreyCloudLookAndFeel::getSliderPopupFont(juce::Slider& slider)
+{
+    juce::ignoreUnused(slider);
+    return juce::Font(11.5f, juce::Font::bold);
+}
+
 void GreyCloudLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& button,
                                                 const juce::Colour& backgroundColourToUse,
                                                 bool shouldDrawButtonAsHighlighted,

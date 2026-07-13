@@ -318,7 +318,7 @@ void CloudGreyVerbEditor::paint (juce::Graphics& g)
     auto bounds = getLocalBounds();
     const float scale = juce::jlimit(0.6f, 2.0f, (float) bounds.getWidth() / 720.0f);
     auto scaled = [scale](float v) { return juce::roundToInt(v * scale); };
-    auto header = bounds.removeFromTop(scaled(64));
+    auto header = bounds.removeFromTop(scaled(68));
 
     g.fillAll(backgroundColour);
     g.setColour(headerColour);
@@ -326,8 +326,8 @@ void CloudGreyVerbEditor::paint (juce::Graphics& g)
     g.setColour(outlineColour);
     g.drawHorizontalLine(header.getBottom() - 1, 0.0f, (float) getWidth());
 
-    auto textArea = juce::Rectangle<int>(header.getX() + scaled(82),
-                                         header.getY() + scaled(13),
+    auto textArea = juce::Rectangle<int>(header.getX() + scaled(84),
+                                         header.getY() + scaled(15),
                                          scaled(170),
                                          scaled(38));
     g.setColour(juce::Colours::white);
@@ -378,12 +378,12 @@ void CloudGreyVerbEditor::resized()
     auto scaled = [scale](float v) { return juce::roundToInt(v * scale); };
     const auto controlLabelGap = scaled(3);
 
-    auto header = bounds.removeFromTop(scaled(64));
+    auto header = bounds.removeFromTop(scaled(68));
     if (nimbusLogo != nullptr)
-        nimbusLogo->setBounds(header.getX() + scaled(14),
-                              header.getCentreY() - scaled(25),
-                              scaled(50),
-                              scaled(50));
+        nimbusLogo->setBounds(header.getX() + scaled(13),
+                              header.getCentreY() - scaled(28),
+                              scaled(56),
+                              scaled(56));
 
     if (auto* hq = getToggle("hqMode"))
         hq->button.setBounds(header.removeFromRight(scaled(80)).withSizeKeepingCentre(scaled(60), scaled(22)));
