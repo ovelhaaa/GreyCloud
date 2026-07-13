@@ -37,7 +37,7 @@ public:
 
         g.setColour(juce::Colour(221, 191, 114));
         g.drawRoundedRectangle(bounds, 4.0f, 1.0f);
-        g.setColour(juce::Colour(221, 191, 114).withAlpha(0.16f));
+        g.setColour(juce::Colour(34, 34, 39));
         g.fillRoundedRectangle(titleArea, 3.0f);
         g.setColour(juce::Colour(221, 191, 114));
         g.setFont(juce::Font(10.5f, juce::Font::bold));

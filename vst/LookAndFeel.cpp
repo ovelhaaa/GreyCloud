@@ -109,6 +109,37 @@ void GreyCloudLookAndFeel::drawComboBox (juce::Graphics& g, int width, int heigh
     g.strokePath(path, juce::PathStrokeType(2.0f));
 }
 
+void GreyCloudLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& button,
+                                                const juce::Colour& backgroundColourToUse,
+                                                bool shouldDrawButtonAsHighlighted,
+                                                bool shouldDrawButtonAsDown)
+{
+    juce::ignoreUnused(backgroundColourToUse);
+
+    auto bounds = button.getLocalBounds().toFloat().reduced(1.0f);
+    const auto cornerSize = 4.0f;
+
+    g.setColour(shouldDrawButtonAsDown ? accentColour.withAlpha(0.22f)
+                                      : shouldDrawButtonAsHighlighted ? accentColour.withAlpha(0.12f)
+                                                                      : backgroundColour.darker(0.12f));
+    g.fillRoundedRectangle(bounds, cornerSize);
+
+    g.setColour(shouldDrawButtonAsHighlighted ? accentColour.withAlpha(0.8f) : outlineColour);
+    g.drawRoundedRectangle(bounds, cornerSize, 1.0f);
+}
+
+void GreyCloudLookAndFeel::drawButtonText(juce::Graphics& g, juce::TextButton& button,
+                                          bool shouldDrawButtonAsHighlighted,
+                                          bool shouldDrawButtonAsDown)
+{
+    juce::ignoreUnused(shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
+
+    g.setColour(button.isEnabled() ? juce::Colours::white.withAlpha(0.88f) : juce::Colours::grey);
+    g.setFont(10.5f);
+    g.drawFittedText(button.getButtonText(), button.getLocalBounds().reduced(5, 0),
+                     juce::Justification::centred, 1);
+}
+
 void GreyCloudLookAndFeel::drawLinearSlider(juce::Graphics& g, int x, int y, int width, int height,
                                              float sliderPos, float minSliderPos, float maxSliderPos,
                                              const juce::Slider::SliderStyle style, juce::Slider& slider)

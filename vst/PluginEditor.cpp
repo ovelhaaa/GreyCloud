@@ -171,11 +171,11 @@ CloudGreyVerbEditor::CloudGreyVerbEditor (CloudGreyVerbProcessor& p)
     
     addToggleControl("hqMode", "HQ");
 
-    importButton.setButtonText("Load WASM JSON Preset...");
+    importButton.setButtonText("Import JSON");
     importButton.onClick = [this] { loadJSONPreset(); };
     addAndMakeVisible(importButton);
 
-    exportButton.setButtonText("Export to JSON...");
+    exportButton.setButtonText("Export JSON");
     exportButton.onClick = [this] { exportJSONPreset(); };
     addAndMakeVisible(exportButton);
 
@@ -318,7 +318,7 @@ void CloudGreyVerbEditor::paint (juce::Graphics& g)
     auto bounds = getLocalBounds();
     const float scale = juce::jlimit(0.6f, 2.0f, (float) bounds.getWidth() / 720.0f);
     auto scaled = [scale](float v) { return juce::roundToInt(v * scale); };
-    auto header = bounds.removeFromTop(scaled(60));
+    auto header = bounds.removeFromTop(scaled(64));
 
     g.fillAll(backgroundColour);
     g.setColour(headerColour);
@@ -326,17 +326,21 @@ void CloudGreyVerbEditor::paint (juce::Graphics& g)
     g.setColour(outlineColour);
     g.drawHorizontalLine(header.getBottom() - 1, 0.0f, (float) getWidth());
 
-    auto textArea = header.withTrimmedLeft(scaled(74)).withWidth(scaled(170));
+    auto textArea = juce::Rectangle<int>(header.getX() + scaled(82),
+                                         header.getY() + scaled(13),
+                                         scaled(170),
+                                         scaled(38));
     g.setColour(juce::Colours::white);
     g.setFont(juce::Font(22.0f * scale, juce::Font::bold));
-    g.drawText("NIMBUS", textArea.removeFromTop(scaled(34)), juce::Justification::centredLeft, true);
+    g.drawText("NIMBUS", textArea.removeFromTop(scaled(25)), juce::Justification::centredLeft, true);
 
     g.setColour(accentColour.withAlpha(0.82f));
     g.setFont(juce::Font(9.0f * scale, juce::Font::bold));
     g.drawText("REVERB", textArea, juce::Justification::centredLeft, true);
 
     auto footer = getLocalBounds().removeFromBottom(scaled(82));
-    footer.removeFromLeft(scaled(130));
+    auto footerLayout = footer.reduced(scaled(10), 0);
+    auto presetGroupWidth = juce::roundToInt(footerLayout.getWidth() * 0.32f);
 
     auto drawFooterGroup = [&](juce::Rectangle<int> groupBounds, const juce::String& title)
     {
@@ -345,16 +349,26 @@ void CloudGreyVerbEditor::paint (juce::Graphics& g)
         g.drawRoundedRectangle(groupBounds.toFloat(), 4.0f, 1.0f);
 
         auto titleArea = groupBounds.removeFromTop(scaled(16));
-        g.setColour(accentColour.withAlpha(0.18f));
+        g.setColour(juce::Colour(34, 34, 39));
         g.fillRoundedRectangle(titleArea.toFloat().reduced(1.0f, 1.0f), 3.0f);
         g.setColour(accentColour);
         g.setFont(juce::Font(9.5f * scale, juce::Font::bold));
         g.drawText(title, titleArea, juce::Justification::centred, true);
     };
 
-    drawFooterGroup(footer.removeFromLeft(scaled(170)), "PRE DELAY");
-    drawFooterGroup(footer.removeFromLeft(scaled(190)), "STEREO FIELD");
-    drawFooterGroup(footer.removeFromRight(scaled(150)), "GAIN");
+    drawFooterGroup(footerLayout.removeFromLeft(presetGroupWidth), "PRESETS");
+    footerLayout.removeFromLeft(scaled(10));
+
+    const auto groupGap = scaled(6);
+    const auto rightWidth = footerLayout.getWidth();
+    auto preDelayWidth = juce::roundToInt(rightWidth * 0.32f);
+    auto stereoWidth = juce::roundToInt(rightWidth * 0.36f);
+
+    drawFooterGroup(footerLayout.removeFromLeft(preDelayWidth), "PRE DELAY");
+    footerLayout.removeFromLeft(groupGap);
+    drawFooterGroup(footerLayout.removeFromLeft(stereoWidth), "STEREO FIELD");
+    footerLayout.removeFromLeft(groupGap);
+    drawFooterGroup(footerLayout, "GAIN");
 }
 
 void CloudGreyVerbEditor::resized()
@@ -364,12 +378,12 @@ void CloudGreyVerbEditor::resized()
     auto scaled = [scale](float v) { return juce::roundToInt(v * scale); };
     const auto controlLabelGap = scaled(3);
 
-    auto header = bounds.removeFromTop(scaled(60));
+    auto header = bounds.removeFromTop(scaled(64));
     if (nimbusLogo != nullptr)
-        nimbusLogo->setBounds(header.getX() + scaled(16),
-                              header.getCentreY() - scaled(22),
-                              scaled(44),
-                              scaled(44));
+        nimbusLogo->setBounds(header.getX() + scaled(14),
+                              header.getCentreY() - scaled(25),
+                              scaled(50),
+                              scaled(50));
 
     if (auto* hq = getToggle("hqMode"))
         hq->button.setBounds(header.removeFromRight(scaled(80)).withSizeKeepingCentre(scaled(60), scaled(22)));
@@ -391,24 +405,35 @@ void CloudGreyVerbEditor::resized()
         c->slider.setBounds(centerBox.withSizeKeepingCentre(knobDiameter, knobDiameter));
     };
 
-    auto fBtns = footer.removeFromLeft(scaled(130)).reduced(scaled(5));
-    importButton.setBounds(fBtns.removeFromTop(fBtns.getHeight() / 2).reduced(scaled(2)));
-    exportButton.setBounds(fBtns.reduced(scaled(2)));
+    auto footerLayout = footer.reduced(scaled(10), 0);
+    auto presetGroupWidth = juce::roundToInt(footerLayout.getWidth() * 0.32f);
+
+    auto fBtns = footerLayout.removeFromLeft(presetGroupWidth).reduced(scaled(4), scaled(5)).withTrimmedTop(scaled(16));
+    importButton.setBounds(fBtns.removeFromTop(fBtns.getHeight() / 2).reduced(scaled(3)));
+    exportButton.setBounds(fBtns.reduced(scaled(3)));
+    footerLayout.removeFromLeft(scaled(10));
+
+    const auto groupGap = scaled(6);
+    const auto rightWidth = footerLayout.getWidth();
+    auto preDelayWidth = juce::roundToInt(rightWidth * 0.32f);
+    auto stereoGroupWidth = juce::roundToInt(rightWidth * 0.36f);
     
-    auto fPre = footer.removeFromLeft(scaled(170)).reduced(scaled(4), scaled(5));
+    auto fPre = footerLayout.removeFromLeft(preDelayWidth).reduced(scaled(4), scaled(5));
     auto fPreControls = fPre.withTrimmedTop(scaled(16));
-    placeRotary(getRotary("preDelay"), fPreControls.removeFromLeft(scaled(72)), 36, 14);
-    fPreControls.removeFromLeft(scaled(4));
+    placeRotary(getRotary("preDelay"), fPreControls.removeFromLeft(scaled(60)), 34, 14);
+    fPreControls.removeFromLeft(scaled(2));
     auto pdSyncTop = fPreControls.removeFromTop(fPreControls.getHeight() / 2);
-    if (auto* pdSync = getToggle("preDelaySync")) pdSync->button.setBounds(pdSyncTop.withSizeKeepingCentre(scaled(65), scaled(22)));
-    if (auto* syncDiv = getChoice("syncDivision")) syncDiv->comboBox.setBounds(fPreControls.withSizeKeepingCentre(scaled(65), scaled(22)));
+    if (auto* pdSync = getToggle("preDelaySync")) pdSync->button.setBounds(pdSyncTop.withSizeKeepingCentre(scaled(56), scaled(20)));
+    if (auto* syncDiv = getChoice("syncDivision")) syncDiv->comboBox.setBounds(fPreControls.withSizeKeepingCentre(scaled(56), scaled(20)));
 
-    auto fStereo = footer.removeFromLeft(scaled(190)).reduced(scaled(4), scaled(5));
+    footerLayout.removeFromLeft(groupGap);
+    auto fStereo = footerLayout.removeFromLeft(stereoGroupWidth).reduced(scaled(4), scaled(5));
     auto fStereoControls = fStereo.withTrimmedTop(scaled(16));
-    placeRotary(getRotary("stereoWidth"), fStereoControls.removeFromLeft(scaled(78)), 36, 14);
-    if (auto* sc = getToggle("stereoCore")) sc->button.setBounds(fStereoControls.withSizeKeepingCentre(scaled(96), scaled(22)));
+    placeRotary(getRotary("stereoWidth"), fStereoControls.removeFromLeft(scaled(66)), 34, 14);
+    if (auto* sc = getToggle("stereoCore")) sc->button.setBounds(fStereoControls.withSizeKeepingCentre(scaled(88), scaled(20)));
 
-    auto fInOut = footer.removeFromRight(scaled(150)).reduced(scaled(5), scaled(5)).withTrimmedTop(scaled(16));
+    footerLayout.removeFromLeft(groupGap);
+    auto fInOut = footerLayout.reduced(scaled(5), scaled(5)).withTrimmedTop(scaled(16));
     auto placeFader = [scaled](RotaryControl* c, juce::Rectangle<int> b) {
         if (!c) return;
         c->label.setBounds(b.removeFromLeft(scaled(30)));
