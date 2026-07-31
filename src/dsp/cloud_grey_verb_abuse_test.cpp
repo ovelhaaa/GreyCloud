@@ -20,20 +20,20 @@ void generateImpulse(float* left, float* right, int numFrames) {
 
 void generateSine(float* left, float* right, int numFrames, float freqHz, float sampleRate, float dbFS) {
     float amp = powf(10.0f, dbFS / 20.0f);
-    float phaseInc = 2.0f * dsp::PI * freqHz / sampleRate;
+    float phaseInc = 2.0f * cgv_dsp::PI * freqHz / sampleRate;
     static float phase = 0.0f;
     for (int i = 0; i < numFrames; ++i) {
         float sample = sinf(phase) * amp;
         left[i] = sample;
         right[i] = sample;
         phase += phaseInc;
-        if (phase > 2.0f * dsp::PI) phase -= 2.0f * dsp::PI;
+        if (phase > 2.0f * cgv_dsp::PI) phase -= 2.0f * cgv_dsp::PI;
     }
 }
 
 void generateNoise(float* left, float* right, int numFrames, float dbFS) {
     float amp = powf(10.0f, dbFS / 20.0f);
-    static dsp::FastPRNG noiseRng;
+    static cgv_dsp::FastPRNG noiseRng;
     for (int i = 0; i < numFrames; ++i) {
         float sample = (noiseRng.randFloat() * 2.0f - 1.0f) * amp;
         left[i] = sample;
@@ -425,7 +425,6 @@ int main() {
         int numChunks = totalFrames / chunkFrames;
         
         float lastL = 0.0f;
-        float lastR = 0.0f;
         
         for (int c = 0; c < numChunks; c++) {
             // Randomly jump parameters
@@ -455,8 +454,7 @@ int main() {
                 // Zip noise / pop derivative check
                 if (fabs(left[i] - lastL) > 0.8f) result.passed = false;
                 
-                lastL = left[i]; 
-                lastR = right[i];
+                lastL = left[i];
             }
         }
         

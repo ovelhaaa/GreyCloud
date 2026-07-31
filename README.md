@@ -1,6 +1,6 @@
 # Nimbus Reverb / GreyCloud
 
-Reverb granular estéreo em C++ que combina nuvens de grãos, difusão por all-pass e uma malha de feedback modulada. **CloudGreyVerb** é o núcleo DSP compartilhado; **Nimbus** é o nome do plugin e de sua interface atual.
+Reverb granular estéreo em C++ que combina nuvens de grãos, difusão por all-pass e uma Feedback Delay Network (FDN) 4×4 modulada. **CloudGreyVerb** é o núcleo DSP compartilhado; **Nimbus** é o nome do plugin e de sua interface atual.
 
 O projeto está em **beta funcional**: o core, o plugin JUCE e as duas bancadas WebAssembly já estão implementados, mas ainda passam por validação auditiva, testes em hosts/DAWs e ajustes de desempenho para hardware embarcado.
 
@@ -10,7 +10,7 @@ O projeto está em **beta funcional**: o core, o plugin JUCE e as duas bancadas 
 
 | Componente | Estado | O que está disponível |
 | --- | --- | --- |
-| Core C++ | Beta funcional | Processamento `float` 32-bit, mono/estéreo, buffer externo, freeze suave e hard freeze, granular forward/reverse, shimmer, pre-delay, modulação, tone/damping e controle de energia no feedback |
+| Core C++ | Beta funcional | Processamento `float` 32-bit, FDN Hadamard 4×4, buffer externo, freeze suave e hard freeze, granular forward/reverse, shimmer, pre-delay, modulação, tone/damping e controle de energia no feedback |
 | Plugin Nimbus | Em desenvolvimento | JUCE 8, VST3, AU e Standalone configurados; interface própria, 10 presets, automação de parâmetros, estado do host, sync por BPM, modo HQ com oversampling 2x e troca de preset com fade/reset da cauda |
 | WebAssembly offline | Funcional | Importa áudio, renderiza pelo mesmo core C++, mostra telemetria e exporta WAV |
 | WebAssembly ao vivo | Funcional | AudioWorklet com arquivo ou microfone/interface, freeze momentâneo/latch, telemetria, presets locais, importação/exportação, Web MIDI e renderização para WAV |
@@ -20,7 +20,7 @@ O projeto está em **beta funcional**: o core, o plugin JUCE e as duas bancadas 
 ## Recursos implementados
 
 - Motor granular estéreo com textura, varredura dos grãos e mistura forward/reverse.
-- Rede de delays modulados e difusores all-pass para caudas densas.
+- FDN 4×4 com matriz Hadamard normalizada, quatro tempos/modulações decorrelacionados e um all-pass por linha.
 - Freeze suavizado e hard freeze.
 - Shimmer com razões de `-1 oitava`, `+5ª`, `+1 oitava`, `+1 oitava + 5ª` e `+2 oitavas`.
 - Pre-delay de até 200 ms, largura estéreo, filtros de damping/low damping e tilt de tonalidade.
@@ -105,7 +105,7 @@ npm run preview
 
 ## Testes do DSP
 
-Os testes C++ cobrem impulso/silêncio, entradas extremas, mudanças bruscas de parâmetros, NaN/Inf, estabilidade de cauda e os quatro perfis de compilação. No Windows, com `g++` disponível:
+Os testes C++ cobrem ortogonalidade e conservação de energia da matriz FDN, abertura da cauda estéreo, limites do buffer externo, impulso/silêncio, entradas extremas, mudanças bruscas de parâmetros, NaN/Inf e os quatro perfis de compilação. No Windows, com `g++` disponível:
 
 ```powershell
 cd src/dsp
@@ -116,18 +116,17 @@ Também existem programas de teste independentes para smoke test, abuse test e v
 
 ## Perfis do core
 
-| Macro | Grãos | Difusores | All-pass no loop | Shimmer padrão |
-| --- | ---: | ---: | ---: | --- |
-| `CLOUD_GREY_PROFILE_H5_LOW_CPU` | 3 | 2 | 0 | Desativado |
-| `CLOUD_GREY_PROFILE_H5_BALANCED` | 4 | 4 | 2 | Desativado |
-| `CLOUD_GREY_PROFILE_H7_HIGH_QUALITY` | 4 | 4 | 2 | Ativado |
-| `CLOUD_GREY_PROFILE_DESKTOP_STUDIO` | 6 | 4 | 2 | Ativado |
+| Macro | Grãos | Difusores | Ordem da FDN | All-pass por linha | Shimmer padrão |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `CLOUD_GREY_PROFILE_H5_LOW_CPU` | 3 | 2 | 2×2 | 0 | Desativado |
+| `CLOUD_GREY_PROFILE_H5_BALANCED` | 4 | 4 | 4×4 | 1 | Desativado |
+| `CLOUD_GREY_PROFILE_H7_HIGH_QUALITY` | 4 | 4 | 4×4 | 1 | Ativado |
+| `CLOUD_GREY_PROFILE_DESKTOP_STUDIO` | 6 | 4 | 4×4 | 1 | Ativado |
 
-Sem uma macro explícita, o core usa `CLOUD_GREY_PROFILE_H5_BALANCED`. As builds WebAssembly usam esse perfil, mas ativam o shimmer explicitamente; o plugin usa `CLOUD_GREY_PROFILE_DESKTOP_STUDIO`.
+Sem uma macro explícita, o core usa `CLOUD_GREY_PROFILE_H5_BALANCED`. As builds WebAssembly usam esse perfil, mas ativam o shimmer explicitamente; o plugin usa `CLOUD_GREY_PROFILE_DESKTOP_STUDIO`. Apenas `H5_LOW_CPU` conserva a antiga malha ortogonal 2×2 para reduzir leituras, filtros e uso de memória.
 
 ## Limitações conhecidas
 
-- A arquitetura FDN 4x4 ainda não foi implementada; a malha atual é estéreo, baseada em delays modulados e all-pass.
 - Não há instalador nem release binária versionada no repositório; os artefatos são produzidos localmente ou pelo GitHub Actions.
 - A integração embarcada depende do firmware, layout de memória, codec e pipeline DMA de cada placa.
 - O modo ao vivo depende do suporte do navegador a AudioWorklet; Web MIDI e captura de áudio também dependem de permissões do navegador.

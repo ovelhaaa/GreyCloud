@@ -1,5 +1,46 @@
 #include "cloud_grey_verb.hpp"
 
+namespace {
+
+static_assert(CGV_FDN_ORDER == 2 || CGV_FDN_ORDER == 4,
+              "CloudGreyVerb supports only 2x2 or 4x4 feedback networks");
+
+inline void encodeStereoForFdn(float left, float right, float output[CGV_FDN_ORDER]) {
+#if CGV_FDN_ORDER == 4
+    // Two orthonormal stereo injection vectors spanning all four delay lines.
+    output[0] = 0.5f * (left + right);
+    output[1] = 0.5f * (left - right);
+    output[2] = 0.5f * (left + right);
+    output[3] = 0.5f * (-left + right);
+#else
+    output[0] = left;
+    output[1] = right;
+#endif
+}
+
+inline void decodeStereoFromFdn(const float input[CGV_FDN_ORDER], float& left, float& right) {
+#if CGV_FDN_ORDER == 4
+    // Transpose of the injection basis, preserving stereo energy.
+    left  = 0.5f * (input[0] + input[1] + input[2] - input[3]);
+    right = 0.5f * (input[0] - input[1] + input[2] + input[3]);
+#else
+    left = input[0];
+    right = input[1];
+#endif
+}
+
+inline void mixFdnFeedback(const float input[CGV_FDN_ORDER], float output[CGV_FDN_ORDER]) {
+#if CGV_FDN_ORDER == 4
+    cgv_dsp::applyNormalizedHadamard4(input, output);
+#else
+    // Orthogonal 2x2 fallback matching the former cross-feedback topology.
+    output[0] = input[1];
+    output[1] = input[0];
+#endif
+}
+
+} // namespace
+
 // Presets sugeridos
 CloudGreyVerb::Params CloudGreyVerb::getPreset(Preset preset) {
     Params p;
@@ -207,6 +248,9 @@ void ShimmerPitcher::processStereo(float input, float& outL, float& outR) {
 
 void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferSize) {
     initialized_ = false;
+#if CGV_ENABLE_SHIMMER
+    shimmerAvailable_ = false;
+#endif
     
     // Custo aproximado e Segurança:
     // Para 48kHz, recomenda-se ao menos 24000 frames (96KB RAM) para delays utilizáveis.
@@ -215,23 +259,25 @@ void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferS
 
     sampleRate_ = sampleRate;
 
-    // Repartição do buffer contínuo (Divisão amigável e segura para a memória entregue).
-    // O Granulador usa cerca de 10% por canal, APs pequenos ~10%, L/R Delays o resto.
+    // Repartição do buffer contínuo. O granulador usa cerca de 10% por canal,
+    // os all-passes ocupam frações pequenas e a FDN divide igualmente o restante.
     size_t granulSize = static_cast<size_t>(bufferSize * 0.10f);
-    size_t apSizes[4] = {0};
-    apSizes[0] = cgv_dsp::nextPrime(static_cast<size_t>(bufferSize * 0.0075f)) + 1;
-    apSizes[1] = cgv_dsp::nextPrime(static_cast<size_t>(bufferSize * 0.01f)) + 1;
+    size_t diffuserLSizes[4] = {0};
+    size_t diffuserRSizes[4] = {0};
+    diffuserLSizes[0] = cgv_dsp::nextPrime(static_cast<size_t>(bufferSize * 0.0075f)) + 1;
+    diffuserLSizes[1] = cgv_dsp::nextPrime(static_cast<size_t>(bufferSize * 0.01f)) + 1;
 #if CGV_NUM_ALLPASS > 2
-    apSizes[2] = cgv_dsp::nextPrime(static_cast<size_t>(bufferSize * 0.0125f)) + 1;
-    apSizes[3] = cgv_dsp::nextPrime(static_cast<size_t>(bufferSize * 0.0175f)) + 1;
+    diffuserLSizes[2] = cgv_dsp::nextPrime(static_cast<size_t>(bufferSize * 0.0125f)) + 1;
+    diffuserLSizes[3] = cgv_dsp::nextPrime(static_cast<size_t>(bufferSize * 0.0175f)) + 1;
 #endif
+    for (int i = 0; i < CGV_NUM_ALLPASS; ++i)
+        diffuserRSizes[i] = cgv_dsp::nextPrime(diffuserLSizes[i] + 5);
 
 #if CGV_NUM_LOOP_ALLPASS > 0
-    size_t lapLSize   = cgv_dsp::nextPrime(static_cast<size_t>(bufferSize * 0.015f)) + 1; // Allpass loop L
-    size_t lapRSize   = cgv_dsp::nextPrime(static_cast<size_t>(bufferSize * 0.018f)) + 1; // Allpass loop R
-#else
-    size_t lapLSize   = 0;
-    size_t lapRSize   = 0;
+    size_t fdnAllpassSizes[CGV_FDN_ORDER] = {0};
+    constexpr float kFdnAllpassRatios[4] = {0.0060f, 0.0072f, 0.0086f, 0.0101f};
+    for (int i = 0; i < CGV_FDN_ORDER; ++i)
+        fdnAllpassSizes[i] = cgv_dsp::nextPrime(static_cast<size_t>(bufferSize * kFdnAllpassRatios[i])) + 1;
 #endif
 
 #if CGV_ENABLE_SHIMMER
@@ -246,10 +292,21 @@ void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferS
         predelaySize = static_cast<size_t>(bufferSize * 0.1f);
     }
     
-    // O restante vai para main delays
-    size_t diffTotal = 2 * (apSizes[0] + apSizes[1] + apSizes[2] + apSizes[3]);
-    size_t remaining = bufferSize - (2 * granulSize + diffTotal + lapLSize + lapRSize + shimmerSize + 2 * predelaySize);
-    mainDelaySize_ = remaining / 2;
+    size_t fixedSize = 2 * granulSize + shimmerSize + 2 * predelaySize;
+    for (int i = 0; i < CGV_NUM_ALLPASS; ++i)
+        fixedSize += diffuserLSizes[i] + diffuserRSizes[i];
+#if CGV_NUM_LOOP_ALLPASS > 0
+    for (int i = 0; i < CGV_FDN_ORDER; ++i)
+        fixedSize += fdnAllpassSizes[i];
+#endif
+
+    constexpr size_t kMinimumDelayCapacity = 8;
+    if (fixedSize >= bufferSize ||
+        bufferSize - fixedSize < kMinimumDelayCapacity * CGV_FDN_ORDER)
+        return;
+
+    size_t remaining = bufferSize - fixedSize;
+    mainDelaySize_ = remaining / CGV_FDN_ORDER;
 
     // Atribuição sequencial s/ alocação
     float* ptr = externalBuffer;
@@ -262,14 +319,15 @@ void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferS
     grainMemorySize_ = granulSize;
 
     for (int i = 0; i < CGV_NUM_ALLPASS; ++i) {
-        diffuserApL_[i].init(ptr, apSizes[i]); ptr += apSizes[i];
-        size_t rSize = cgv_dsp::nextPrime(apSizes[i] + 5);
-        diffuserApR_[i].init(ptr, rSize); ptr += rSize;
+        diffuserApL_[i].init(ptr, diffuserLSizes[i]); ptr += diffuserLSizes[i];
+        diffuserApR_[i].init(ptr, diffuserRSizes[i]); ptr += diffuserRSizes[i];
     }
     
 #if CGV_NUM_LOOP_ALLPASS > 0
-    loopApL_.init(ptr, lapLSize); ptr += lapLSize;
-    loopApR_.init(ptr, lapRSize); ptr += lapRSize;
+    for (int i = 0; i < CGV_FDN_ORDER; ++i) {
+        fdnLoopAp_[i].init(ptr, fdnAllpassSizes[i]);
+        ptr += fdnAllpassSizes[i];
+    }
 #endif
 
 #if CGV_ENABLE_SHIMMER
@@ -277,8 +335,10 @@ void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferS
     ptr += shimmerSize;
 #endif
 
-    delayL_.init(ptr, mainDelaySize_); ptr += mainDelaySize_;
-    delayR_.init(ptr, mainDelaySize_); ptr += mainDelaySize_;
+    for (int i = 0; i < CGV_FDN_ORDER; ++i) {
+        fdnDelay_[i].init(ptr, mainDelaySize_);
+        ptr += mainDelaySize_;
+    }
 
     // LFO Init
     lfo1_.setRate(0.5f, sampleRate_);
@@ -318,14 +378,19 @@ void CloudGreyVerb::reset() {
     preDelayL_.clear();
     preDelayR_.clear();
 #if CGV_NUM_LOOP_ALLPASS > 0
-    loopApL_.clear(); loopApR_.clear();
+    for (int i = 0; i < CGV_FDN_ORDER; ++i)
+        fdnLoopAp_[i].clear();
 #endif
-    delayL_.clear(); delayR_.clear();
+    for (int i = 0; i < CGV_FDN_ORDER; ++i) {
+        fdnDelay_[i].clear();
+        fdnDamp_[i].clear();
+        fdnHighPassState_[i].clear();
+    }
     lfo1_.clear(); lfo2_.clear(); spinLfo_.clear();
-    dampL_.clear(); dampR_.clear();
-    hpFeedL_.clear(); hpFeedR_.clear();
     toneL_.clear(); toneR_.clear();
     duckingEnvState_ = 0.0f;
+    loopEnergy_ = 0.0f;
+    lastSafetyGain_ = 1.0f;
     
     float smoothHz = 15.0f;
     smoothSize_.clear(); smoothSize_.setFreq(smoothHz, sampleRate_); smoothSize_.setValue(params_.size);
@@ -551,8 +616,8 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     if (fabsf(sLowDamp - lastSmoothedLowDamping_) > 0.001f) {
         lastSmoothedLowDamping_ = sLowDamp;
         float hpFreq = cgv_dsp::lerp(20.0f, 400.0f, sLowDamp);
-        hpFeedL_.setFreq(hpFreq, sampleRate_);
-        hpFeedR_.setFreq(hpFreq, sampleRate_);
+        for (int i = 0; i < CGV_FDN_ORDER; ++i)
+            fdnHighPassState_[i].setFreq(hpFreq, sampleRate_);
     }
 
     if (fabsf(sTone - lastSmoothedTone_) > 0.001f) {
@@ -660,70 +725,80 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
         diffInR = granOutR * 0.4f - diffSignalMono * 0.8f;
     }
 
-    // 4. Rede Recirculante (Greyhole Wash Loop)
-    
-    delayL_.setFrozen(params_.hardFreeze);
-    delayR_.setFrozen(params_.hardFreeze);
+    // 4. Feedback Delay Network. Os perfis principais usam quatro linhas
+    // acopladas por uma Hadamard normalizada; LOW_CPU preserva o fallback 2x2.
+    for (int i = 0; i < CGV_FDN_ORDER; ++i)
+        fdnDelay_[i].setFrozen(params_.hardFreeze);
 
-    // Size range: 10% a 95% do buffer total disponivel
-    float maxDelayBase = static_cast<float>(mainDelaySize_) * kSizeMaxFrameRatio;
-    float baseDelayTimeL = cgv_dsp::lerp(sampleRate_ * kSizeMinFrameRatio, maxDelayBase, sSize);
-    float baseDelayTimeR = baseDelayTimeL * 0.81f; // Assimetria crucial em reverb
-    
-    // Modulação (drift) convertida para frames. Depth ~ 0 a 15ms
-    float modL = lfo1_val * 0.85f + modDriftL_ * 0.15f;
-    float modR = lfo2_val * 0.85f + modDriftR_ * 0.15f;
+    constexpr float kFdnDelayRatios[4] = {
+        1.0f,
+        0.81649658f, // sqrt(2/3)
+        0.70710678f, // 1/sqrt(2)
+        0.61803399f  // golden-ratio conjugate
+    };
 
-    float modFrames = params_.modDepth * 0.015f * sampleRate_; 
-    float timeL = baseDelayTimeL + modL * modFrames;
-    float timeR = baseDelayTimeR + modR * modFrames;
+    float fdnModulation[4] = {
+        lfo1_val * 0.85f + modDriftL_ * 0.15f,
+        lfo2_val * 0.85f + modDriftR_ * 0.15f,
+        spinLfo_.getValue(0.125f) * 0.82f + modDriftL_ * 0.18f,
+        spinLfo_.getValue(0.625f) * 0.82f + modDriftR_ * 0.18f
+    };
 
-    // Boundary constraints limitando tamanho de sweep
-    float maxDelayBaseAllowed = static_cast<float>(mainDelaySize_) - 2.0f;
-    if (timeL < 2.0f) timeL = 2.0f; else if (timeL > maxDelayBaseAllowed) timeL = maxDelayBaseAllowed;
-    if (timeR < 2.0f) timeR = 2.0f; else if (timeR > maxDelayBaseAllowed) timeR = maxDelayBaseAllowed;
+    const float maxDelayBase = static_cast<float>(mainDelaySize_) * kSizeMaxFrameRatio;
+    const float baseDelayTime = cgv_dsp::lerp(sampleRate_ * kSizeMinFrameRatio,
+                                               maxDelayBase, sSize);
+    const float modFrames = params_.modDepth * 0.015f * sampleRate_;
+    const float maxDelayAllowed = static_cast<float>(mainDelaySize_) - 2.0f;
 
-    // Puxa do delay (fundo do mar)
-    float readL = delayL_.read(timeL);
-    float readR = delayR_.read(timeR);
+    float fdnRead[CGV_FDN_ORDER] = {0.0f};
+    for (int i = 0; i < CGV_FDN_ORDER; ++i) {
+        float delayFrames = baseDelayTime * kFdnDelayRatios[i]
+                          + fdnModulation[i] * modFrames * (1.0f - 0.06f * static_cast<float>(i));
+        if (delayFrames < 2.0f) delayFrames = 2.0f;
+        else if (delayFrames > maxDelayAllowed) delayFrames = maxDelayAllowed;
+        fdnRead[i] = fdnDelay_[i].read(delayFrames);
+    }
 
-    // Damping intrínseco e Dinâmico do ambiente (Ducking Tone)
+    // Damping independente por linha evita estados de filtro compartilhados e
+    // mantém a decorrelação criada pelos comprimentos não proporcionais.
     float baseLpFreq = cgv_dsp::lerp(800.0f, 15000.0f, sDamp);
-    float duckFactor = 1.0f / (1.0f + duckingEnvState_ * 8.0f); // Fast decay de high frequencies no ataque
+    float duckFactor = 1.0f / (1.0f + duckingEnvState_ * 8.0f);
     float dynamicLpFreq = baseLpFreq * duckFactor;
-    if (dynamicLpFreq < 300.0f) dynamicLpFreq = 300.0f; 
-    
-    dampL_.setFreq(dynamicLpFreq, sampleRate_);
-    dampR_.setFreq(dynamicLpFreq, sampleRate_);
+    if (dynamicLpFreq < 300.0f) dynamicLpFreq = 300.0f;
 
-    readL = dampL_.process(readL);
-    readR = dampR_.process(readR);
-    
-    // Highpass no Loop: Subtração do LP de ~120Hz p/ previnir lama graves
-    readL = readL - hpFeedL_.process(readL);
-    readR = readR - hpFeedR_.process(readR);
-    
-    // Difusão DENTRO do feedback (Acumula densidade como algoritmos Lexicon/Greyhole)
+    for (int i = 0; i < CGV_FDN_ORDER; ++i) {
+        fdnDamp_[i].setFreq(dynamicLpFreq, sampleRate_);
+        fdnRead[i] = fdnDamp_[i].process(fdnRead[i]);
+        fdnRead[i] -= fdnHighPassState_[i].process(fdnRead[i]);
 #if CGV_NUM_LOOP_ALLPASS > 0
-    readL = loopApL_.processModulated(readL, 0.5f, spin1 * 0.5f);
-    readR = loopApR_.processModulated(readR, 0.5f, spin2 * 0.5f);
+        fdnRead[i] = fdnLoopAp_[i].processModulated(fdnRead[i], 0.5f,
+                                                    spinVals[i] * 0.5f);
 #endif
+        cgv_dsp::sanitize(fdnRead[i]);
+    }
 
-    // Injeção de volta à linha de atraso (CROSS-FEEDBACK Matrix L/R)
-    float inputInject = cgv_dsp::lerp(0.28f, 0.40f, sDiff);
+    float tailL = 0.0f;
+    float tailR = 0.0f;
+    decodeStereoFromFdn(fdnRead, tailL, tailR);
 
-    float sizeComp = cgv_dsp::lerp(1.0f, 0.88f, sSize);
+    float feedbackVector[CGV_FDN_ORDER] = {0.0f};
+    mixFdnFeedback(fdnRead, feedbackVector);
+
+    const float inputInject = cgv_dsp::lerp(0.28f, 0.40f, sDiff);
+    const float sizeComp = cgv_dsp::lerp(1.0f, 0.88f, sSize);
     float effectiveFeedback = sFeedback * sizeComp;
 
-    // Quando o freeze atua, o feedback da nuvem estática aproxima-se de 1.0 lentamente
-    // para sustentar o latch sem perder a massa (já que a entrada foi cortada).
+    // No freeze a matriz continua ortogonal, enquanto a entrada seca é cortada
+    // e o ganho se aproxima de unidade sem cruzar o limite de estabilidade.
     effectiveFeedback = cgv_dsp::lerp(effectiveFeedback, 0.98f, freezeSmoothed_);
 
-    float feedbackProbeL = readR * effectiveFeedback;
-    float feedbackProbeR = readL * effectiveFeedback;
+    float encodedInput[CGV_FDN_ORDER] = {0.0f};
+    encodeStereoForFdn(diffInL, diffInR, encodedInput);
 
-    float feedLoopL = diffInL * inputInject + feedbackProbeL;
-    float feedLoopR = diffInR * inputInject + feedbackProbeR;
+    float feedLoop[CGV_FDN_ORDER] = {0.0f};
+    for (int i = 0; i < CGV_FDN_ORDER; ++i)
+        feedLoop[i] = encodedInput[i] * inputInject
+                    + feedbackVector[i] * effectiveFeedback;
 
     float shimmerWetL = 0.0f;
     float shimmerWetR = 0.0f;
@@ -735,7 +810,7 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
         
         if (currentShimmerAmount > 0.001f) {
             // Obter uma média mono filtrada da cauda
-            float shimmerIn = (readL + readR) * 0.5f;
+            float shimmerIn = (tailL + tailR) * 0.5f;
             shimmerIn = shimmerIn - shimmerHp_.process(shimmerIn); // HP 300Hz (hp = x - lp)
             shimmerIn = shimmerLp_.process(shimmerIn);             // LP dynamic
             
@@ -753,8 +828,10 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
             
             float shimmerSend = currentShimmerAmount * 0.08f * duckGain; // Reduced max gain
             
-            feedLoopL += shimmerOutL * shimmerSend;
-            feedLoopR += shimmerOutR * shimmerSend;
+            float encodedShimmer[CGV_FDN_ORDER] = {0.0f};
+            encodeStereoForFdn(shimmerOutL, shimmerOutR, encodedShimmer);
+            for (int i = 0; i < CGV_FDN_ORDER; ++i)
+                feedLoop[i] += encodedShimmer[i] * shimmerSend;
             
             shimmerWetL = shimmerOutL * currentShimmerAmount * 0.08f;
             shimmerWetR = shimmerOutR * currentShimmerAmount * 0.08f;
@@ -768,15 +845,19 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
 #endif
 
     constexpr float kLoopWriteHeadroom = 0.88f;
-    feedLoopL *= kLoopWriteHeadroom;
-    feedLoopR *= kLoopWriteHeadroom;
-
-    // Saturação Tape Magnética no feedback (Adiciona warm/analog feel)
-    feedLoopL = cgv_dsp::tapeClip(feedLoopL);
-    feedLoopR = cgv_dsp::tapeClip(feedLoopR);
+    for (int i = 0; i < CGV_FDN_ORDER; ++i) {
+        feedLoop[i] *= kLoopWriteHeadroom;
+        // tapeClip normaliza o pico com ganho de 1.5. A compensação abaixo
+        // devolve ganho unitário em sinais pequenos, essencial numa FDN.
+        feedLoop[i] = cgv_dsp::tapeClip(feedLoop[i]) * (2.0f / 3.0f);
+    }
 
     // --- Safety Energy Guard (v2) ---
-    float e = feedLoopL * feedLoopL + feedLoopR * feedLoopR;
+    float e = 0.0f;
+    for (int i = 0; i < CGV_FDN_ORDER; ++i)
+        e += feedLoop[i] * feedLoop[i];
+    // A codificação estéreo e a Hadamard são ortonormais, portanto a
+    // soma das quatro linhas já está na mesma escala energética da entrada L/R.
     loopEnergy_ = 0.9995f * loopEnergy_ + 0.0005f * e;
 
     constexpr float kSafetyThreshold = 0.55f;
@@ -792,22 +873,18 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     cgv_dsp::sanitize(loopEnergy_);
     cgv_dsp::sanitize(lastSafetyGain_);
 
-    feedLoopL *= lastSafetyGain_;
-    feedLoopR *= lastSafetyGain_;
-    
-    cgv_dsp::sanitize(feedLoopL);
-    cgv_dsp::sanitize(feedLoopR);
+    for (int i = 0; i < CGV_FDN_ORDER; ++i) {
+        feedLoop[i] *= lastSafetyGain_;
+        cgv_dsp::sanitize(feedLoop[i]);
+        fdnDelay_[i].write(feedLoop[i]);
+    }
     // --------------------------------
-
-    // Escreve novamente
-    delayL_.write(feedLoopL);
-    delayR_.write(feedLoopR);
 
     // 5. Tonalidade Global (Tilt EQ)
     // Mistura frações do difusor de entrada na cauda p/ colar ataques
     float wetGlue = cgv_dsp::lerp(0.38f, 0.50f, sDiff);
-    float wetL = readL + diffInL * wetGlue;
-    float wetR = readR + diffInR * wetGlue;
+    float wetL = tailL + diffInL * wetGlue;
+    float wetR = tailR + diffInR * wetGlue;
 
     wetL += shimmerWetL;
     wetR += shimmerWetR;

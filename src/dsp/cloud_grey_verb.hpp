@@ -26,27 +26,31 @@
     #define CGV_NUM_GRAINS 3
     #define CGV_NUM_ALLPASS 2
     #define CGV_NUM_LOOP_ALLPASS 0
+    #define CGV_FDN_ORDER 2
     #ifndef CGV_ENABLE_SHIMMER
         #define CGV_ENABLE_SHIMMER 0
     #endif
 #elif CLOUD_GREY_PROFILE_H7_HIGH_QUALITY
     #define CGV_NUM_GRAINS 4
     #define CGV_NUM_ALLPASS 4
-    #define CGV_NUM_LOOP_ALLPASS 2
+    #define CGV_NUM_LOOP_ALLPASS 1
+    #define CGV_FDN_ORDER 4
     #ifndef CGV_ENABLE_SHIMMER
         #define CGV_ENABLE_SHIMMER 1
     #endif
 #elif CLOUD_GREY_PROFILE_DESKTOP_STUDIO
     #define CGV_NUM_GRAINS 6
     #define CGV_NUM_ALLPASS 4
-    #define CGV_NUM_LOOP_ALLPASS 2
+    #define CGV_NUM_LOOP_ALLPASS 1
+    #define CGV_FDN_ORDER 4
     #ifndef CGV_ENABLE_SHIMMER
         #define CGV_ENABLE_SHIMMER 1
     #endif
 #else // H5_BALANCED
     #define CGV_NUM_GRAINS 4
     #define CGV_NUM_ALLPASS 4
-    #define CGV_NUM_LOOP_ALLPASS 2
+    #define CGV_NUM_LOOP_ALLPASS 1
+    #define CGV_FDN_ORDER 4
     #ifndef CGV_ENABLE_SHIMMER
         #define CGV_ENABLE_SHIMMER 0
     #endif
@@ -105,7 +109,7 @@ public:
         float modRate = 0.2f;      // 0.0 a 1.0 -> Frequência dos LFOs (0.05 Hz a 2 Hz)
         float damping = 0.5f;      // 0.0 a 1.0 -> Absorção de altas frequências no feedback (Dark -> Bright)
         float tone = 0.5f;         // 0.0 a 1.0 -> Filtro Tilt no Wet: <0.5 Dark, >0.5 Bright
-        float shimmer = 0.0f;      // 0.0 a 1.0 -> Placeholder para Pitch Shift (+1 OCT) no feedback (TODO)
+        float shimmer = 0.0f;      // 0.0 a 1.0 -> Pitch shift selecionável injetado no feedback
         int shimmerRatioIndex = 2; // 0=-1oct, 1=+5th, 2=+1oct, 3=+1oct+5th, 4=+2oct
         float inputGain = 1.0f;    // 0.0 a 2.0 -> Compensação / Excitação de entrada
         float outputGain = 1.0f;   // 0.0 a 2.0 -> Saída geral
@@ -120,6 +124,7 @@ public:
     
     static constexpr float kSizeMinFrameRatio = 0.05f;
     static constexpr float kSizeMaxFrameRatio = 0.95f;
+    static constexpr size_t kFdnOrder = CGV_FDN_ORDER;
 
     // Utilitário de Presets Internos
     static Params getPreset(Preset preset);
@@ -181,9 +186,12 @@ private:
     cgv_dsp::Allpass diffuserApL_[CGV_NUM_ALLPASS];
     cgv_dsp::Allpass diffuserApR_[CGV_NUM_ALLPASS];
 
-    // Rede Greyhole (Long Modulated delays + Allpasses no Loop)
-    cgv_dsp::DelayLine delayL_, delayR_;
-    cgv_dsp::Allpass loopApL_, loopApR_;
+    // Feedback Delay Network: Hadamard 4x4 nos perfis principais e
+    // fallback cross-feedback 2x2 no perfil H5_LOW_CPU.
+    cgv_dsp::DelayLine fdnDelay_[CGV_FDN_ORDER];
+#if CGV_NUM_LOOP_ALLPASS > 0
+    cgv_dsp::Allpass fdnLoopAp_[CGV_FDN_ORDER];
+#endif
     size_t mainDelaySize_ = 0;
     
     cgv_dsp::DelayLine preDelayL_, preDelayR_;
@@ -202,8 +210,8 @@ private:
     float lastSafetyGain_ = 1.0f;
 
     // Filtros
-    cgv_dsp::OnePoleRC dampL_, dampR_;
-    cgv_dsp::OnePoleRC hpFeedL_, hpFeedR_; // Filtro HP para secar o low end
+    cgv_dsp::OnePoleRC fdnDamp_[CGV_FDN_ORDER];
+    cgv_dsp::OnePoleRC fdnHighPassState_[CGV_FDN_ORDER];
     cgv_dsp::OnePoleRC toneL_, toneR_;
 
     // Suavizadores de Parâmetros

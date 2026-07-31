@@ -10,22 +10,22 @@ O projeto foi atualizado para mirar nativamente a arquitetura do **STM32H5 (Cort
 - Transição suavizada do *Freeze*.
 
 **Feedback Dinâmico Difuso (Greyhole-like):**
-- Adicionados 2 Allpasses *dentro* do loop de injeção de feedback L/R (disponível no perfil `BALANCED` ou `HIGH_QUALITY`). Cada volta do sinal fica mais embaçada, espessa e densa.
-- Modulação nos frames de leitura criando wash analógico sem cliques.
+- Os perfis `BALANCED` e `HIGH_QUALITY` usam uma FDN 4×4 com matriz Hadamard normalizada e um all-pass independente por linha.
+- Quatro comprimentos e fases de modulação decorrelacionados criam um wash denso sem concentrar a energia em um par L/R.
 
 **Adaptação P/ Baixo e Guitarra:**
 - Filtro Highpass no feedback: Corta o lodo e *boomness* de notas graves (fundeado a ~120 Hz). Deixa o Dry reinar nas frequências de ataque.
 - Nova equalização Tilt musical substituiu o damping destrutivo do core inicial. Mais corpo, mais brilho, menos "filtro subaquático".
 
-*(O "Shimmer" ainda é mantido como `#define CGV_ENABLE_SHIMMER 0` e `TODO` devido a limitações de ciclo de clock para pitch shifting de alta qualidade e delay network na pipeline atual).*
+*No perfil H5 Balanced, o Shimmer permanece desativado por padrão para preservar ciclos de CPU. Ele pode ser habilitado explicitamente com `-DCGV_ENABLE_SHIMMER=1` depois de medir a carga no hardware alvo.*
 
 ## 2. Recomendações de Compilação (Perfis)
 
 A fim de balancear uso da MCU e FPU, foram inseridos perfis. Defina a macro desejada em tempo de compilação:
 
-* `-DCLOUD_GREY_PROFILE_H5_BALANCED=1` : 4 grãos, 4 diffusion allpasses, 2 feedback loop allpasses. Recomendado como padrão.
-* `-DCLOUD_GREY_PROFILE_H5_LOW_CPU=1` : 3 grãos, 2 diffusion allpasses, sem allpass no loop de delay. Para quando adicionar outros módulos pesados na mesma MCU.
-* `-DCLOUD_GREY_PROFILE_H7_HIGH_QUALITY=1` : Mesmos specs que balanced, com portas abertas para habilitar cross-modulation ou shimmer (habilitar shimmer flag manual).
+* `-DCLOUD_GREY_PROFILE_H5_BALANCED=1` : 4 grãos, 4 diffusion allpasses e FDN 4×4 com um all-pass por linha. Recomendado como padrão.
+* `-DCLOUD_GREY_PROFILE_H5_LOW_CPU=1` : 3 grãos, 2 diffusion allpasses e malha ortogonal 2×2 sem all-pass interno. Para quando outros módulos pesados compartilham a MCU.
+* `-DCLOUD_GREY_PROFILE_H7_HIGH_QUALITY=1` : FDN 4×4, 4 grãos, 4 diffusion allpasses e Shimmer habilitado por padrão.
 
 ### Flags de Compilação & Cortex-M33F
 O STM32H5 utiliza um Cortex-M33 com FPU (Single Precision). Recomendações para GCC:
@@ -41,7 +41,7 @@ A API do DSP confia inteiramente ao usuário um buffer `float*` pré-alocado. **
 ### Tempo Equivalente Mono VS RAM Mínima
 Para a taxa padrão de **48 kHz float (32-bit/4 bytes)**:
 * 1 Segundo de memória base = 192 KB.
-* Devido a repartição granular e espalhamento LR, este delay base de 1s soa mais como um "Medium Room".
+* Como o buffer também alimenta o granulador, os all-passes e as quatro linhas da FDN, o tempo por linha é uma fração do equivalente mono total.
 * Para pads espaciais massivos, aponte para **> 2s de memória (384 KB até 576 KB RAM)**.
 
 ### Mapeamento Físico de Memória (Memória Persistente)
@@ -125,7 +125,7 @@ if (paramsChanged) {
 Se estiver montando fisicamente o dispositivo ou UI de prototipagem:
 * **POT 1 - Mix:** Dry/wet master control.
 * **POT 2 - Texture:** Curto, slap smear a pad espalhado.
-* **POT 3 - Size:** Aumenta base delay lines do Greyhole L/R.
+* **POT 3 - Size:** Aumenta o tempo-base das linhas da FDN.
 * **POT 4 - Feedback:** Decay do ambiente infinito. (No maximo bate em 0.98 de absorção para nao clipar o conversor).
 * **POT 5 - Tone:** Escurece a cauda ou atenua sub/graves do reverb.
 * **Switch / Botão:** Alterna os modos `Mode` (veja metodo `getPreset(Mode)` interno para pré-redefinições de all-pass).

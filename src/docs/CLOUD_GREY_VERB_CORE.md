@@ -63,10 +63,10 @@ Sugerimos focar na audição musical para validar a transição teórica -> prá
 ## Mecanismos de Segurança e Estabilidade
 
 **Safety Energy Guard (v2)**
-Para evitar crescimento explosivo (runaway feedback) na rede do Greyhole – um problema comum em matrizes recirculantes –, implementamos um Energy Guard lento:
-1. Ele mensura a energia quadrada `L^2 + R^2` injetada de volta nos delays.
+Para evitar crescimento explosivo (runaway feedback) na FDN – um problema comum em matrizes recirculantes –, implementamos um Energy Guard lento:
+1. Ele mensura a energia quadrada normalizada do vetor injetado nas linhas de atraso.
 2. Com um filtro passa-baixa (LPF) extremamente lento (`0.9995`), ele rastreia a RMS do loop em janelas longas.
-3. Se a energia excede `0.45`, ele calcula um ganho de redução (Safety Gain) para trazer o loop de volta aos níveis sadios.
+3. Se a energia excede `0.55`, ele calcula um ganho de redução (Safety Gain) para trazer o loop de volta aos níveis sadios.
 4. O valor máximo de clipping do limiteur também atua secundariamente via `dsp::softClip()` em allpasses e na saída do loop.
 Você pode visualizar a atuação deste limitador verificando o valor *Safety Gain* na UI do testador WASM.
 
@@ -86,9 +86,8 @@ O controle de `Damping` atua quase como um "Feedback Brightness" natural para a 
 
 ---
 
-## O Que Ficou "Para Depois" (Próximas Atualizações)
+## Arquitetura Atual
 
-Com intenção de finalizar um Core rígido de alta robustez, as exclusões a seguir têm justificativa em escopo:
-- **Shimmer Real:** O parâmetro `shimmer` está no pacote, mas o módulo pitch-shifter de +1 OCTAVE não está conectado ainda, aguardando validação de CPU/Memória na MCU.
-- **AudioWorklet / Live WASM:** O Applet Web usa o motor de forma *Offline Block Rendering*. A futura implementação Live exigirá uma thread AudioWorklet JavaScript conectada ao microfone com ring-buffers independentes.
-- **FDN 4x4:** A arquitetura do Greyhole é baseada em Allpass Loop estéreo. A expansão conceitual para uma verdadeira Feedback Delay Network (Matriz Ortogonal 4x4) será tratada futuramente se pedida.
+- **FDN 4×4:** os perfis H5 Balanced, H7 High Quality e Desktop Studio usam quatro linhas de atraso ligadas por uma matriz Hadamard normalizada. O perfil H5 Low CPU mantém uma versão ortogonal 2×2.
+- **Shimmer:** o pitch shifter está conectado à realimentação nos perfis que habilitam `CGV_ENABLE_SHIMMER`.
+- **AudioWorklet:** o modo WASM ao vivo processa arquivo ou microfone em uma thread de áudio dedicada; a bancada offline continua disponível para renderização e exportação.

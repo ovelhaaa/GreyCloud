@@ -68,6 +68,21 @@ inline float lerp(float a, float b, float t) {
     return a + (b - a) * t;
 }
 
+// Matriz Hadamard 4x4 normalizada. A escala de 0.5 torna a matriz
+// ortogonal (H * H^T = I), preservando a energia dentro de uma FDN.
+// Os temporários permitem usar o mesmo vetor como entrada e saída.
+inline void applyNormalizedHadamard4(const float input[4], float output[4]) {
+    const float x0 = input[0];
+    const float x1 = input[1];
+    const float x2 = input[2];
+    const float x3 = input[3];
+
+    output[0] = 0.5f * (x0 + x1 + x2 + x3);
+    output[1] = 0.5f * (x0 - x1 + x2 - x3);
+    output[2] = 0.5f * (x0 + x1 - x2 - x3);
+    output[3] = 0.5f * (x0 - x1 - x2 + x3);
+}
+
 // Utilitários para encontrar números primos (útil para Schroeder reverbs)
 inline bool isPrime(size_t n) {
     if (n <= 1) return false;

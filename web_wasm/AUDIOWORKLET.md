@@ -144,8 +144,9 @@ Then open:
 
 Do not open the HTML directly from the filesystem.
 
-## Current Limitations & Next Steps
-- **FDN 4x4** architecture is not implemented yet.
+## Feedback network
+
+The AudioWorklet build uses the H5 Balanced profile with the 4x4 FDN enabled. Four decorrelated delay lines are coupled by a normalized Hadamard matrix; the build script explicitly enables Shimmer on top of that profile.
 
 ## Shimmer (Experimental)
 An experimental Shimmer effect (1 octave up pitch-shifting) has been added to the internal feedback loop. 
