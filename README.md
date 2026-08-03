@@ -114,6 +114,22 @@ cd src/dsp
 
 Também existem programas de teste independentes para smoke test, abuse test e verificação A/B em `src/dsp/`.
 
+### Comparativo de respostas ao impulso da FDN
+
+A bancada de IR compila o mesmo perfil H5 Balanced duas vezes, alterando somente a ordem da FDN, e gera WAVs e métricas para todos os presets:
+
+```powershell
+python src/dsp/run_fdn_ir_analysis.py
+```
+
+Por padrão, a análise usa 48 kHz, oito segundos por preset e o mesmo buffer externo de três segundos-mono usado pelas interfaces WASM. Os artefatos ficam em `build/fdn-ir/`:
+
+- `comparison.md`: relatório comparativo com links para audição.
+- `comparison.csv`: valores 2×2, 4×4 e deltas em formato legível por máquina.
+- `fdn2/` e `fdn4/`: respostas ao impulso WAV float32 e métricas individuais.
+
+As medidas incluem RT60 broadband e por bandas, curva de cauda, correlação estéreo, energia lateral M/S, C80, densidade inicial, pico e atuação do Safety Guard. Use `--help` para selecionar preset, duração, sample rate, memória ou desativar a gravação dos WAVs.
+
 ## Perfis do core
 
 | Macro | Grãos | Difusores | Ordem da FDN | All-pass por linha | Shimmer padrão |

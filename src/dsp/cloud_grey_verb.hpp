@@ -22,11 +22,22 @@
     #define CLOUD_GREY_PROFILE_H5_BALANCED 1
 #endif
 
+// Ferramentas de análise podem forçar somente a ordem da FDN, mantendo
+// grãos, difusores e Shimmer idênticos para um A/B isolado da topologia.
+#if defined(CGV_FDN_ORDER_OVERRIDE)
+    #if CGV_FDN_ORDER_OVERRIDE != 2 && CGV_FDN_ORDER_OVERRIDE != 4
+        #error "CGV_FDN_ORDER_OVERRIDE must be 2 or 4"
+    #endif
+    #define CGV_FDN_ORDER CGV_FDN_ORDER_OVERRIDE
+#endif
+
 #if CLOUD_GREY_PROFILE_H5_LOW_CPU
     #define CGV_NUM_GRAINS 3
     #define CGV_NUM_ALLPASS 2
     #define CGV_NUM_LOOP_ALLPASS 0
-    #define CGV_FDN_ORDER 2
+    #ifndef CGV_FDN_ORDER
+        #define CGV_FDN_ORDER 2
+    #endif
     #ifndef CGV_ENABLE_SHIMMER
         #define CGV_ENABLE_SHIMMER 0
     #endif
@@ -34,7 +45,9 @@
     #define CGV_NUM_GRAINS 4
     #define CGV_NUM_ALLPASS 4
     #define CGV_NUM_LOOP_ALLPASS 1
-    #define CGV_FDN_ORDER 4
+    #ifndef CGV_FDN_ORDER
+        #define CGV_FDN_ORDER 4
+    #endif
     #ifndef CGV_ENABLE_SHIMMER
         #define CGV_ENABLE_SHIMMER 1
     #endif
@@ -42,7 +55,9 @@
     #define CGV_NUM_GRAINS 6
     #define CGV_NUM_ALLPASS 4
     #define CGV_NUM_LOOP_ALLPASS 1
-    #define CGV_FDN_ORDER 4
+    #ifndef CGV_FDN_ORDER
+        #define CGV_FDN_ORDER 4
+    #endif
     #ifndef CGV_ENABLE_SHIMMER
         #define CGV_ENABLE_SHIMMER 1
     #endif
@@ -50,7 +65,9 @@
     #define CGV_NUM_GRAINS 4
     #define CGV_NUM_ALLPASS 4
     #define CGV_NUM_LOOP_ALLPASS 1
-    #define CGV_FDN_ORDER 4
+    #ifndef CGV_FDN_ORDER
+        #define CGV_FDN_ORDER 4
+    #endif
     #ifndef CGV_ENABLE_SHIMMER
         #define CGV_ENABLE_SHIMMER 0
     #endif
