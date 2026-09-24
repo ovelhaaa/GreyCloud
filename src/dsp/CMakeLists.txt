@@ -12,4 +12,11 @@ if(BUILD_TESTING)
     target_compile_definitions(CloudGreyVerbMilestoneTest PRIVATE CLOUD_GREY_PROFILE_DESKTOP_STUDIO=1)
     add_test(NAME CloudGreyVerbMilestoneTest COMMAND CloudGreyVerbMilestoneTest)
     set_tests_properties(CloudGreyVerbMilestoneTest PROPERTIES TIMEOUT 120)
+
+    add_executable(CloudGreyVerbM2Bench
+        cloud_grey_verb.cpp
+        cloud_grey_verb_m2_bench.cpp
+    )
+    target_compile_features(CloudGreyVerbM2Bench PRIVATE cxx_std_17)
+    target_compile_definitions(CloudGreyVerbM2Bench PRIVATE CLOUD_GREY_PROFILE_DESKTOP_STUDIO=1)
 endif()

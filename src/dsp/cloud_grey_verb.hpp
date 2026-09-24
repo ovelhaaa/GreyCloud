@@ -35,6 +35,7 @@
     #define CGV_NUM_GRAINS 3
     #define CGV_NUM_ALLPASS 2
     #define CGV_NUM_LOOP_ALLPASS 0
+    #define CGV_NUM_EARLY_TAPS 2
     #ifndef CGV_FDN_ORDER
         #define CGV_FDN_ORDER 2
     #endif
@@ -45,6 +46,7 @@
     #define CGV_NUM_GRAINS 4
     #define CGV_NUM_ALLPASS 4
     #define CGV_NUM_LOOP_ALLPASS 1
+    #define CGV_NUM_EARLY_TAPS 4
     #ifndef CGV_FDN_ORDER
         #define CGV_FDN_ORDER 4
     #endif
@@ -55,6 +57,7 @@
     #define CGV_NUM_GRAINS 6
     #define CGV_NUM_ALLPASS 4
     #define CGV_NUM_LOOP_ALLPASS 1
+    #define CGV_NUM_EARLY_TAPS 4
     #ifndef CGV_FDN_ORDER
         #define CGV_FDN_ORDER 4
     #endif
@@ -65,6 +68,7 @@
     #define CGV_NUM_GRAINS 4
     #define CGV_NUM_ALLPASS 4
     #define CGV_NUM_LOOP_ALLPASS 1
+    #define CGV_NUM_EARLY_TAPS 3
     #ifndef CGV_FDN_ORDER
         #define CGV_FDN_ORDER 4
     #endif
@@ -221,6 +225,11 @@ private:
     cgv_dsp::DelayLine preDelayL_, preDelayR_;
     float preDelaySmoothed_ = 0.0f;
 
+    // Early Energy Layer: a feed-forward, post-pre-delay reflection network.
+    // It deliberately has no granular dependency, feedback loop or modulation.
+    cgv_dsp::DelayLine earlyTapL_[CGV_NUM_EARLY_TAPS];
+    cgv_dsp::DelayLine earlyTapR_[CGV_NUM_EARLY_TAPS];
+
     // LFOs dedicados (Fases cruzadas para imagem estéreo larga)
     cgv_dsp::LFO lfo1_, lfo2_;
     cgv_dsp::LFO spinLfo_;
@@ -279,4 +288,6 @@ private:
 
     // Helpers
     void processGranular(float inL, float inR, float lfoDrift, float& outL, float& outR);
+    void processEarly(float inL, float inR, float diffusion, float size,
+                      float& outL, float& outR);
 };

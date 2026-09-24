@@ -306,8 +306,18 @@ void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferS
     
     // Allocate predelay (up to 200ms per channel)
     size_t predelaySize = frames(0.200f);
+
+    // The first pair remains intentionally close between channels; later
+    // reflections progressively open the image.  These are capacities, not
+    // acoustic-size controls, so the timing stays sample-rate invariant.
+    constexpr float kEarlyTapMaxSeconds[4] = {0.0045f, 0.0120f, 0.0240f, 0.0420f};
+    size_t earlyTapSizes[4] = {0};
+    for (int i = 0; i < CGV_NUM_EARLY_TAPS; ++i)
+        earlyTapSizes[i] = frames(kEarlyTapMaxSeconds[i]);
     
     size_t fixedSize = 2 * granulSize + shimmerSize + 2 * predelaySize;
+    for (int i = 0; i < CGV_NUM_EARLY_TAPS; ++i)
+        fixedSize += 2 * earlyTapSizes[i];
     for (int i = 0; i < CGV_NUM_ALLPASS; ++i)
         fixedSize += diffuserLSizes[i] + diffuserRSizes[i];
 #if CGV_NUM_LOOP_ALLPASS > 0
@@ -326,6 +336,11 @@ void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferS
 
     preDelayL_.init(ptr, predelaySize); ptr += predelaySize;
     preDelayR_.init(ptr, predelaySize); ptr += predelaySize;
+
+    for (int i = 0; i < CGV_NUM_EARLY_TAPS; ++i) {
+        earlyTapL_[i].init(ptr, earlyTapSizes[i]); ptr += earlyTapSizes[i];
+        earlyTapR_[i].init(ptr, earlyTapSizes[i]); ptr += earlyTapSizes[i];
+    }
 
     grainMemoryL_ = ptr; ptr += granulSize;
     grainMemoryR_ = ptr; ptr += granulSize;
@@ -404,6 +419,10 @@ void CloudGreyVerb::reset() {
     
     preDelayL_.clear();
     preDelayR_.clear();
+    for (int i = 0; i < CGV_NUM_EARLY_TAPS; ++i) {
+        earlyTapL_[i].clear();
+        earlyTapR_[i].clear();
+    }
     preDelaySmoothed_ = 0.0f;
 #if CGV_NUM_LOOP_ALLPASS > 0
     for (int i = 0; i < CGV_FDN_ORDER; ++i)
@@ -619,6 +638,37 @@ void CloudGreyVerb::processGranular(float inL, float inR, float lfoDrift, float&
     outR = accR * volumeComp;
 }
 
+void CloudGreyVerb::processEarly(float inL, float inR, float diffusion, float size,
+                                 float& outL, float& outR) {
+    // Feed-forward multi-tap early field.  Unlike the cloud diffuser this is
+    // sourced straight from the post-pre-delay input, so Texture=0 still has
+    // a spatial bridge to the dry source.  The timings are deliberately
+    // incommensurate and stable: no short-loop ringing and no LFO pitch smear.
+    constexpr float kTapL[4] = {0.0032f, 0.0087f, 0.0169f, 0.0307f};
+    constexpr float kTapR[4] = {0.0032f, 0.0101f, 0.0203f, 0.0371f};
+    constexpr float kGain[4] = {0.58f, 0.20f, 0.15f, 0.10f};
+    constexpr float kCross[4] = {0.00f, 0.035f, 0.10f, 0.16f};
+
+    // A larger virtual space spreads the reflections modestly but lets its
+    // late cloud remain dominant.  Keep enough early energy for attachment.
+    const float timeScale = cgv_dsp::lerp(0.88f, 1.18f, size);
+    const float density = cgv_dsp::lerp(0.72f, 1.0f, diffusion);
+    outL = 0.0f;
+    outR = 0.0f;
+    for (int i = 0; i < CGV_NUM_EARLY_TAPS; ++i) {
+        earlyTapL_[i].write(inL);
+        earlyTapR_[i].write(inR);
+        const float tapL = earlyTapL_[i].read(kTapL[i] * timeScale * sampleRate_);
+        const float tapR = earlyTapR_[i].read(kTapR[i] * timeScale * sampleRate_);
+        const float cross = kCross[i] * density;
+        const float gain = kGain[i] * (i == 0 ? 1.0f : density);
+        outL += gain * (tapL * (1.0f - cross) + tapR * cross);
+        outR += gain * (tapR * (1.0f - cross) + tapL * cross);
+    }
+    cgv_dsp::sanitize(outL);
+    cgv_dsp::sanitize(outR);
+}
+
 void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR) {
     if (!initialized_) {
         // Dry-through seguro se não inicializado
@@ -707,6 +757,10 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     pdL *= freezeKill;
     pdR *= freezeKill;
     pdMono *= freezeKill;
+
+    // Early path is intentionally before granular processing and FDN input.
+    float earlyL = 0.0f, earlyR = 0.0f;
+    processEarly(pdL, pdR, sDiff, sSize, earlyL, earlyR);
 
     // LFOs (Calculados cedo para fornecer drift p/ motor Granular)
     float lfo1_val = lfo1_.process();
@@ -920,10 +974,18 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     // --------------------------------
 
     // 5. Tonalidade Global (Tilt EQ)
-    // Mistura frações do difusor de entrada na cauda p/ colar ataques
-    float wetGlue = cgv_dsp::lerp(0.38f, 0.50f, sDiff);
-    float wetL = tailL + diffInL * wetGlue;
-    float wetR = tailR + diffInR * wetGlue;
+    // The new early field is the primary dry/wet bridge.  Retain only a small
+    // cloud-diffuser contribution so the historical smear still leads into
+    // the tail without duplicating two strong glue mechanisms.
+    #if defined(CGV_DISABLE_EARLY_LAYER)
+    const float earlyLevel = 0.0f;
+    const float cloudGlue = cgv_dsp::lerp(0.38f, 0.50f, sDiff);
+    #else
+    const float earlyLevel = cgv_dsp::lerp(0.52f, 0.28f, sSize);
+    const float cloudGlue = cgv_dsp::lerp(0.08f, 0.14f, sDiff);
+    #endif
+    float wetL = tailL + earlyL * earlyLevel + diffInL * cloudGlue;
+    float wetR = tailR + earlyR * earlyLevel + diffInR * cloudGlue;
 
     wetL += shimmerWetL;
     wetR += shimmerWetR;
