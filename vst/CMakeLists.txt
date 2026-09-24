@@ -108,3 +108,22 @@ add_cgv_m2_profile_test(CloudGreyVerbM2Test_LowCPU CLOUD_GREY_PROFILE_H5_LOW_CPU
 add_cgv_m2_profile_test(CloudGreyVerbM2Test_Balanced CLOUD_GREY_PROFILE_H5_BALANCED)
 add_cgv_m2_profile_test(CloudGreyVerbM2Test_H7 CLOUD_GREY_PROFILE_H7_HIGH_QUALITY)
 add_cgv_m2_profile_test(CloudGreyVerbM2Test_Desktop CLOUD_GREY_PROFILE_DESKTOP_STUDIO)
+
+add_executable(CloudGreyVerbFactoryPresetApvtsTest
+    FactoryPresetApvtsTest.cpp
+    PluginProcessor.cpp PluginProcessor.h
+    PluginEditor.cpp PluginEditor.h
+    LookAndFeel.cpp LookAndFeel.h
+    ../src/dsp/cloud_grey_verb.cpp
+)
+target_compile_features(CloudGreyVerbFactoryPresetApvtsTest PRIVATE cxx_std_17)
+target_compile_definitions(CloudGreyVerbFactoryPresetApvtsTest PRIVATE
+    JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0
+    CLOUD_GREY_PROFILE_DESKTOP_STUDIO=1 JucePlugin_Name="Nimbus")
+target_include_directories(CloudGreyVerbFactoryPresetApvtsTest PRIVATE
+    ../src/dsp ${CMAKE_CURRENT_BINARY_DIR}/NimbusReverbPlugin_artefacts/JuceLibraryCode)
+target_link_libraries(CloudGreyVerbFactoryPresetApvtsTest PRIVATE
+    NimbusAssets juce::juce_audio_utils juce::juce_audio_processors
+    juce::juce_gui_basics juce::juce_gui_extra juce::juce_dsp
+    juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+add_test(NAME CloudGreyVerbFactoryPresetApvtsTest COMMAND CloudGreyVerbFactoryPresetApvtsTest)

@@ -1,7 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"C:/progs/vst/GreyCloud/src/dsp/build-test/cmake_install.cmake"
-	],
-	"Parallel" : false
-}

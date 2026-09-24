@@ -2,6 +2,32 @@
 #include "PluginEditor.h"
 #include "TempoSyncUtils.h"
 
+namespace {
+// The sole FactoryPreset -> APVTS mapping.  Keep this list exhaustive: it is
+// exercised by the JUCE-side parity test, including the non-DSP persisted flags.
+void applyFactoryPresetToParameters(juce::AudioProcessorValueTreeState& parameters,
+                                    const CloudGreyVerb::FactoryPreset& preset)
+{
+    const auto& p = preset.dsp;
+    const auto set = [&](const char* id, float value) {
+        if (auto* parameter = parameters.getParameter(id))
+            parameter->setValueNotifyingHost(parameter->convertTo0to1(value));
+    };
+    set("mix", p.mix); set("texture", p.texture); set("freeze", p.freeze);
+    set("feedback", p.feedback); set("size", p.size); set("sizeScale", p.sizeScale);
+    set("diffusion", p.diffusion); set("modDepth", p.modDepth); set("modRate", p.modRate);
+    set("damping", p.damping); set("lowDamping", p.lowDamping); set("tone", p.tone);
+    set("shimmer", p.shimmer); set("shimmerRatio", static_cast<float>(p.shimmerRatioIndex));
+    set("inputGain", p.inputGain); set("outputGain", p.outputGain); set("preDelay", p.preDelay);
+    set("stereoWidth", p.stereoWidth); set("stereoCore", p.stereoCore ? 1.0f : 0.0f);
+    set("hardFreeze", p.hardFreeze ? 1.0f : 0.0f); set("reverseMix", p.reverseMix);
+    set("grainScan", p.grainScan); set("hqMode", preset.hqMode ? 1.0f : 0.0f);
+    set("preDelaySync", preset.preDelaySync ? 1.0f : 0.0f);
+    set("sizeSync", preset.sizeSync ? 1.0f : 0.0f);
+    set("syncDivision", static_cast<float>(preset.syncDivisionIndex));
+}
+}
+
 // Factory function to create parameters
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
 {
@@ -52,6 +78,9 @@ CloudGreyVerbProcessor::CloudGreyVerbProcessor()
       parameters (*this, nullptr, juce::Identifier ("CloudGreyVerbVTS"), createParameterLayout())
 {
     currentPresetIndex = 0;
+    // A new instance must not advertise SmallCloudRoom while holding generic
+    // APVTS defaults. This happens before a host can process audio/automation.
+    applyFactoryPresetToParameters(parameters, CloudGreyVerb::getFactoryPreset(0));
 }
 
 CloudGreyVerbProcessor::~CloudGreyVerbProcessor() = default;
@@ -72,40 +101,8 @@ void CloudGreyVerbProcessor::setCurrentProgram (int index)
     {
         currentPresetIndex = index;
         requestPresetTransition();
-        const auto& preset = CloudGreyVerb::getFactoryPreset(static_cast<size_t>(index));
-        const auto& p = preset.dsp;
-        
-        auto updateParameterValue = [&](const juce::String& id, float value) {
-            if (auto* param = parameters.getParameter(id))
-                param->setValueNotifyingHost(param->convertTo0to1(value));
-        };
-        
-        updateParameterValue("mix", p.mix);
-        updateParameterValue("texture", p.texture);
-        updateParameterValue("freeze", p.freeze);
-        updateParameterValue("feedback", p.feedback);
-        updateParameterValue("size", p.size);
-        updateParameterValue("sizeScale", p.sizeScale);
-        updateParameterValue("diffusion", p.diffusion);
-        updateParameterValue("modDepth", p.modDepth);
-        updateParameterValue("modRate", p.modRate);
-        updateParameterValue("damping", p.damping);
-        updateParameterValue("lowDamping", p.lowDamping);
-        updateParameterValue("tone", p.tone);
-        updateParameterValue("inputGain", p.inputGain);
-        updateParameterValue("outputGain", p.outputGain);
-        updateParameterValue("shimmer", p.shimmer);
-        updateParameterValue("shimmerRatio", static_cast<float>(p.shimmerRatioIndex));
-        updateParameterValue("preDelay", p.preDelay);
-        updateParameterValue("stereoWidth", p.stereoWidth);
-        updateParameterValue("hqMode", preset.hqMode ? 1.0f : 0.0f);
-        updateParameterValue("reverseMix", p.reverseMix);
-        updateParameterValue("grainScan", p.grainScan);
-        updateParameterValue("stereoCore", p.stereoCore ? 1.0f : 0.0f);
-        updateParameterValue("hardFreeze", p.hardFreeze ? 1.0f : 0.0f);
-        updateParameterValue("preDelaySync", preset.preDelaySync ? 1.0f : 0.0f);
-        updateParameterValue("sizeSync", preset.sizeSync ? 1.0f : 0.0f);
-        updateParameterValue("syncDivision", static_cast<float>(preset.syncDivisionIndex));
+        applyFactoryPresetToParameters(parameters,
+                                       CloudGreyVerb::getFactoryPreset(static_cast<size_t>(index)));
     }
 }
 

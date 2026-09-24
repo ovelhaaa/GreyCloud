@@ -2,6 +2,16 @@ node_modules/
 build/
 dist/
 coverage/
+**/build/
+**/build-*/
+**/build_*/
+**/CMakeFiles/
+**/CMakeCache.txt
+**/*.obj
+**/*.exe
+**/.ninja_*
+m2_analysis_*/
+m3_analysis_*/
 .DS_Store
 *.log
 .env*

@@ -3,15 +3,15 @@
 # CloudGreyVerb - Emscripten Build Script for AudioWorklet
 # Run this script if you have Emscripten installed: `./build_live.sh`
 
-if ! command -v emcc &> /dev/null
+if ! command -v em++ &> /dev/null
 then
-    echo "emcc command not found! Please install and activate Emscripten SDK."
+    echo "em++ command not found! Please install and activate Emscripten SDK."
     exit 1
 fi
 
 echo "Building CloudGreyVerb for WebAssembly Live Mode..."
 
-emcc cloud_grey_wasm.cpp ../src/dsp/cloud_grey_verb.cpp \
+em++ cloud_grey_wasm.cpp ../src/dsp/cloud_grey_verb.cpp \
   -O3 \
   -std=c++17 \
   -fno-exceptions \

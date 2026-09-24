@@ -60,11 +60,18 @@ const std::array<FP, 10>& factoryPresets() {
     }};
     return presets;
 }
+static_assert(10 == static_cast<size_t>(CloudGreyVerb::Preset::Count),
+              "Preset enum and factory catalogue order/count are a shared contract");
 }
 
 size_t CloudGreyVerb::factoryPresetCount() { return factoryPresets().size(); }
 const CloudGreyVerb::FactoryPreset& CloudGreyVerb::getFactoryPreset(size_t index) {
-    return factoryPresets().at(index);
+    const auto& presets = factoryPresets();
+    // This function is also called by the no-exception WebAssembly build.
+    // Keep invalid catalogue access deterministic and free of libc++ abort paths.
+    if (index >= presets.size())
+        index = 0;
+    return presets[index];
 }
 const CloudGreyVerb::FactoryPreset& CloudGreyVerb::getFactoryPreset(Preset preset) {
     return getFactoryPreset(static_cast<size_t>(preset));

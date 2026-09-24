@@ -6,6 +6,27 @@ on:
   workflow_dispatch: # Permite rodar o build manualmente na aba Actions
 
 jobs:
+  wasm-smoke:
+    name: WASM build smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+      - name: Build static and AudioWorklet modules
+        working-directory: web_wasm
+        run: |
+          chmod +x build.sh build_live.sh
+          ./build.sh
+          ./build_live.sh
+      - name: Verify generated modules and required C exports
+        working-directory: web_wasm
+        run: |
+          test -s cloud_grey.js
+          test -s cloud_grey_live.js
+          grep -q 'cgv_set_preset' cloud_grey.js
+          grep -q 'cgv_set_preset' cloud_grey_live.js
+
   build:
     name: Build on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}

@@ -4,16 +4,16 @@
 # Run this script if you have Emscripten installed: `./build.sh`
 # It will generate cloud_grey.js and cloud_grey.wasm in the current directory.
 
-# Make sure emcc is available in your PATH before running
-if ! command -v emcc &> /dev/null
+# Make sure em++ is available in your PATH before running
+if ! command -v em++ &> /dev/null
 then
-    echo "emcc command not found! Please install and activate Emscripten SDK."
+    echo "em++ command not found! Please install and activate Emscripten SDK."
     exit 1
 fi
 
 echo "Building CloudGreyVerb for WebAssembly..."
 
-emcc cloud_grey_wasm.cpp ../src/dsp/cloud_grey_verb.cpp \
+em++ cloud_grey_wasm.cpp ../src/dsp/cloud_grey_verb.cpp \
   -O3 \
   -std=c++17 \
   -fno-exceptions \

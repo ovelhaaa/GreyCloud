@@ -1,7 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"C:/progs/vst/GreyCloud/vst/build-m3/_deps/juce-subbuild/cmake_install.cmake"
-	],
-	"Parallel" : false
-}

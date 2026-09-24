@@ -126,7 +126,8 @@ public:
         AlwaysOnSubtle,
         BrightCloud,
         ShimmerCloud,
-        ReverseSmear
+        ReverseSmear,
+        Count
     };
 
     struct Params {
