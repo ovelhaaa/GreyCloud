@@ -102,10 +102,12 @@ Stereo stereoMetrics(const std::vector<float>& left, const std::vector<float>& r
 Regions findRegions(const std::vector<float>& input, double sampleRate, double thresholdDb) {
     Regions r{{0, input.size()}, {0, 0}, {input.size(), input.size()}};
     double peak = 0.0; for (float x : input) peak = std::max(peak, std::abs(static_cast<double>(x)));
+    if (peak == 0.0) return r;
     const double threshold = peak * std::pow(10.0, thresholdDb / 20.0);
     auto first = input.size(), last = std::size_t{0};
     for (std::size_t i = 0; i < input.size(); ++i) if (std::abs(input[i]) > threshold) { first = std::min(first, i); last = i + 1; }
-    if (first < input.size()) r.active = {first, last};
+    if (first == input.size()) return r;
+    r.active = {first, last};
     const auto guard = static_cast<std::size_t>(std::llround(sampleRate * tailGuardSeconds));
     r.tail = {std::min(input.size(), last + guard), input.size()};
     return r;

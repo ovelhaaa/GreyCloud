@@ -47,6 +47,8 @@ and average stereo energetic power before deriving band RMS and the
 power-weighted centroid. The five stable bands are 20–80, 80–200, 200–1000,
 1000–4000, and 4000–16000 Hz. A final partial window is zero-padded; no FFT is
 run in the audio callback.
+`spectral_centroid_*` is specifically the power-weighted centroid over
+20 Hz–16 kHz; DC and spectrum above 16 kHz do not enter that value.
 
 Every musical row identifies four time boundaries. `full` is the entire
 eight-second render. `active` spans the first through last input sample above

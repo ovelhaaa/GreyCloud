@@ -3,6 +3,8 @@ name: Build VST Plugins
 on:
   push:
     branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
   workflow_dispatch: # Permite rodar o build manualmente na aba Actions
 
 jobs:
