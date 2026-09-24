@@ -127,3 +127,11 @@ target_link_libraries(CloudGreyVerbFactoryPresetApvtsTest PRIVATE
     juce::juce_gui_basics juce::juce_gui_extra juce::juce_dsp
     juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 add_test(NAME CloudGreyVerbFactoryPresetApvtsTest COMMAND CloudGreyVerbFactoryPresetApvtsTest)
+
+add_executable(CloudGreyVerbOfflineMetricsTest
+    ../src/dsp/offline_metrics.cpp
+    ../src/dsp/offline_metrics_test.cpp
+)
+target_compile_features(CloudGreyVerbOfflineMetricsTest PRIVATE cxx_std_17)
+target_include_directories(CloudGreyVerbOfflineMetricsTest PRIVATE ../src/dsp)
+add_test(NAME CloudGreyVerbOfflineMetricsTest COMMAND CloudGreyVerbOfflineMetricsTest)

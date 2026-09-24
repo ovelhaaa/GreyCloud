@@ -3,6 +3,7 @@ build/
 dist/
 coverage/
 **/build/
+**/build[0-9]*/
 **/build-*/
 **/build_*/
 **/CMakeFiles/

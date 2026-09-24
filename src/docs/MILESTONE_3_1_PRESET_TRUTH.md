@@ -39,6 +39,51 @@ The layout is `build/m3/dry`, `build/m3/after/<preset>`, and
 one explicit wet-only path. The deterministic snare is a decaying broadband
 noise/body synthesis, replacing the prior Nyquist-heavy alternating samples.
 
+## M3.1b measurement contract
+
+Spectral measurements are offline Welch estimates over the explicitly named
+region. They use a 4096-point FFT, a Hann window, 50% overlap (2048 samples),
+and average stereo energetic power before deriving band RMS and the
+power-weighted centroid. The five stable bands are 20–80, 80–200, 200–1000,
+1000–4000, and 4000–16000 Hz. A final partial window is zero-padded; no FFT is
+run in the audio callback.
+
+Every musical row identifies four time boundaries. `full` is the entire
+eight-second render. `active` spans the first through last input sample above
+-60 dB relative to that source's peak. `tail` starts 75 ms after the last such
+sample and ends with the render. Band columns are linear RMS; `_delta_db`
+columns are 20 log10(output band RMS / dry band RMS). Centroids are in Hz.
+
+`output_rms` is stereo energetic RMS,
+`sqrt(mean((L^2 + R^2) / 2))`. The mono fold is `M=(L+R)/2`, and
+`mono_delta_db=20 log10(rms(M)/output_rms)`. Mid and side use
+`M=(L+R)/2` and `S=(L-R)/2`; `side_mid_ratio` is their RMS ratio.
+
+The metrics directory now contains three durable tables:
+
+* `ir_metrics.csv` contains wet-only impulse timing, energy, spatial, decay,
+  peak and safety measurements. Its `energy_*` values are summed stereo energy.
+* `musical_metrics.csv` contains only the ten named musical sources, their
+  region boundaries, region spectra, dry deltas, level and mono definitions.
+* `preset_summary.csv` aggregates exactly those ten musical rows per preset;
+  impulse renders are never included.
+
+### Host execution policy
+
+`FactoryPreset::dsp` is portable acoustic state. `FactoryPreset::hqMode` is a
+host execution policy. VST3 and Standalone honor it with JUCE two-times
+`filterHalfBandFIREquiripple` oversampling and therefore run the core at
+96 kHz for a 48 kHz host. WASM currently applies the same portable DSP state
+at the native WebAudio rate and does **not** claim VST-HQ equivalence.
+
+The dependency-light benchmark retains its historical linear midpoint/two-core-
+steps approximation and labels every such row `render_mode=hq_approx`
+(`normal` otherwise). In particular, ShimmerCloud is `hq_approx`; its timing
+and 96 kHz core-path checks are useful, but its spectrum, aliasing, peak and RMS
+are not JUCE/VST ground truth. Absolute ShimmerCloud HQ decisions must use a
+VST/Standalone JUCE render. This explicit limitation avoids introducing a
+second plugin engine into the measurement tool.
+
 ## Retuning
 
 No DSP-parameter retune is included in this pass. The previous comparison was
