@@ -43,12 +43,38 @@ renderizar IR e exemplos `transient`, `pluck` e `chord` em WAV float estéreo.
 
 ## Custo
 
-Cada tap faz uma escrita e uma leitura Hermite por canal. Desktop/H7 usam 4
-taps/canal (8 leituras + 8 escritas por amostra); H5 Balanced usa 3/canal e H5
-Low CPU 2/canal. A memória extra máxima é aproximadamente 2 canais ×
-`(4,5 + 12 + 24 + 42) ms` = 7920 floats: 30,9 KiB em 48 kHz e 61,9 KiB em
-96 kHz (metade no Low CPU, 3/4 no Balanced). Não há buffers dinâmicos, loops
-adicionais de feedback ou mudança na FDN/Safety Guard.
+M2.2 mantém uma única `DelayLine` por canal. A capacidade é derivada do maior
+tempo L/R do prefixo de taps ativo, multiplicado por `1,18`, arredondado para
+cima e acrescido de três frames de guarda para Hermite. Cada sample faz duas
+escritas (uma por canal) e duas leituras por tap (uma por canal).
+
+| Profile | taps | máximo early (ms) | frames/canal @48 kHz | bytes (L+R) @48 kHz | frames/canal @96 kHz | bytes (L+R) @96 kHz | reads/sample | writes/sample |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| H5 Low CPU | 2 | 11,918 | 576 | 4.608 | 1.148 | 9.184 | 4 | 2 |
+| H5 Balanced | 3 | 23,954 | 1.153 | 9.224 | 2.303 | 18.424 | 6 | 2 |
+| H7 High Quality | 4 | 43,778 | 2.105 | 16.840 | 4.206 | 33.648 | 8 | 2 |
+| Desktop Studio | 4 | 43,778 | 2.105 | 16.840 | 4.206 | 33.648 | 8 | 2 |
+
+A implementação M2 original alocava um par de buffers por tap, baseado na
+soma dos delays (Desktop/H7: 7.920 floats / 30,9 KiB a 48 kHz e 61,9 KiB a
+96 kHz) e escrevia uma vez por tap/canal. A M2.1/M2.2 usa somente o histórico
+necessário do maior tap: Desktop/H7 passam a 4.210 floats (16.840 bytes) a
+48 kHz e 8.412 floats (33.648 bytes) a 96 kHz, com duas escritas por sample.
+Não há buffers dinâmicos, loops adicionais de feedback ou mudança na
+FDN/Safety Guard.
+
+## Contrato de teste M2.2
+
+O bloco early é medido isoladamente por um adaptador `friend` de teste; a API
+de produção não expõe `processEarly()`. Ele aceita somente sinal pós-pre-delay,
+`Size` e `Diffusion`: não depende de `Texture`, modulação, shimmer, feedback ou
+freeze granular. Os testes por profile verificam capacidade, ordem e escala dos
+taps em 44,1/48/96 kHz, finitude, chegada inicial, correlação e energia Side.
+
+Isso é o contrato temporal determinístico. Métricas de IR do engine inteiro
+(granular, modulação e tail) são estocásticas e continuam sendo avaliadas com
+tolerâncias próprias; nenhuma tolerância global ampla deve ser interpretada
+como permissão para variar timings da Early Layer.
 
 ## Trade-off
 

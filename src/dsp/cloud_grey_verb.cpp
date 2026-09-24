@@ -114,16 +114,9 @@ float CloudGreyVerb::secondsToSize(float seconds, float scale) {
 }
 
 float CloudGreyVerb::earlyMaxRequestedSeconds() {
-    // Only provision reflections compiled into this profile. This preserves
-    // the H5 memory budget while still deriving each capacity from its actual
-    // longest right-channel request at 1.18x Size scaling.
-#if CGV_NUM_EARLY_TAPS == 2
-    return 0.0101f * 1.18f;
-#elif CGV_NUM_EARLY_TAPS == 3
-    return 0.0203f * 1.18f;
-#else
-    return 0.0371f * 1.18f;
-#endif
+    // Capacity follows the active prefix of kEarlyTaps exactly.  Do not add
+    // acoustic timing literals here: the specification above is authoritative.
+    return earlyMaxTapSeconds() * kEarlyMaxTimeScale;
 }
 
 size_t CloudGreyVerb::earlyDelayCapacityFrames(float sampleRate) {
@@ -656,24 +649,20 @@ void CloudGreyVerb::processEarly(float inL, float inR, float diffusion, float si
     // sourced straight from the post-pre-delay input, so Texture=0 still has
     // a spatial bridge to the dry source.  The timings are deliberately
     // incommensurate and stable: no short-loop ringing and no LFO pitch smear.
-    constexpr float kTapL[4] = {0.0032f, 0.0087f, 0.0169f, 0.0307f};
-    constexpr float kTapR[4] = {0.0032f, 0.0101f, 0.0203f, 0.0371f};
-    constexpr float kGain[4] = {0.58f, 0.20f, 0.15f, 0.10f};
-    constexpr float kCross[4] = {0.00f, 0.035f, 0.10f, 0.16f};
-
     // A larger virtual space spreads the reflections modestly but lets its
     // late cloud remain dominant.  Keep enough early energy for attachment.
-    const float timeScale = cgv_dsp::lerp(0.88f, 1.18f, size);
+    const float timeScale = cgv_dsp::lerp(kEarlyMinTimeScale, kEarlyMaxTimeScale, size);
     const float density = cgv_dsp::lerp(0.72f, 1.0f, diffusion);
     outL = 0.0f;
     outR = 0.0f;
     earlyDelayL_.write(inL);
     earlyDelayR_.write(inR);
     for (int i = 0; i < CGV_NUM_EARLY_TAPS; ++i) {
-        const float tapL = earlyDelayL_.read(kTapL[i] * timeScale * sampleRate_);
-        const float tapR = earlyDelayR_.read(kTapR[i] * timeScale * sampleRate_);
-        const float cross = kCross[i] * density;
-        const float gain = kGain[i] * (i == 0 ? 1.0f : density);
+        const auto& tap = kEarlyTaps[i];
+        const float tapL = earlyDelayL_.read(tap.delayLSeconds * timeScale * sampleRate_);
+        const float tapR = earlyDelayR_.read(tap.delayRSeconds * timeScale * sampleRate_);
+        const float cross = tap.crossfeed * density;
+        const float gain = tap.gain * (i == 0 ? 1.0f : density);
         outL += gain * (tapL * (1.0f - cross) + tapR * cross);
         outR += gain * (tapR * (1.0f - cross) + tapL * cross);
     }

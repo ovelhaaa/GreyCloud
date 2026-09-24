@@ -3,6 +3,9 @@
 #include <cstddef>
 #include "dsp_utils.hpp"
 
+// Test-only adapter.  It is deliberately not part of the production API.
+struct CloudGreyVerbEarlyTestAccess;
+
 /**
  * CloudGreyVerb DSP Core
  * ----------------------
@@ -107,6 +110,12 @@ private:
 
 class CloudGreyVerb {
 public:
+    struct EarlyTapSpec {
+        float delayLSeconds;
+        float delayRSeconds;
+        float gain;
+        float crossfeed;
+    };
     enum class Preset {
         SmallCloudRoom,
         BassAmbientWash,
@@ -188,6 +197,30 @@ public:
     static size_t earlyDelayCapacityFrames(float sampleRate);
 
 private:
+    // Single acoustic specification for the feed-forward early field.  Profile
+    // selection only chooses its prefix; timing, gain and crossfeed never have
+    // a second manually-maintained copy elsewhere in the engine.
+    inline static constexpr EarlyTapSpec kEarlyTaps[] = {
+        {0.0032f, 0.0032f, 0.58f, 0.00f},
+        {0.0087f, 0.0101f, 0.20f, 0.035f},
+        {0.0169f, 0.0203f, 0.15f, 0.10f},
+        {0.0307f, 0.0371f, 0.10f, 0.16f},
+    };
+    inline static constexpr float kEarlyMinTimeScale = 0.88f;
+    inline static constexpr float kEarlyMaxTimeScale = 1.18f;
+
+    static constexpr float earlyMaxTapSeconds() {
+        float maximum = 0.0f;
+        for (size_t i = 0; i < CGV_NUM_EARLY_TAPS; ++i) {
+            const float tapMaximum = kEarlyTaps[i].delayLSeconds > kEarlyTaps[i].delayRSeconds
+                ? kEarlyTaps[i].delayLSeconds : kEarlyTaps[i].delayRSeconds;
+            maximum = maximum > tapMaximum ? maximum : tapMaximum;
+        }
+        return maximum;
+    }
+
+    friend struct CloudGreyVerbEarlyTestAccess;
+
     bool initialized_ = false;
     float sampleRate_ = 48000.0f;
     Params params_;
