@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(NimbusReverbPlugin VERSION 1.0.0)
+enable_testing()
 
 # ==============================================================================
 # Fetch JUCE Framework (this will download JUCE when CMake runs)
@@ -71,3 +72,12 @@ target_link_libraries(NimbusReverbPlugin
 )
 
 target_include_directories(NimbusReverbPlugin PRIVATE ../src/dsp)
+
+add_executable(CloudGreyVerbMilestoneTest
+    ../src/dsp/cloud_grey_verb.cpp
+    ../src/dsp/cloud_grey_verb_milestone_test.cpp
+)
+target_compile_definitions(CloudGreyVerbMilestoneTest PRIVATE CLOUD_GREY_PROFILE_DESKTOP_STUDIO=1)
+target_include_directories(CloudGreyVerbMilestoneTest PRIVATE ../src/dsp)
+add_test(NAME CloudGreyVerbMilestoneTest COMMAND CloudGreyVerbMilestoneTest)
+set_tests_properties(CloudGreyVerbMilestoneTest PROPERTIES TIMEOUT 120)

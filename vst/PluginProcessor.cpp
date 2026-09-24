@@ -12,6 +12,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"freeze", 1}, "Freeze", 0.0f, 1.0f, 0.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"feedback", 1}, "Feedback", 0.0f, 0.94f, 0.5f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"size", 1}, "Size", 0.0f, 1.0f, 0.5f));
+    // Persisted policy for exceptional Greyhole-scale spaces; it is not a UI control.
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"sizeScale", 1}, "Size Scale", 1.0f, CloudGreyVerb::kSizeMaxExtendedSeconds / CloudGreyVerb::kSizeMaxNormalSeconds, 1.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"diffusion", 1}, "Diffusion", 0.0f, 1.0f, 0.5f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"modDepth", 1}, "Mod Depth", 0.0f, 1.0f, 0.2f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"modRate", 1}, "Mod Rate", 0.0f, 1.0f, 0.2f));
@@ -52,8 +54,8 @@ CloudGreyVerbProcessor::CloudGreyVerbProcessor()
     presets.push_back(BuiltInPreset("SmallCloudRoom", 0.4f, 0.3f, 0.0f, 0.5f, 0.35f, 0.6f, 0.2f, 0.15f, 0.5f, 0.5f, 0.6f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f));
     presets.push_back(BuiltInPreset("BassAmbientWash", 0.36f, 0.42f, 0.0f, 0.62f, 0.56f, 0.52f, 0.14f, 0.15f, 0.78f, 0.2f, 0.40f, 0.90f, 0.92f, 0.0f, 0.1f, 1.5f));
     presets.push_back(BuiltInPreset("FrozenOrganPad", 0.7f, 0.85f, 1.0f, 0.65f, 0.7f, 0.8f, 0.4f, 0.05f, 0.4f, 0.6f, 0.45f, 1.0f, 1.0f, 0.0f, 0.0f, 1.2f));
-    presets.push_back(BuiltInPreset("GreyholeDelayVerb", 0.6f, 0.55f, 0.0f, 0.76f, 0.76f, 0.70f, 0.4f, 0.25f, 0.65f, 0.5f, 0.5f, 1.0f, 0.90f, 0.0f, 0.2f, 1.0f));
-    presets.push_back(BuiltInPreset("DarkLongCloud", 0.55f, 0.75f, 0.0f, 0.76f, 0.84f, 0.66f, 0.3f, 0.1f, 0.3f, 0.4f, 0.3f, 0.72f, 0.72f, 0.0f, 0.3f, 1.0f));
+    presets.push_back(BuiltInPreset("GreyholeDelayVerb", 0.6f, 0.55f, 0.0f, 0.76f, 0.76f, 0.70f, 0.4f, 0.25f, 0.65f, 0.5f, 0.5f, 1.0f, 0.90f, 0.0f, 0.2f, 1.0f, 2, false, 0.0f, 0.0f, true, false, false, false, 7, 3.0f));
+    presets.push_back(BuiltInPreset("DarkLongCloud", 0.55f, 0.75f, 0.0f, 0.76f, 0.84f, 0.66f, 0.3f, 0.1f, 0.3f, 0.4f, 0.3f, 0.72f, 0.72f, 0.0f, 0.3f, 1.0f, 2, false, 0.0f, 0.0f, true, false, false, false, 7, 3.5f));
     presets.push_back(BuiltInPreset("GlitchSmear", 0.5f, 0.05f, 0.0f, 0.5f, 0.25f, 0.2f, 0.9f, 0.8f, 0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f));
     presets.push_back(BuiltInPreset("AlwaysOnSubtle", 0.25f, 0.2f, 0.0f, 0.3f, 0.2f, 0.4f, 0.1f, 0.1f, 0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 0.0f, 0.05f, 0.8f));
     presets.push_back(BuiltInPreset("BrightCloud", 0.5f, 0.6f, 0.0f, 0.75f, 0.6f, 0.7f, 0.6f, 0.4f, 0.7f, 0.8f, 0.8f, 1.0f, 1.0f, 0.0f, 0.1f, 1.2f));
@@ -92,6 +94,7 @@ void CloudGreyVerbProcessor::setCurrentProgram (int index)
         updateParameterValue("freeze", p.freeze);
         updateParameterValue("feedback", p.feedback);
         updateParameterValue("size", p.size);
+        updateParameterValue("sizeScale", p.sizeScale);
         updateParameterValue("diffusion", p.diffusion);
         updateParameterValue("modDepth", p.modDepth);
         updateParameterValue("modRate", p.modRate);
@@ -136,7 +139,8 @@ void CloudGreyVerbProcessor::prepareToPlay (double sampleRate, int samplesPerBlo
     presetTransitionSamplesRemaining = 0;
     presetTransitionSamplesTotal = 0;
 
-    // Allocate DSP memory (~3.0MB for true stereo 48k operations)
+    // 1.6M + 3.2M floats reserve 19.2 MB decimal (about 18.3 MiB) total.
+    // The two pools keep normal and 2x HQ state independent.
     size_t requiredFloats = 1600000; 
     dspMemoryNormal.resize(requiredFloats, 0.0f);
     
@@ -146,6 +150,11 @@ void CloudGreyVerbProcessor::prepareToPlay (double sampleRate, int samplesPerBlo
     
     dspCoreNormal.init(static_cast<float>(sampleRate), dspMemoryNormal.data(), requiredFloats);
     dspCoreHQ.init(static_cast<float>(sampleRate * 2.0), dspMemoryHQ.data(), requiredFloatsHQ);
+    coresReady = dspCoreNormal.isInitialized() && dspCoreHQ.isInitialized();
+    if (!coresReady) {
+        juce::Logger::writeToLog("Nimbus DSP initialization failed: unsupported sample rate or insufficient fixed DSP memory.");
+        jassertfalse;
+    }
     
     oversampling = std::make_unique<juce::dsp::Oversampling<float>> (2, 1, juce::dsp::Oversampling<float>::filterHalfBandFIREquiripple, true);
     oversampling->initProcessing (samplesPerBlock);
@@ -178,8 +187,10 @@ int CloudGreyVerbProcessor::getPresetTransitionLengthInSamples (double seconds) 
 
 void CloudGreyVerbProcessor::resetDspStateForPresetChange()
 {
-    dspCoreNormal.reset();
-    dspCoreHQ.reset();
+    if (coresReady) {
+        dspCoreNormal.reset();
+        dspCoreHQ.reset();
+    }
     latencyCompensationL.reset();
     latencyCompensationR.reset();
 
@@ -283,6 +294,11 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, buffer.getNumSamples());
 
+    // prepareToPlay cannot return an error to a host. The failure is logged and
+    // asserted above; bypass deterministically instead of selecting a bad core.
+    if (!coresReady)
+        return;
+
     // Update DSP parameters from VTS
     CloudGreyVerb::Params p;
     p.mix = parameters.getRawParameterValue("mix")->load();
@@ -290,6 +306,7 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     p.freeze = parameters.getRawParameterValue("freeze")->load();
     p.feedback = parameters.getRawParameterValue("feedback")->load();
     p.size = parameters.getRawParameterValue("size")->load();
+    p.sizeScale = parameters.getRawParameterValue("sizeScale")->load();
     p.diffusion = parameters.getRawParameterValue("diffusion")->load();
     p.modDepth = parameters.getRawParameterValue("modDepth")->load();
     p.modRate = parameters.getRawParameterValue("modRate")->load();
@@ -307,8 +324,6 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     p.reverseMix = parameters.getRawParameterValue("reverseMix")->load();
     p.grainScan = parameters.getRawParameterValue("grainScan")->load();
     p.clipOutput = false; // VST3 float may legally deliver samples above 0 dBFS.
-    if (currentPresetIndex == 3) p.sizeScale = 3.0f;      // GreyholeDelayVerb
-    else if (currentPresetIndex == 4) p.sizeScale = 3.5f; // DarkLongCloud
     
     bool hqMode = parameters.getRawParameterValue("hqMode")->load() > 0.5f;
     bool preDelaySync = parameters.getRawParameterValue("preDelaySync")->load() > 0.5f;

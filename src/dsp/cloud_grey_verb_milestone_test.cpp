@@ -13,6 +13,7 @@ struct IrMetrics {
     double earlyEnergy = 0.0;
     double lateEnergy = 0.0;
     double centroidSeconds = 0.0;
+    double earlyLateDb = 0.0;
     double rt60Seconds = std::numeric_limits<double>::quiet_NaN();
     float minSafety = 1.0f;
     bool finite = true;
@@ -56,6 +57,8 @@ IrMetrics render(float sampleRate, CloudGreyVerb::Preset preset, float seconds =
     }
     m.rms = std::sqrt(sum / (2.0 * count));
     m.centroidSeconds = sum > 0.0 ? weighted / sum : 0.0;
+    m.earlyLateDb = 10.0 * std::log10((m.earlyEnergy + 1.0e-24)
+                                      / (m.lateEnergy + 1.0e-24));
 
     std::vector<double> decay(count, 0.0);
     double cumulative = 0.0;
@@ -148,17 +151,36 @@ int main() {
         const IrMetrics m96 = render(96000.0f, presets[i]);
         check(m44.finite && m48.finite && m96.finite, "IR must contain no NaN/Inf");
         check(m48.peak < 8.0 && m48.rms < 1.0, "IR must not run away");
-        // Long/dark stochastic tails are measured over a finite 8 s window;
-        // allow 25%, while room presets remain substantially tighter in output.
+        // Capacity/time mapping remains invariant for every factory preset.
+        // Finite-window centroid is reported only for giant stochastic tails.
         check(closeRelative(m44.centroidSeconds, m48.centroidSeconds, 0.25)
               && closeRelative(m48.centroidSeconds, m96.centroidSeconds, 0.25),
-              "IR timing must remain approximately invariant across sample rates");
+              "IR timing must remain bounded across sample rates");
         std::cout << names[i] << ",centroid_44_48_96=" << m44.centroidSeconds << '/'
                   << m48.centroidSeconds << '/' << m96.centroidSeconds
                   << ",sr48000,peak=" << m48.peak << ",rms=" << m48.rms
                   << ",early=" << m48.earlyEnergy << ",late=" << m48.lateEnergy
-                  << ",centroid_s=" << m48.centroidSeconds << ",rt60_s=" << m48.rt60Seconds
+                  << ",c80_db=" << m48.earlyLateDb << ",centroid_s=" << m48.centroidSeconds << ",rt60_s=" << m48.rt60Seconds
                   << ",min_safety=" << m48.minSafety << '\n';
+    }
+
+    // Tight temporal checks use normal, finite tails rather than the intentionally
+    // giant presets whose RT60 does not fit inside this 8-second render window.
+    for (const auto preset : { CloudGreyVerb::Preset::SmallCloudRoom,
+                               CloudGreyVerb::Preset::AlwaysOnSubtle,
+                               CloudGreyVerb::Preset::ShimmerCloud }) {
+        const IrMetrics m44 = render(44100.0f, preset);
+        const IrMetrics m48 = render(48000.0f, preset);
+        const IrMetrics m96 = render(96000.0f, preset);
+        check(closeRelative(m44.centroidSeconds, m48.centroidSeconds, 0.10)
+              && closeRelative(m48.centroidSeconds, m96.centroidSeconds, 0.10),
+              "normal-tail centroid must be within 10% across sample rates");
+        check(closeRelative(m44.rt60Seconds, m48.rt60Seconds, 0.10)
+              && closeRelative(m48.rt60Seconds, m96.rt60Seconds, 0.10),
+              "normal-tail RT60 must be within 10% across sample rates");
+        check(std::abs(m44.earlyLateDb - m48.earlyLateDb) < 1.0
+              && std::abs(m48.earlyLateDb - m96.earlyLateDb) < 1.0,
+              "normal-tail early/late balance must be within 1 dB across sample rates");
     }
 
     // 48 kHz normal and a 96 kHz core model the same time domain used by HQ 2x.
@@ -178,7 +200,7 @@ int main() {
     {
         std::vector<float> memory(memoryFor(48000.0f), 0.0f);
         CloudGreyVerb fx; fx.init(48000.0f, memory.data(), memory.size());
-        auto p = CloudGreyVerb::getPreset(CloudGreyVerb::Preset::AlwaysOnSubtle);
+        auto p = CloudGreyVerb::getPreset(CloudGreyVerb::Preset::BrightCloud);
         p.mix = 1.0f; p.feedback = 0.94f; p.inputGain = 2.0f; p.shimmer = 1.0f;
         p.clipOutput = false; fx.setParams(p); fx.reset();
         float minimumSafety = 1.0f;
@@ -197,6 +219,24 @@ int main() {
         if (minimumSafety >= 0.999f)
             std::cerr << "Safety test max energy=" << maximumEnergy << '\n';
         check(minimumSafety < 0.999f, "Safety Guard must engage under sustained abuse");
+    }
+
+    // Nominal sustained material must remain stable without unnecessary gain reduction.
+    {
+        std::vector<float> memory(memoryFor(48000.0f), 0.0f);
+        CloudGreyVerb fx; fx.init(48000.0f, memory.data(), memory.size());
+        auto p = CloudGreyVerb::getPreset(CloudGreyVerb::Preset::GreyholeDelayVerb);
+        p.clipOutput = false; fx.setParams(p); fx.reset();
+        float minimumSafety = 1.0f;
+        bool finite = true;
+        for (int i=0; i<48000*10; ++i) {
+            const float x = 0.25f * std::sin(2.0f * cgv_dsp::PI * 220.0f * i / 48000.0f);
+            float l=0, r=0; fx.processSample(x, x, l, r);
+            finite = finite && std::isfinite(l) && std::isfinite(r);
+            minimumSafety = std::min(minimumSafety, fx.getSafetyGain());
+        }
+        check(finite, "nominal sustained material must remain finite");
+        check(minimumSafety > 0.995f, "Safety Guard must stay transparent on nominal sustained material");
     }
 
     if (failures != 0) return 1;

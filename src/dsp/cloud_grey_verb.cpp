@@ -897,9 +897,9 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     loopEnergy_ += energyCoeff_ * (e - loopEnergy_);
 
     // Feed-loop waveshaping/headroom keeps normal program material far below
-    // the old 0.55 threshold, making the guard effectively unreachable. 0.04
+    // the old 0.55 threshold, making the guard effectively unreachable. 0.05
     // remains transparent for nominal IRs but engages on sustained abuse.
-    constexpr float kSafetyThreshold = 0.04f;
+    constexpr float kSafetyThreshold = 0.05f;
     float safety = 1.0f;
     if (loopEnergy_ > kSafetyThreshold) {
         safety = kSafetyThreshold / loopEnergy_;

@@ -15,7 +15,7 @@ public:
 
     struct BuiltInPreset {
         juce::String name;
-        float mix, texture, freeze, feedback, size, diffusion, modDepth, modRate, damping, lowDamping, tone, inputGain, outputGain, shimmer, preDelay, stereoWidth;
+        float mix, texture, freeze, feedback, size, diffusion, modDepth, modRate, damping, lowDamping, tone, inputGain, outputGain, shimmer, preDelay, stereoWidth, sizeScale;
         int shimmerRatioIndex;
         bool hqMode;
         float reverseMix, grainScan;
@@ -25,8 +25,8 @@ public:
         bool sizeSyncOn;
         int syncDivisionIndex;
         
-        BuiltInPreset(juce::String n, float m, float t, float fr, float fb, float s, float d, float md, float mr, float da, float lda, float to, float ig, float og, float sh, float pd, float sw, int sri = 2, bool hq = false, float revMix = 0.0f, float gScan = 0.0f, bool stereoCore = true, bool hardFreeze = false, bool preDelaySync = false, bool sizeSync = false, int syncDiv = 7)
-            : name(n), mix(m), texture(t), freeze(fr), feedback(fb), size(s), diffusion(d), modDepth(md), modRate(mr), damping(da), lowDamping(lda), tone(to), inputGain(ig), outputGain(og), shimmer(sh), preDelay(pd), stereoWidth(sw), shimmerRatioIndex(sri), hqMode(hq), reverseMix(revMix), grainScan(gScan), stereoCoreOn(stereoCore), hardFreezeOn(hardFreeze), preDelaySyncOn(preDelaySync), sizeSyncOn(sizeSync), syncDivisionIndex(syncDiv) {}
+        BuiltInPreset(juce::String n, float m, float t, float fr, float fb, float s, float d, float md, float mr, float da, float lda, float to, float ig, float og, float sh, float pd, float sw, int sri = 2, bool hq = false, float revMix = 0.0f, float gScan = 0.0f, bool stereoCore = true, bool hardFreeze = false, bool preDelaySync = false, bool sizeSync = false, int syncDiv = 7, float sizeScaleIn = 1.0f)
+            : name(n), mix(m), texture(t), freeze(fr), feedback(fb), size(s), diffusion(d), modDepth(md), modRate(mr), damping(da), lowDamping(lda), tone(to), inputGain(ig), outputGain(og), shimmer(sh), preDelay(pd), stereoWidth(sw), sizeScale(sizeScaleIn), shimmerRatioIndex(sri), hqMode(hq), reverseMix(revMix), grainScan(gScan), stereoCoreOn(stereoCore), hardFreezeOn(hardFreeze), preDelaySyncOn(preDelaySync), sizeSyncOn(sizeSync), syncDivisionIndex(syncDiv) {}
     };
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
@@ -85,6 +85,7 @@ private:
     double currentSampleRate = 44100.0;
     CloudGreyVerb::Params currentDspParams;
     bool currentDspHqMode = false;
+    bool coresReady = false;
     std::atomic<bool> presetTransitionRequested { false };
     std::atomic<int> presetTransitionStage { static_cast<int> (PresetTransitionStage::idle) };
     int presetTransitionSamplesRemaining = 0;
