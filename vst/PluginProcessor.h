@@ -13,22 +13,6 @@ public:
     CloudGreyVerbProcessor();
     ~CloudGreyVerbProcessor() override;
 
-    struct BuiltInPreset {
-        juce::String name;
-        float mix, texture, freeze, feedback, size, diffusion, modDepth, modRate, damping, lowDamping, tone, inputGain, outputGain, shimmer, preDelay, stereoWidth, sizeScale;
-        int shimmerRatioIndex;
-        bool hqMode;
-        float reverseMix, grainScan;
-        bool stereoCoreOn;
-        bool hardFreezeOn;
-        bool preDelaySyncOn;
-        bool sizeSyncOn;
-        int syncDivisionIndex;
-        
-        BuiltInPreset(juce::String n, float m, float t, float fr, float fb, float s, float d, float md, float mr, float da, float lda, float to, float ig, float og, float sh, float pd, float sw, int sri = 2, bool hq = false, float revMix = 0.0f, float gScan = 0.0f, bool stereoCore = true, bool hardFreeze = false, bool preDelaySync = false, bool sizeSync = false, int syncDiv = 7, float sizeScaleIn = 1.0f)
-            : name(n), mix(m), texture(t), freeze(fr), feedback(fb), size(s), diffusion(d), modDepth(md), modRate(mr), damping(da), lowDamping(lda), tone(to), inputGain(ig), outputGain(og), shimmer(sh), preDelay(pd), stereoWidth(sw), sizeScale(sizeScaleIn), shimmerRatioIndex(sri), hqMode(hq), reverseMix(revMix), grainScan(gScan), stereoCoreOn(stereoCore), hardFreezeOn(hardFreeze), preDelaySyncOn(preDelaySync), sizeSyncOn(sizeSync), syncDivisionIndex(syncDiv) {}
-    };
-
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
 
@@ -80,7 +64,6 @@ private:
     juce::dsp::DelayLine<float> latencyCompensationR { 1024 };
     float currentLatencySamples = 0.0f;
     
-    std::vector<BuiltInPreset> presets;
     int currentPresetIndex = 0;
     double currentSampleRate = 44100.0;
     CloudGreyVerb::Params currentDspParams;

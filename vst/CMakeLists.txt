@@ -84,6 +84,15 @@ target_include_directories(CloudGreyVerbMilestoneTest PRIVATE ../src/dsp)
 add_test(NAME CloudGreyVerbMilestoneTest COMMAND CloudGreyVerbMilestoneTest)
 set_tests_properties(CloudGreyVerbMilestoneTest PROPERTIES TIMEOUT 120)
 
+add_executable(CloudGreyVerbFactoryPresetParityTest
+    ../src/dsp/cloud_grey_verb.cpp
+    ../src/dsp/cloud_grey_verb_factory_preset_test.cpp
+)
+target_compile_features(CloudGreyVerbFactoryPresetParityTest PRIVATE cxx_std_17)
+target_compile_definitions(CloudGreyVerbFactoryPresetParityTest PRIVATE CLOUD_GREY_PROFILE_DESKTOP_STUDIO=1)
+target_include_directories(CloudGreyVerbFactoryPresetParityTest PRIVATE ../src/dsp)
+add_test(NAME CloudGreyVerbFactoryPresetParityTest COMMAND CloudGreyVerbFactoryPresetParityTest)
+
 function(add_cgv_m2_profile_test target profile)
     add_executable(${target}
         ../src/dsp/cloud_grey_verb.cpp

@@ -13,6 +13,11 @@ if(BUILD_TESTING)
     add_test(NAME CloudGreyVerbMilestoneTest COMMAND CloudGreyVerbMilestoneTest)
     set_tests_properties(CloudGreyVerbMilestoneTest PROPERTIES TIMEOUT 120)
 
+    add_executable(CloudGreyVerbFactoryPresetParityTest cloud_grey_verb.cpp cloud_grey_verb_factory_preset_test.cpp)
+    target_compile_features(CloudGreyVerbFactoryPresetParityTest PRIVATE cxx_std_17)
+    target_compile_definitions(CloudGreyVerbFactoryPresetParityTest PRIVATE CLOUD_GREY_PROFILE_DESKTOP_STUDIO=1)
+    add_test(NAME CloudGreyVerbFactoryPresetParityTest COMMAND CloudGreyVerbFactoryPresetParityTest)
+
     function(add_cgv_m2_profile_test target profile)
         add_executable(${target} cloud_grey_verb.cpp cloud_grey_verb_m2_regression_test.cpp)
         target_compile_features(${target} PRIVATE cxx_std_17)

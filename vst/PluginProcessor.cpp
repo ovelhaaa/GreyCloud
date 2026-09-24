@@ -51,16 +51,6 @@ CloudGreyVerbProcessor::CloudGreyVerbProcessor()
                       .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       parameters (*this, nullptr, juce::Identifier ("CloudGreyVerbVTS"), createParameterLayout())
 {
-    presets.push_back(BuiltInPreset("SmallCloudRoom", 0.40f, 0.32f, 0.0f, 0.44f, 0.35f, 0.66f, 0.05f, 0.12f, 0.52f, 0.48f, 0.56f, 1.0f, 0.96f, 0.0f, 0.0f, 1.0f));
-    presets.push_back(BuiltInPreset("BassAmbientWash", 0.36f, 0.48f, 0.0f, 0.58f, 0.56f, 0.60f, 0.10f, 0.12f, 0.68f, 0.68f, 0.44f, 0.90f, 0.94f, 0.0f, 0.1f, 1.5f));
-    presets.push_back(BuiltInPreset("FrozenOrganPad", 0.7f, 0.85f, 1.0f, 0.65f, 0.7f, 0.8f, 0.4f, 0.05f, 0.4f, 0.6f, 0.45f, 1.0f, 1.0f, 0.0f, 0.0f, 1.2f));
-    presets.push_back(BuiltInPreset("GreyholeDelayVerb", 0.60f, 0.58f, 0.0f, 0.75f, 0.76f, 0.72f, 0.36f, 0.22f, 0.62f, 0.58f, 0.52f, 1.0f, 0.92f, 0.0f, 0.2f, 1.0f, 2, false, 0.0f, 0.0f, true, false, false, false, 7, 3.0f));
-    presets.push_back(BuiltInPreset("DarkLongCloud", 0.55f, 0.75f, 0.0f, 0.75f, 0.84f, 0.70f, 0.26f, 0.08f, 0.32f, 0.60f, 0.32f, 0.76f, 0.78f, 0.0f, 0.3f, 1.0f, 2, false, 0.0f, 0.0f, true, false, false, false, 7, 3.5f));
-    presets.push_back(BuiltInPreset("GlitchSmear", 0.5f, 0.05f, 0.0f, 0.5f, 0.25f, 0.2f, 0.9f, 0.8f, 0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f));
-    presets.push_back(BuiltInPreset("AlwaysOnSubtle", 0.25f, 0.20f, 0.0f, 0.28f, 0.20f, 0.46f, 0.02f, 0.10f, 0.50f, 0.52f, 0.50f, 1.0f, 0.98f, 0.0f, 0.05f, 0.8f));
-    presets.push_back(BuiltInPreset("BrightCloud", 0.50f, 0.60f, 0.0f, 0.72f, 0.60f, 0.72f, 0.30f, 0.28f, 0.66f, 0.56f, 0.72f, 1.0f, 0.96f, 0.0f, 0.1f, 1.2f));
-    presets.push_back(BuiltInPreset("ShimmerCloud", 0.55f, 0.58f, 0.0f, 0.60f, 0.62f, 0.72f, 0.16f, 0.10f, 0.52f, 0.56f, 0.58f, 0.82f, 0.90f, 0.20f, 0.15f, 1.4f, 2, true));
-    presets.push_back(BuiltInPreset("ReverseSmear", 0.65f, 0.6f, 0.0f, 0.70f, 0.5f, 0.6f, 0.4f, 0.2f, 0.6f, 0.5f, 0.5f, 1.0f, 1.0f, 0.0f, 0.0f, 1.2f, 2, false, 1.0f, 1.0f));
     currentPresetIndex = 0;
 }
 
@@ -73,16 +63,17 @@ bool CloudGreyVerbProcessor::isMidiEffect() const { return false; }
 // Conservative finite report for normal/long factory tails. Freeze can be
 // indefinite by design, but hosts need a useful non-zero scheduling value.
 double CloudGreyVerbProcessor::getTailLengthSeconds() const { return 30.0; }
-int CloudGreyVerbProcessor::getNumPrograms() { return static_cast<int>(presets.size()); }
+int CloudGreyVerbProcessor::getNumPrograms() { return static_cast<int>(CloudGreyVerb::factoryPresetCount()); }
 int CloudGreyVerbProcessor::getCurrentProgram() { return currentPresetIndex; }
 
 void CloudGreyVerbProcessor::setCurrentProgram (int index)
 {
-    if (index >= 0 && index < presets.size())
+    if (index >= 0 && index < getNumPrograms())
     {
         currentPresetIndex = index;
         requestPresetTransition();
-        const auto& p = presets[index];
+        const auto& preset = CloudGreyVerb::getFactoryPreset(static_cast<size_t>(index));
+        const auto& p = preset.dsp;
         
         auto updateParameterValue = [&](const juce::String& id, float value) {
             if (auto* param = parameters.getParameter(id))
@@ -107,28 +98,29 @@ void CloudGreyVerbProcessor::setCurrentProgram (int index)
         updateParameterValue("shimmerRatio", static_cast<float>(p.shimmerRatioIndex));
         updateParameterValue("preDelay", p.preDelay);
         updateParameterValue("stereoWidth", p.stereoWidth);
-        updateParameterValue("hqMode", p.hqMode ? 1.0f : 0.0f);
+        updateParameterValue("hqMode", preset.hqMode ? 1.0f : 0.0f);
         updateParameterValue("reverseMix", p.reverseMix);
         updateParameterValue("grainScan", p.grainScan);
-        updateParameterValue("stereoCore", p.stereoCoreOn ? 1.0f : 0.0f);
-        updateParameterValue("hardFreeze", p.hardFreezeOn ? 1.0f : 0.0f);
-        updateParameterValue("preDelaySync", p.preDelaySyncOn ? 1.0f : 0.0f);
-        updateParameterValue("sizeSync", p.sizeSyncOn ? 1.0f : 0.0f);
-        updateParameterValue("syncDivision", static_cast<float>(p.syncDivisionIndex));
+        updateParameterValue("stereoCore", p.stereoCore ? 1.0f : 0.0f);
+        updateParameterValue("hardFreeze", p.hardFreeze ? 1.0f : 0.0f);
+        updateParameterValue("preDelaySync", preset.preDelaySync ? 1.0f : 0.0f);
+        updateParameterValue("sizeSync", preset.sizeSync ? 1.0f : 0.0f);
+        updateParameterValue("syncDivision", static_cast<float>(preset.syncDivisionIndex));
     }
 }
 
 const juce::String CloudGreyVerbProcessor::getProgramName (int index) 
 { 
-    if (index >= 0 && index < presets.size())
-        return presets[index].name;
+    if (index >= 0 && index < getNumPrograms())
+        return CloudGreyVerb::getFactoryPreset(static_cast<size_t>(index)).name;
     return {}; 
 }
 
 void CloudGreyVerbProcessor::changeProgramName (int index, const juce::String& newName) 
 {
-    if (index >= 0 && index < presets.size())
-        presets[index].name = newName;
+    // Factory programs are immutable by design: their names and acoustic
+    // state must remain the shared core/VST/benchmark truth.
+    juce::ignoreUnused (index, newName);
 }
 
 void CloudGreyVerbProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)

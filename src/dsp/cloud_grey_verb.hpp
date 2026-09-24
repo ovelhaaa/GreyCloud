@@ -125,7 +125,8 @@ public:
         GlitchSmear,
         AlwaysOnSubtle,
         BrightCloud,
-        ShimmerCloud
+        ShimmerCloud,
+        ReverseSmear
     };
 
     struct Params {
@@ -153,13 +154,29 @@ public:
         float reverseMix = 0.0f;   // 0.0 a 1.0 -> Direção do grão (Forward -> Reverse)
         float grainScan = 0.0f;    // 0.0 a 1.0 -> Janela estática vs varredura real completa
     };
+
+    // Factory sound specification.  This is deliberately JUCE-free so the
+    // embedded core, plugin and offline tools all consume identical state.
+    // Do not add visual/editor-only state here.
+    struct FactoryPreset {
+        const char* name;
+        Params dsp;
+        bool hqMode = false;
+        bool preDelaySync = false;
+        bool sizeSync = false;
+        int syncDivisionIndex = 7;
+    };
     
     static constexpr float kSizeMinSeconds = 0.035f;
     static constexpr float kSizeMaxNormalSeconds = 0.900f;
     static constexpr float kSizeMaxExtendedSeconds = 3.200f;
     static constexpr size_t kFdnOrder = CGV_FDN_ORDER;
 
-    // Utilitário de Presets Internos
+    // Canonical factory preset catalogue. getPreset remains for source
+    // compatibility, but returns the DSP portion of this same catalogue.
+    static size_t factoryPresetCount();
+    static const FactoryPreset& getFactoryPreset(size_t index);
+    static const FactoryPreset& getFactoryPreset(Preset preset);
     static Params getPreset(Preset preset);
 
     /**
