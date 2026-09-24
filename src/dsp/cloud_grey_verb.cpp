@@ -113,6 +113,25 @@ float CloudGreyVerb::secondsToSize(float seconds, float scale) {
     return logf(seconds / kSizeMinSeconds) / logf(maximum / kSizeMinSeconds);
 }
 
+float CloudGreyVerb::earlyMaxRequestedSeconds() {
+    // Only provision reflections compiled into this profile. This preserves
+    // the H5 memory budget while still deriving each capacity from its actual
+    // longest right-channel request at 1.18x Size scaling.
+#if CGV_NUM_EARLY_TAPS == 2
+    return 0.0101f * 1.18f;
+#elif CGV_NUM_EARLY_TAPS == 3
+    return 0.0203f * 1.18f;
+#else
+    return 0.0371f * 1.18f;
+#endif
+}
+
+size_t CloudGreyVerb::earlyDelayCapacityFrames(float sampleRate) {
+    constexpr size_t kHermiteGuardFrames = 3;
+    return static_cast<size_t>(ceilf(earlyMaxRequestedSeconds() * sampleRate))
+           + kHermiteGuardFrames;
+}
+
 #if CGV_ENABLE_SHIMMER
 bool ShimmerPitcher::init(float sampleRate, float* buffer, uint32_t bufferSize) {
     if (!buffer || bufferSize == 0 || sampleRate <= 0.0f) return false;
@@ -307,17 +326,14 @@ void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferS
     // Allocate predelay (up to 200ms per channel)
     size_t predelaySize = frames(0.200f);
 
-    // The first pair remains intentionally close between channels; later
-    // reflections progressively open the image.  These are capacities, not
-    // acoustic-size controls, so the timing stays sample-rate invariant.
-    constexpr float kEarlyTapMaxSeconds[4] = {0.0045f, 0.0120f, 0.0240f, 0.0420f};
-    size_t earlyTapSizes[4] = {0};
-    for (int i = 0; i < CGV_NUM_EARLY_TAPS; ++i)
-        earlyTapSizes[i] = frames(kEarlyTapMaxSeconds[i]);
+    // One history per channel serves all feed-forward reflections.  Capacity
+    // derives from the actual longest acoustic request, not a hand-tuned
+    // nominal number.  The guard keeps Hermite's p1/p2/p3 neighbours inside
+    // retained history even at the largest size setting.
+    const size_t earlyDelaySize = earlyDelayCapacityFrames(sampleRate_);
     
     size_t fixedSize = 2 * granulSize + shimmerSize + 2 * predelaySize;
-    for (int i = 0; i < CGV_NUM_EARLY_TAPS; ++i)
-        fixedSize += 2 * earlyTapSizes[i];
+    fixedSize += 2 * earlyDelaySize;
     for (int i = 0; i < CGV_NUM_ALLPASS; ++i)
         fixedSize += diffuserLSizes[i] + diffuserRSizes[i];
 #if CGV_NUM_LOOP_ALLPASS > 0
@@ -337,10 +353,8 @@ void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferS
     preDelayL_.init(ptr, predelaySize); ptr += predelaySize;
     preDelayR_.init(ptr, predelaySize); ptr += predelaySize;
 
-    for (int i = 0; i < CGV_NUM_EARLY_TAPS; ++i) {
-        earlyTapL_[i].init(ptr, earlyTapSizes[i]); ptr += earlyTapSizes[i];
-        earlyTapR_[i].init(ptr, earlyTapSizes[i]); ptr += earlyTapSizes[i];
-    }
+    earlyDelayL_.init(ptr, earlyDelaySize); ptr += earlyDelaySize;
+    earlyDelayR_.init(ptr, earlyDelaySize); ptr += earlyDelaySize;
 
     grainMemoryL_ = ptr; ptr += granulSize;
     grainMemoryR_ = ptr; ptr += granulSize;
@@ -419,10 +433,8 @@ void CloudGreyVerb::reset() {
     
     preDelayL_.clear();
     preDelayR_.clear();
-    for (int i = 0; i < CGV_NUM_EARLY_TAPS; ++i) {
-        earlyTapL_[i].clear();
-        earlyTapR_[i].clear();
-    }
+    earlyDelayL_.clear();
+    earlyDelayR_.clear();
     preDelaySmoothed_ = 0.0f;
 #if CGV_NUM_LOOP_ALLPASS > 0
     for (int i = 0; i < CGV_FDN_ORDER; ++i)
@@ -655,11 +667,11 @@ void CloudGreyVerb::processEarly(float inL, float inR, float diffusion, float si
     const float density = cgv_dsp::lerp(0.72f, 1.0f, diffusion);
     outL = 0.0f;
     outR = 0.0f;
+    earlyDelayL_.write(inL);
+    earlyDelayR_.write(inR);
     for (int i = 0; i < CGV_NUM_EARLY_TAPS; ++i) {
-        earlyTapL_[i].write(inL);
-        earlyTapR_[i].write(inR);
-        const float tapL = earlyTapL_[i].read(kTapL[i] * timeScale * sampleRate_);
-        const float tapR = earlyTapR_[i].read(kTapR[i] * timeScale * sampleRate_);
+        const float tapL = earlyDelayL_.read(kTapL[i] * timeScale * sampleRate_);
+        const float tapR = earlyDelayR_.read(kTapR[i] * timeScale * sampleRate_);
         const float cross = kCross[i] * density;
         const float gain = kGain[i] * (i == 0 ? 1.0f : density);
         outL += gain * (tapL * (1.0f - cross) + tapR * cross);

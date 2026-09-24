@@ -182,6 +182,10 @@ public:
     bool isInitialized() const { return initialized_; }
     static float sizeToSeconds(float normalized, float scale = 1.0f);
     static float secondsToSize(float seconds, float scale = 1.0f);
+    // Exposed for deterministic capacity tests. Hermite needs three future
+    // neighbours relative to the oldest requested sample in the ring.
+    static float earlyMaxRequestedSeconds();
+    static size_t earlyDelayCapacityFrames(float sampleRate);
 
 private:
     bool initialized_ = false;
@@ -227,8 +231,8 @@ private:
 
     // Early Energy Layer: a feed-forward, post-pre-delay reflection network.
     // It deliberately has no granular dependency, feedback loop or modulation.
-    cgv_dsp::DelayLine earlyTapL_[CGV_NUM_EARLY_TAPS];
-    cgv_dsp::DelayLine earlyTapR_[CGV_NUM_EARLY_TAPS];
+    cgv_dsp::DelayLine earlyDelayL_;
+    cgv_dsp::DelayLine earlyDelayR_;
 
     // LFOs dedicados (Fases cruzadas para imagem estéreo larga)
     cgv_dsp::LFO lfo1_, lfo2_;

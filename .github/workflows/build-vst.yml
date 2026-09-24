@@ -26,6 +26,10 @@ jobs:
         run: |
           cmake --build vst/build --config Release --parallel 4
 
+      - name: Run fast DSP regression tests
+        run: |
+          ctest --test-dir vst/build -C Release --output-on-failure
+
       - name: Upload VST3/Standalone Artifacts
         uses: actions/upload-artifact@v4
         with:
