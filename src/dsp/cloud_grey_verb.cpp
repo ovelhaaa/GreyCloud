@@ -49,14 +49,17 @@ CloudGreyVerb::Params CloudGreyVerb::getPreset(Preset preset) {
     p.shimmer = 0.0f;
     switch(preset) {
         case Preset::SmallCloudRoom:
-            p.mix = 0.4f; p.texture = 0.3f; p.freeze = 0.0f; p.feedback = 0.5f;
-            p.size = 0.35f; p.diffusion = 0.6f; p.modDepth = 0.2f; p.modRate = 0.15f;
-            p.damping = 0.5f; p.tone = 0.6f;
+            // Pequeno espaço cloud, íntimo e denso: attachment primeiro,
+            // movimento quase imperceptível e uma cauda deliberadamente curta.
+            p.mix = 0.40f; p.texture = 0.32f; p.freeze = 0.0f; p.feedback = 0.44f;
+            p.size = 0.35f; p.diffusion = 0.66f; p.modDepth = 0.05f; p.modRate = 0.12f;
+            p.damping = 0.52f; p.lowDamping = 0.48f; p.tone = 0.56f; p.outputGain = 0.96f;
             break;
         case Preset::BassAmbientWash:
-            p.mix = 0.36f; p.texture = 0.42f; p.freeze = 0.0f; p.feedback = 0.62f;
-            p.size = 0.56f; p.diffusion = 0.52f; p.modDepth = 0.14f; p.modRate = 0.15f;
-            p.damping = 0.78f; p.tone = 0.40f; p.inputGain = 0.90f; p.outputGain = 0.92f; p.shimmer = 0.0f;
+            // Wash quente e amplo que deixa o fundamento do baixo no dry.
+            p.mix = 0.36f; p.texture = 0.48f; p.freeze = 0.0f; p.feedback = 0.58f;
+            p.size = 0.56f; p.diffusion = 0.60f; p.modDepth = 0.10f; p.modRate = 0.12f;
+            p.damping = 0.68f; p.lowDamping = 0.68f; p.tone = 0.44f; p.inputGain = 0.90f; p.outputGain = 0.94f; p.shimmer = 0.0f;
             break;
         case Preset::FrozenOrganPad:
             p.mix = 0.7f; p.texture = 0.85f; p.freeze = 1.0f; p.feedback = 0.65f;
@@ -64,14 +67,14 @@ CloudGreyVerb::Params CloudGreyVerb::getPreset(Preset preset) {
             p.damping = 0.4f; p.tone = 0.45f;
             break;
         case Preset::GreyholeDelayVerb:
-            p.mix = 0.6f; p.texture = 0.55f; p.freeze = 0.0f; p.feedback = 0.76f;
-            p.size = 0.76f; p.diffusion = 0.70f; p.modDepth = 0.4f; p.modRate = 0.25f;
-            p.damping = 0.65f; p.tone = 0.5f; p.outputGain = 0.90f; p.sizeScale = 3.0f;
+            p.mix = 0.60f; p.texture = 0.58f; p.freeze = 0.0f; p.feedback = 0.75f;
+            p.size = 0.76f; p.diffusion = 0.72f; p.modDepth = 0.36f; p.modRate = 0.22f;
+            p.damping = 0.62f; p.lowDamping = 0.58f; p.tone = 0.52f; p.outputGain = 0.92f; p.sizeScale = 3.0f;
             break;
         case Preset::DarkLongCloud:
-            p.mix = 0.55f; p.texture = 0.75f; p.freeze = 0.0f; p.feedback = 0.76f;
-            p.size = 0.84f; p.diffusion = 0.66f; p.modDepth = 0.3f; p.modRate = 0.1f;
-            p.damping = 0.3f; p.tone = 0.3f; p.inputGain = 0.72f; p.outputGain = 0.72f; p.sizeScale = 3.5f;
+            p.mix = 0.55f; p.texture = 0.75f; p.freeze = 0.0f; p.feedback = 0.75f;
+            p.size = 0.84f; p.diffusion = 0.70f; p.modDepth = 0.26f; p.modRate = 0.08f;
+            p.damping = 0.32f; p.lowDamping = 0.60f; p.tone = 0.32f; p.inputGain = 0.76f; p.outputGain = 0.78f; p.sizeScale = 3.5f;
             break;
         case Preset::GlitchSmear:
             p.mix = 0.5f; p.texture = 0.05f; p.freeze = 0.0f; p.feedback = 0.5f;
@@ -79,19 +82,20 @@ CloudGreyVerb::Params CloudGreyVerb::getPreset(Preset preset) {
             p.damping = 0.5f; p.tone = 0.5f;
             break;
         case Preset::AlwaysOnSubtle:
-            p.mix = 0.25f; p.texture = 0.2f; p.freeze = 0.0f; p.feedback = 0.3f;
-            p.size = 0.2f; p.diffusion = 0.4f; p.modDepth = 0.1f; p.modRate = 0.1f;
-            p.damping = 0.5f; p.tone = 0.5f;
+            // Cola invisível: early presente, nível wet absoluto baixo e estático.
+            p.mix = 0.25f; p.texture = 0.20f; p.freeze = 0.0f; p.feedback = 0.28f;
+            p.size = 0.20f; p.diffusion = 0.46f; p.modDepth = 0.02f; p.modRate = 0.10f;
+            p.damping = 0.50f; p.lowDamping = 0.52f; p.tone = 0.50f; p.outputGain = 0.98f;
             break;
         case Preset::BrightCloud:
-            p.mix = 0.5f; p.texture = 0.6f; p.freeze = 0.0f; p.feedback = 0.75f;
-            p.size = 0.6f; p.diffusion = 0.7f; p.modDepth = 0.6f; p.modRate = 0.4f;
-            p.damping = 0.7f; p.tone = 0.8f; p.shimmer = 0.0f;
+            p.mix = 0.50f; p.texture = 0.60f; p.freeze = 0.0f; p.feedback = 0.72f;
+            p.size = 0.60f; p.diffusion = 0.72f; p.modDepth = 0.30f; p.modRate = 0.28f;
+            p.damping = 0.66f; p.lowDamping = 0.56f; p.tone = 0.72f; p.outputGain = 0.96f; p.shimmer = 0.0f;
             break;
         case Preset::ShimmerCloud:
-            p.mix = 0.55f; p.texture = 0.55f; p.freeze = 0.0f; p.feedback = 0.58f;
-            p.size = 0.62f; p.diffusion = 0.70f; p.modDepth = 0.20f; p.modRate = 0.12f;
-            p.damping = 0.55f; p.tone = 0.62f; p.shimmer = 0.20f; p.shimmerRatioIndex = 2; p.inputGain = 0.80f; p.outputGain = 0.85f;
+            p.mix = 0.55f; p.texture = 0.58f; p.freeze = 0.0f; p.feedback = 0.60f;
+            p.size = 0.62f; p.diffusion = 0.72f; p.modDepth = 0.16f; p.modRate = 0.10f;
+            p.damping = 0.52f; p.lowDamping = 0.56f; p.tone = 0.58f; p.shimmer = 0.20f; p.shimmerRatioIndex = 2; p.inputGain = 0.82f; p.outputGain = 0.90f;
             break;
     }
     return p;
@@ -853,8 +857,12 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     // Damping independente por linha evita estados de filtro compartilhados e
     // mantém a decorrelação criada pelos comprimentos não proporcionais.
     float baseLpFreq = cgv_dsp::lerp(800.0f, 15000.0f, sDamp);
-    float duckFactor = 1.0f / (1.0f + duckingEnvState_ * 8.0f);
-    float dynamicLpFreq = baseLpFreq * duckFactor;
+    // Dynamic damping is a gentle bloom: loud attacks are kept clean/darker,
+    // then the existing 104 ms release lets the tail open without an audible
+    // post-note brightness jump.  The former 1/(1+8*env) curve could remove
+    // more than 80% of the cutoff on normal musical peaks.
+    const float bloomFactor = 0.58f + 0.42f / (1.0f + duckingEnvState_ * 3.0f);
+    float dynamicLpFreq = baseLpFreq * bloomFactor;
     if (dynamicLpFreq < 300.0f) dynamicLpFreq = 300.0f;
 
     for (int i = 0; i < CGV_FDN_ORDER; ++i) {
@@ -982,8 +990,8 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     const float earlyLevel = 0.0f;
     const float cloudGlue = cgv_dsp::lerp(0.38f, 0.50f, sDiff);
     #else
-    const float earlyLevel = cgv_dsp::lerp(0.52f, 0.28f, sSize);
-    const float cloudGlue = cgv_dsp::lerp(0.08f, 0.14f, sDiff);
+    const float earlyLevel = cgv_dsp::lerp(0.56f, 0.30f, sSize);
+    const float cloudGlue = cgv_dsp::lerp(0.10f, 0.16f, sDiff);
     #endif
     float wetL = tailL + earlyL * earlyLevel + diffInL * cloudGlue;
     float wetR = tailR + earlyR * earlyLevel + diffInR * cloudGlue;

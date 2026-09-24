@@ -78,6 +78,7 @@ add_executable(CloudGreyVerbMilestoneTest
     ../src/dsp/cloud_grey_verb.cpp
     ../src/dsp/cloud_grey_verb_milestone_test.cpp
 )
+target_compile_features(CloudGreyVerbMilestoneTest PRIVATE cxx_std_17)
 target_compile_definitions(CloudGreyVerbMilestoneTest PRIVATE CLOUD_GREY_PROFILE_DESKTOP_STUDIO=1)
 target_include_directories(CloudGreyVerbMilestoneTest PRIVATE ../src/dsp)
 add_test(NAME CloudGreyVerbMilestoneTest COMMAND CloudGreyVerbMilestoneTest)

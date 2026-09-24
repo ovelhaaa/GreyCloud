@@ -23,6 +23,7 @@ struct Metrics {
 
 void writeWav(const std::filesystem::path& path, const std::vector<float>& l,
               const std::vector<float>& r) {
+    std::filesystem::create_directories(path.parent_path());
     std::ofstream f(path, std::ios::binary);
     const uint32_t dataBytes = static_cast<uint32_t>(l.size() * 2 * sizeof(float));
     const uint32_t riffSize = 36 + dataBytes, fmtSize = 16, byteRate = 8 * static_cast<uint32_t>(kSr);
@@ -67,9 +68,11 @@ void print(const char* name,const Metrics&m){
 }
 int main(int argc,char**argv){
     const std::filesystem::path root=argc>1?argv[1]:"m2_audio"; std::filesystem::create_directories(root);
-    const CloudGreyVerb::Preset ps[]={CloudGreyVerb::Preset::SmallCloudRoom,CloudGreyVerb::Preset::AlwaysOnSubtle,CloudGreyVerb::Preset::BassAmbientWash,CloudGreyVerb::Preset::BrightCloud,CloudGreyVerb::Preset::GreyholeDelayVerb,CloudGreyVerb::Preset::DarkLongCloud};
-    const char* names[]={"SmallCloudRoom","AlwaysOnSubtle","BassAmbientWash","BrightCloud","GreyholeDelayVerb","DarkLongCloud"};
+    const bool renderAudio = argc < 3 || std::string(argv[2]) != "--metrics";
+    const CloudGreyVerb::Preset ps[]={CloudGreyVerb::Preset::SmallCloudRoom,CloudGreyVerb::Preset::AlwaysOnSubtle,CloudGreyVerb::Preset::BassAmbientWash,CloudGreyVerb::Preset::BrightCloud,CloudGreyVerb::Preset::GreyholeDelayVerb,CloudGreyVerb::Preset::DarkLongCloud,CloudGreyVerb::Preset::ShimmerCloud,CloudGreyVerb::Preset::FrozenOrganPad,CloudGreyVerb::Preset::GlitchSmear};
+    const char* names[]={"SmallCloudRoom","AlwaysOnSubtle","BassAmbientWash","BrightCloud","GreyholeDelayVerb","DarkLongCloud","ShimmerCloud","FrozenOrganPad","GlitchSmear"};
     std::vector<float> ir(kFrames);ir[0]=.70710678f;
-    for(int i=0;i<6;++i){std::vector<float>l,r;auto m=render(ps[i],ir,&l,&r);print(names[i],m);writeWav(root/(std::string(names[i])+"_ir.wav"),l,r);if(!std::isfinite(m.peak)||m.peak>8||m.minSafety<0.34)return 1;}
-    for(const auto& kind: {std::string("transient"),std::string("pluck"),std::string("chord")}) { std::vector<float> in(kFrames); for(int i=0;i<kFrames;++i){float t=i/kSr;if(kind=="transient")in[i]=(i%2400==0?.8f:0); else if(kind=="pluck")in[i]=t<.12f?.6f*std::sin(2*3.14159265f*220*t)*std::exp(-18*t):0; else in[i]=t<1.0f?.22f*(std::sin(2*3.14159265f*220*t)+std::sin(2*3.14159265f*277.18f*t)+std::sin(2*3.14159265f*329.63f*t)):0; } std::vector<float>l,r;render(CloudGreyVerb::Preset::SmallCloudRoom,in,&l,&r);writeWav(root/(kind+".wav"),l,r); }
+    for(int i=0;i<9;++i){std::vector<float>l,r;auto m=render(ps[i],ir,&l,&r);print(names[i],m);writeWav(root/(std::string(names[i])+"_ir.wav"),l,r);if(!std::isfinite(m.peak)||m.peak>8||m.minSafety<0.34)return 1;}
+    if (renderAudio) { const std::string signalNames[]={"01_dry_vocal","02_piano_chord","03_piano_staccato","04_acoustic_guitar","05_electric_guitar_clean","06_snare","07_synth_pluck","08_synth_pad","09_bass_notes","10_full_mix_excerpt"};
+    for(int s=0;s<10;++s) { std::vector<float> in(kFrames); for(int i=0;i<kFrames;++i){ const float t=i/kSr; const float chord=.12f*(std::sin(2*3.14159265f*220*t)+.65f*std::sin(2*3.14159265f*277.18f*t)+.42f*std::sin(2*3.14159265f*329.63f*t)); const float pluck=.55f*std::sin(2*3.14159265f*220*t)*std::exp(-18.0f*t); if(s==0) in[i]=t<1.4f?.16f*(std::sin(2*3.14159265f*196*t)+.28f*std::sin(2*3.14159265f*392*t))*std::exp(-1.5f*t):0; else if(s==1) in[i]=t<1.8f?chord*std::exp(-1.25f*t):0; else if(s==2) in[i]=(t<.16f?chord*std::exp(-9*t):0)+(t>.42f&&t<.58f?chord*std::exp(-9*(t-.42f)):0); else if(s==3) in[i]=t<.7f?pluck:0; else if(s==4) in[i]=t<.55f?.38f*(std::sin(2*3.14159265f*164.81f*t)+.18f*std::sin(2*3.14159265f*329.63f*t))*std::exp(-7*t):0; else if(s==5) in[i]=t<.12f?.32f*((i%2)?1.f:-1.f)*std::exp(-32*t):0; else if(s==6) in[i]=t<.38f?.52f*std::sin(2*3.14159265f*293.66f*t)*std::exp(-14*t):0; else if(s==7) in[i]=t<2.8f?chord*(.75f+.25f*std::sin(2*3.14159265f*.17f*t)):0; else if(s==8) in[i]=t<1.4f?.26f*std::sin(2*3.14159265f*(t<.7f?55.f:82.41f)*t):0; else in[i]=(t<1.6f?(.42f*chord+.35f*pluck+.16f*std::sin(2*3.14159265f*82.41f*t)):0); } std::vector<float> dryR=in; writeWav(root/"dry"/(signalNames[s]+".wav"),in,dryR); for(int p=0;p<9;++p){std::vector<float>l,r;render(ps[p],in,&l,&r);writeWav(root/names[p]/(signalNames[s]+".wav"),l,r);} } }
 }
