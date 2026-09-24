@@ -16,7 +16,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"modDepth", 1}, "Mod Depth", 0.0f, 1.0f, 0.2f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"modRate", 1}, "Mod Rate", 0.0f, 1.0f, 0.2f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"damping", 1}, "Damping", 0.0f, 1.0f, 0.5f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"lowDamping", 1}, "Low Damp", 0.0f, 1.0f, 0.5f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"lowDamping", 1}, "Low Cut", 0.0f, 1.0f, 0.5f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"tone", 1}, "Tone", 0.0f, 1.0f, 0.5f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"shimmer", 1}, "Shimmer", 0.0f, 1.0f, 0.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"inputGain", 1}, "Input Gain", 0.0f, 2.0f, 1.0f));
@@ -68,7 +68,9 @@ const juce::String CloudGreyVerbProcessor::getName() const { return JucePlugin_N
 bool CloudGreyVerbProcessor::acceptsMidi() const { return false; }
 bool CloudGreyVerbProcessor::producesMidi() const { return false; }
 bool CloudGreyVerbProcessor::isMidiEffect() const { return false; }
-double CloudGreyVerbProcessor::getTailLengthSeconds() const { return 0.0; }
+// Conservative finite report for normal/long factory tails. Freeze can be
+// indefinite by design, but hosts need a useful non-zero scheduling value.
+double CloudGreyVerbProcessor::getTailLengthSeconds() const { return 30.0; }
 int CloudGreyVerbProcessor::getNumPrograms() { return static_cast<int>(presets.size()); }
 int CloudGreyVerbProcessor::getCurrentProgram() { return currentPresetIndex; }
 
@@ -304,6 +306,9 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     p.hardFreeze = parameters.getRawParameterValue("hardFreeze")->load() > 0.5f;
     p.reverseMix = parameters.getRawParameterValue("reverseMix")->load();
     p.grainScan = parameters.getRawParameterValue("grainScan")->load();
+    p.clipOutput = false; // VST3 float may legally deliver samples above 0 dBFS.
+    if (currentPresetIndex == 3) p.sizeScale = 3.0f;      // GreyholeDelayVerb
+    else if (currentPresetIndex == 4) p.sizeScale = 3.5f; // DarkLongCloud
     
     bool hqMode = parameters.getRawParameterValue("hqMode")->load() > 0.5f;
     bool preDelaySync = parameters.getRawParameterValue("preDelaySync")->load() > 0.5f;
@@ -331,17 +336,7 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
         }
         
         if (sizeSync) {
-            float sr = static_cast<float>(getSampleRate());
-            if (hqMode) sr *= 2.0f;
-            
-            float targetFrames = syncMs * (sr / 1000.0f);
-            size_t mainDelaySize = hqMode ? dspCoreHQ.getMainDelayFrames() : dspCoreNormal.getMainDelayFrames();
-            
-            float minFrames = sr * CloudGreyVerb::kSizeMinFrameRatio;
-            float maxFrames = static_cast<float>(mainDelaySize) * CloudGreyVerb::kSizeMaxFrameRatio;
-            
-            float normalizedSize = (targetFrames - minFrames) / (maxFrames - minFrames);
-            p.size = juce::jlimit(0.0f, 1.0f, normalizedSize);
+            p.size = CloudGreyVerb::secondsToSize(syncMs / 1000.0f, p.sizeScale);
         }
     }
 

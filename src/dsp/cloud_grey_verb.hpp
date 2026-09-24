@@ -132,15 +132,18 @@ public:
         float outputGain = 1.0f;   // 0.0 a 2.0 -> Saída geral
         float preDelay = 0.0f;     // 0.0 a 1.0 -> 0ms a 200ms
         float stereoWidth = 1.0f;  // 0.0 a 2.0 -> 0=Mono, 1=Stereo, 2=Extra Wide
-        float lowDamping = 0.5f;   // 0.0 a 1.0 -> High-pass do feedback. 0=Thin (corta graves), 1=Full/Lama
+        float lowDamping = 0.5f;   // ID legado: Low Cut do feedback. 0=20 Hz, 1=400 Hz
         bool stereoCore = true;    // True: Processa grãos e diffusor em estéreo discreto
         bool hardFreeze = false;   // True: Corta input 100% e congela estado instantaneamente
+        bool clipOutput = true;    // Proteção de conversor no core embarcado; VST float desabilita
+        float sizeScale = 1.0f;    // Extensão explícita para presets Greyhole; normal = 1
         float reverseMix = 0.0f;   // 0.0 a 1.0 -> Direção do grão (Forward -> Reverse)
         float grainScan = 0.0f;    // 0.0 a 1.0 -> Janela estática vs varredura real completa
     };
     
-    static constexpr float kSizeMinFrameRatio = 0.05f;
-    static constexpr float kSizeMaxFrameRatio = 0.95f;
+    static constexpr float kSizeMinSeconds = 0.035f;
+    static constexpr float kSizeMaxNormalSeconds = 0.900f;
+    static constexpr float kSizeMaxExtendedSeconds = 3.200f;
     static constexpr size_t kFdnOrder = CGV_FDN_ORDER;
 
     // Utilitário de Presets Internos
@@ -172,6 +175,9 @@ public:
     float getLoopEnergy() const { return loopEnergy_; }
     float getSafetyGain() const { return lastSafetyGain_; }
     size_t getMainDelayFrames() const { return mainDelaySize_; }
+    bool isInitialized() const { return initialized_; }
+    static float sizeToSeconds(float normalized, float scale = 1.0f);
+    static float secondsToSize(float seconds, float scale = 1.0f);
 
 private:
     bool initialized_ = false;
@@ -193,6 +199,7 @@ private:
     
     // Controle Granular Estendido
     cgv_dsp::FastPRNG prng_;
+    cgv_dsp::FastPRNG modulationPrng_;
     float grainJitter_[CGV_NUM_GRAINS] = {0.0f};
     float grainPan_[CGV_NUM_GRAINS] = {0.5f};
     float grainOffsetMs_[CGV_NUM_GRAINS] = {0.0f};
@@ -221,6 +228,9 @@ private:
     // Modulation drift state
     float modDriftL_ = 0.0f;
     float modDriftR_ = 0.0f;
+    float modTargetL_ = 0.0f;
+    float modTargetR_ = 0.0f;
+    float modRandomPhase_ = 0.0f;
     
     // Safety guard loop state
     float loopEnergy_ = 0.0f;
@@ -248,6 +258,16 @@ private:
 
     // Envelope Follower para Ducking do Reverb e do Shimmer
     float duckingEnvState_ = 0.0f;
+
+    float freezeSmoothingCoeff_ = 1.0f;
+    float preDelaySmoothingCoeff_ = 1.0f;
+    float duckAttackCoeff_ = 1.0f;
+    float duckReleaseCoeff_ = 1.0f;
+    float energyCoeff_ = 1.0f;
+    float safetyAttackCoeff_ = 1.0f;
+    float safetyReleaseCoeff_ = 1.0f;
+    float driftLCoeff_ = 1.0f;
+    float driftRCoeff_ = 1.0f;
 
 #if CGV_ENABLE_SHIMMER
     ShimmerPitcher shimmer_;

@@ -43,7 +43,9 @@ void generateNoise(float* left, float* right, int numFrames, float dbFS) {
 
 // Configs do Teste
 const float SAMPLE_RATE = 48000.0f;
-const size_t BUFFER_SIZE = static_cast<size_t>(SAMPLE_RATE * 3.0f); // 3 segundos de max delay
+// Capacity for the explicit 3.2 s acoustic profile; extra memory no longer
+// changes any delay time.
+const size_t BUFFER_SIZE = 800000;
 
 struct TestResult {
     string presetName;
@@ -67,6 +69,11 @@ TestResult runTestForPreset(CloudGreyVerb::Preset preset, const string& presetNa
     CloudGreyVerb cgv;
     vector<float> extBuffer(BUFFER_SIZE, 0.0f);
     cgv.init(SAMPLE_RATE, extBuffer.data(), BUFFER_SIZE);
+    if (!cgv.isInitialized()) {
+        result.passed = false;
+        result.hadNaN = true; // makes initialization failure visible in the report
+        return result;
+    }
 
     CloudGreyVerb::Params p = CloudGreyVerb::getPreset(preset);
     if (shimmerOverride >= 0.0f) {

@@ -3,13 +3,17 @@
 #include "cloud_grey_verb.hpp"
 
 // Alocação estática segura
-static float externalMemory[48000 * 3]; // 3 segundos mono equivalentes
+static float externalMemory[800000]; // capacidade nominal explícita do perfil desktop a 48 kHz
 
 int main() {
     CloudGreyVerb fx;
     
     // 1. Inicializa
-    fx.init(48000.0f, externalMemory, 48000 * 3);
+    fx.init(48000.0f, externalMemory, 800000);
+    if (!fx.isInitialized()) {
+        std::cerr << "FAIL: memória insuficiente para o perfil acústico nominal." << std::endl;
+        return 1;
+    }
     
     // 2. Define o preset seguro inicial
     fx.setParams(CloudGreyVerb::getPreset(CloudGreyVerb::Preset::BassAmbientWash));

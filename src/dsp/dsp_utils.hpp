@@ -68,6 +68,13 @@ inline float lerp(float a, float b, float t) {
     return a + (b - a) * t;
 }
 
+// One-pole interpolation coefficient for a time constant expressed in seconds.
+// This keeps envelope/smoothing timing invariant when the sample rate changes.
+inline float timeConstantCoefficient(float seconds, float sampleRate) {
+    if (seconds <= 0.0f || sampleRate <= 0.0f) return 1.0f;
+    return 1.0f - expf(-1.0f / (seconds * sampleRate));
+}
+
 // Matriz Hadamard 4x4 normalizada. A escala de 0.5 torna a matriz
 // ortogonal (H * H^T = I), preservando a energia dentro de uma FDN.
 // Os temporários permitem usar o mesmo vetor como entrada e saída.

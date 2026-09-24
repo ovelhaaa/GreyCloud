@@ -149,7 +149,7 @@ CloudGreyVerbEditor::CloudGreyVerbEditor (CloudGreyVerbProcessor& p)
     cards.push_back(std::make_unique<CardComponent>("Tone / Decay"));
     addAndMakeVisible(cards.back().get());
     addRotaryControl("damping", "Damping");
-    addRotaryControl("lowDamping", "Low Damp");
+    addRotaryControl("lowDamping", "Low Cut");
     addRotaryControl("tone", "Tone");
 
     cards.push_back(std::make_unique<CardComponent>("Modulation"));

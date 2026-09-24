@@ -66,7 +66,7 @@ Sugerimos focar na audição musical para validar a transição teórica -> prá
 Para evitar crescimento explosivo (runaway feedback) na FDN – um problema comum em matrizes recirculantes –, implementamos um Energy Guard lento:
 1. Ele mensura a energia quadrada normalizada do vetor injetado nas linhas de atraso.
 2. Com um filtro passa-baixa (LPF) extremamente lento (`0.9995`), ele rastreia a RMS do loop em janelas longas.
-3. Se a energia excede `0.55`, ele calcula um ganho de redução (Safety Gain) para trazer o loop de volta aos níveis sadios.
+3. Se a energia suavizada excede `0.04`, ele calcula um ganho de redução (Safety Gain) para trazer o loop de volta aos níveis sadios. O limiar considera o headroom e a saturação já aplicados no loop; material nominal permanece abaixo dele.
 4. O valor máximo de clipping do limiteur também atua secundariamente via `dsp::softClip()` em allpasses e na saída do loop.
 Você pode visualizar a atuação deste limitador verificando o valor *Safety Gain* na UI do testador WASM.
 
