@@ -35,6 +35,7 @@ struct CloudGreyVerbEarlyTestAccess;
 #endif
 
 #if CLOUD_GREY_PROFILE_H5_LOW_CPU
+    #define CGV_PREDELAY_CAPACITY_SECONDS 0.25f
     #define CGV_NUM_GRAINS 3
     #define CGV_NUM_ALLPASS 2
     #define CGV_NUM_LOOP_ALLPASS 0
@@ -46,6 +47,7 @@ struct CloudGreyVerbEarlyTestAccess;
         #define CGV_ENABLE_SHIMMER 0
     #endif
 #elif CLOUD_GREY_PROFILE_H7_HIGH_QUALITY
+    #define CGV_PREDELAY_CAPACITY_SECONDS 2.0f
     #define CGV_NUM_GRAINS 4
     #define CGV_NUM_ALLPASS 4
     #define CGV_NUM_LOOP_ALLPASS 1
@@ -57,6 +59,7 @@ struct CloudGreyVerbEarlyTestAccess;
         #define CGV_ENABLE_SHIMMER 1
     #endif
 #elif CLOUD_GREY_PROFILE_DESKTOP_STUDIO
+    #define CGV_PREDELAY_CAPACITY_SECONDS 8.0f
     #define CGV_NUM_GRAINS 6
     #define CGV_NUM_ALLPASS 4
     #define CGV_NUM_LOOP_ALLPASS 1
@@ -68,6 +71,8 @@ struct CloudGreyVerbEarlyTestAccess;
         #define CGV_ENABLE_SHIMMER 1
     #endif
 #else // H5_BALANCED
+    // Also the default for the WASM build: do not reserve desktop history.
+    #define CGV_PREDELAY_CAPACITY_SECONDS 1.0f
     #define CGV_NUM_GRAINS 4
     #define CGV_NUM_ALLPASS 4
     #define CGV_NUM_LOOP_ALLPASS 1
@@ -173,10 +178,9 @@ public:
     static constexpr float kSizeMaxNormalSeconds = 0.900f;
     static constexpr float kSizeMaxExtendedSeconds = 3.200f;
     static constexpr float kManualPreDelayMaximumSeconds = 0.200f;
-    // A quarter note at the minimum supported 60 BPM is one second and the
-    // 2/1 division is eight quarter notes. Keep this physical capacity in
-    // lockstep with the VST tempo-sync contract.
-    static constexpr float kPreDelayCapacitySeconds = 8.0f;
+    // Profile-owned history budget. Desktop supports 2/1 at 60 BPM (8 s);
+    // embedded/WASM profiles deliberately clamp sync targets to their budget.
+    static constexpr float kPreDelayCapacitySeconds = CGV_PREDELAY_CAPACITY_SECONDS;
     static constexpr size_t kFdnOrder = CGV_FDN_ORDER;
 
     // Canonical factory preset catalogue. getPreset remains for source
@@ -219,6 +223,9 @@ public:
     // neighbours relative to the oldest requested sample in the ring.
     static float earlyMaxRequestedSeconds();
     static size_t earlyDelayCapacityFrames(float sampleRate);
+    // Exact float count required by init() for this build profile/sample rate.
+    // This keeps hosts from guessing a large pool and is used by capacity tests.
+    static size_t requiredMemoryFloats(float sampleRate);
 
 private:
     // Single acoustic specification for the feed-forward early field.  Profile

@@ -102,11 +102,13 @@ void CloudGreyVerbProcessor::setCurrentProgram (int index)
     if (index >= 0 && index < getNumPrograms())
     {
         currentPresetIndex = index;
-        applyFactoryPresetToParameters(parameters,
-                                       CloudGreyVerb::getFactoryPreset(static_cast<size_t>(index)));
+        const auto& preset = CloudGreyVerb::getFactoryPreset(static_cast<size_t>(index));
+        presetTransactionGeneration.fetch_add (1, std::memory_order_acq_rel); // odd: APVTS transaction open
+        applyFactoryPresetToParameters(parameters, preset);
         // Publish the request after the complete APVTS transaction, so the
         // audio thread never starts a transition against half a preset.
-        requestPresetTransition();
+        publishPresetTarget(preset);
+        presetTransactionGeneration.fetch_add (1, std::memory_order_release); // even: complete snapshot published
     }
 }
 
@@ -132,13 +134,13 @@ void CloudGreyVerbProcessor::prepareToPlay (double sampleRate, int samplesPerBlo
     presetTransitionSamplesRemaining = 0;
     presetTransitionSamplesTotal = 0;
 
-    // Prepared outside the callback. The pools include the 8 s physical
-    // pre-delay capacity at 192 kHz as well as independent normal/HQ state.
-    size_t requiredFloats = 6000000;
+    // Exact profile/sample-rate-derived pools. This is deliberately not a
+    // desktop-sized magic allocation for H5/H7/WASM builds.
+    const size_t requiredFloats = CloudGreyVerb::requiredMemoryFloats(static_cast<float>(sampleRate));
     dspMemoryNormal.resize(requiredFloats, 0.0f);
     
     // For HQ mode (2x oversampling), we need to handle 2x sample rate without halving max delay times.
-    size_t requiredFloatsHQ = requiredFloats * 2;
+    const size_t requiredFloatsHQ = CloudGreyVerb::requiredMemoryFloats(static_cast<float>(sampleRate * 2.0));
     dspMemoryHQ.resize(requiredFloatsHQ, 0.0f);
     
     dspCoreNormal.init(static_cast<float>(sampleRate), dspMemoryNormal.data(), requiredFloats);
@@ -178,24 +180,35 @@ void CloudGreyVerbProcessor::requestPresetTransition()
     presetTransitionRequested.store (true, std::memory_order_release);
 }
 
+void CloudGreyVerbProcessor::publishPresetTarget (const CloudGreyVerb::FactoryPreset& preset)
+{
+    const int next = 1 - pendingPresetTargetIndex.load (std::memory_order_relaxed);
+    auto target = preset.dsp;
+    target.clipOutput = false;
+    pendingPresetTargets[next] = { target, preset.hqMode };
+    pendingPresetTargetIndex.store (next, std::memory_order_release);
+    pendingPresetTargetPublished.store (true, std::memory_order_release);
+    requestPresetTransition();
+}
+
 int CloudGreyVerbProcessor::getPresetTransitionLengthInSamples (double seconds) const
 {
     return juce::jmax (1, juce::roundToInt (currentSampleRate * seconds));
 }
 
-void CloudGreyVerbProcessor::resetDspStateForPresetChange()
+void CloudGreyVerbProcessor::resetDspStateForTransition (bool targetHq)
 {
-    if (coresReady) {
-        dspCoreNormal.reset();
+    if (! coresReady) return;
+    // Only wet state changes. Dry/PDC input history is intentionally retained
+    // so latency and dry continuity survive preset and HQ transitions.
+    if (targetHq) {
         dspCoreHQ.reset();
+        if (oversampling != nullptr) oversampling->reset();
+    } else {
+        dspCoreNormal.reset();
+        latencyCompensationL.reset();
+        latencyCompensationR.reset();
     }
-    latencyCompensationL.reset();
-    latencyCompensationR.reset();
-    transitionDryDelayL.reset();
-    transitionDryDelayR.reset();
-
-    if (oversampling != nullptr)
-        oversampling->reset();
 }
 
 void CloudGreyVerbProcessor::applyPresetTransition (juce::AudioBuffer<float>& buffer)
@@ -232,7 +245,9 @@ void CloudGreyVerbProcessor::applyPresetTransition (juce::AudioBuffer<float>& bu
 
         // Fade wet only. The dry reference has the same fixed latency policy
         // as the processor output, so a preset reset never mutes dry audio.
-        const float dryGain = std::sqrt (1.0f - currentDspParams.mix) * currentDspParams.outputGain;
+        const float dryGain = currentDspParams.inputGain
+                            * std::sqrt (1.0f - currentDspParams.mix)
+                            * currentDspParams.outputGain;
         for (int channel = 0; channel < numChannels; ++channel)
         {
             const float dry = transitionDryBuffer.getReadPointer(channel)[sample] * dryGain;
@@ -247,9 +262,12 @@ void CloudGreyVerbProcessor::applyPresetTransition (juce::AudioBuffer<float>& bu
             if (stage == PresetTransitionStage::fadeOut)
             {
                 shouldResetDsp = true;
+                // Finish this block at zero wet, while preserving the delayed
+                // dry path. The old code zeroed the complete output here.
                 for (int restSample = sample + 1; restSample < numSamples; ++restSample)
                     for (int channel = 0; channel < numChannels; ++channel)
-                        buffer.getWritePointer (channel)[restSample] = 0.0f;
+                        buffer.getWritePointer (channel)[restSample]
+                            = transitionDryBuffer.getReadPointer(channel)[restSample] * dryGain;
             }
             else
             {
@@ -262,7 +280,9 @@ void CloudGreyVerbProcessor::applyPresetTransition (juce::AudioBuffer<float>& bu
 
     if (shouldResetDsp)
     {
-        resetDspStateForPresetChange();
+        resetDspStateForTransition (transitionTarget.hqMode);
+        currentDspParams = transitionTarget.params;
+        currentDspHqMode = transitionTarget.hqMode;
         presetTransitionSamplesTotal = getPresetTransitionLengthInSamples (0.008);
         presetTransitionSamplesRemaining = presetTransitionSamplesTotal;
         presetTransitionStage.store (static_cast<int> (PresetTransitionStage::fadeIn), std::memory_order_release);
@@ -291,12 +311,7 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     auto totalNumInputChannels  = getTotalNumInputChannels();
     auto totalNumOutputChannels = getTotalNumOutputChannels();
 
-    if (presetTransitionRequested.exchange (false, std::memory_order_acq_rel))
-    {
-        presetTransitionSamplesRemaining = 0;
-        presetTransitionSamplesTotal = 0;
-        presetTransitionStage.store (static_cast<int> (PresetTransitionStage::fadeOut), std::memory_order_release);
-    }
+    const bool presetRequested = presetTransitionRequested.exchange (false, std::memory_order_acq_rel);
 
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, buffer.getNumSamples());
@@ -306,6 +321,7 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     if (!coresReady)
         return;
 
+    const auto transactionBefore = presetTransactionGeneration.load (std::memory_order_acquire);
     // Update DSP parameters from VTS
     CloudGreyVerb::Params p;
     p.mix = parameters.getRawParameterValue("mix")->load();
@@ -337,6 +353,17 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     bool sizeSync = parameters.getRawParameterValue("sizeSync")->load() > 0.5f;
     int syncDivision = static_cast<int>(parameters.getRawParameterValue("syncDivision")->load());
 
+    const auto transactionAfter = presetTransactionGeneration.load (std::memory_order_acquire);
+    if ((transactionBefore & 1u) != 0 || transactionBefore != transactionAfter)
+    {
+        // A program update overlapped this callback: keep the last complete
+        // state until its published target begins the transition.
+        p = currentDspParams;
+        hqMode = currentDspHqMode;
+        preDelaySync = false;
+        sizeSync = false;
+    }
+
     if (preDelaySync || sizeSync) {
         float bpm = 120.0f;
         if (auto* playHead = getPlayHead()) {
@@ -361,27 +388,33 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     }
 
     auto transitionStage = static_cast<PresetTransitionStage> (presetTransitionStage.load (std::memory_order_acquire));
-    const bool holdPreviousDspState = transitionStage == PresetTransitionStage::fadeOut;
-    const auto paramsToProcess = holdPreviousDspState ? currentDspParams : p;
-    const auto hqModeToProcess = holdPreviousDspState ? currentDspHqMode : hqMode;
-
-    if (! holdPreviousDspState)
+    if (presetRequested)
     {
-        // HQ cores deliberately do not share tail memory. Resetting the
-        // incoming core makes an OFF->ON->OFF sequence deterministic instead
-        // of resurrecting an old inactive tail. The reported maximum latency
-        // remains fixed and normal mode retains matching internal delay.
-        if (currentDspHqMode != hqMode)
-        {
-            if (hqMode) {
-                dspCoreHQ.reset();
-                if (oversampling != nullptr) oversampling->reset();
-            } else {
-                dspCoreNormal.reset();
-                latencyCompensationL.reset();
-                latencyCompensationR.reset();
-            }
-        }
+        transitionTarget = pendingPresetTargetPublished.exchange (false, std::memory_order_acq_rel)
+            ? pendingPresetTargets[pendingPresetTargetIndex.load (std::memory_order_acquire)]
+            : TransitionTarget { p, hqMode };
+        presetTransitionSamplesRemaining = 0;
+        presetTransitionSamplesTotal = 0;
+        presetTransitionStage.store (static_cast<int> (PresetTransitionStage::fadeOut), std::memory_order_release);
+        transitionStage = PresetTransitionStage::fadeOut;
+    }
+    else if (transitionStage == PresetTransitionStage::idle && hqMode != currentDspHqMode)
+    {
+        transitionTarget = { p, hqMode };
+        presetTransitionSamplesRemaining = 0;
+        presetTransitionSamplesTotal = 0;
+        presetTransitionStage.store (static_cast<int> (PresetTransitionStage::fadeOut), std::memory_order_release);
+        transitionStage = PresetTransitionStage::fadeOut;
+    }
+    const bool holdPreviousDspState = transitionStage == PresetTransitionStage::fadeOut;
+    const bool useTransitionTarget = transitionStage == PresetTransitionStage::fadeIn;
+    const auto paramsToProcess = holdPreviousDspState ? currentDspParams
+                               : (useTransitionTarget ? transitionTarget.params : p);
+    const auto hqModeToProcess = holdPreviousDspState ? currentDspHqMode
+                               : (useTransitionTarget ? transitionTarget.hqMode : hqMode);
+
+    if (! holdPreviousDspState && ! useTransitionTarget)
+    {
         currentDspParams = p;
         currentDspHqMode = hqMode;
     }
@@ -399,6 +432,7 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
             transitionDryDelayR.pushSample(0, inR);
         }
     }
+    lastRuntimePreDelaySeconds.store (p.preDelaySeconds, std::memory_order_relaxed);
 
     if (hqModeToProcess) {
         dspCoreHQ.setParams(paramsToProcess);

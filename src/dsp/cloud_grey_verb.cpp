@@ -112,6 +112,35 @@ size_t CloudGreyVerb::earlyDelayCapacityFrames(float sampleRate) {
            + kHermiteGuardFrames;
 }
 
+size_t CloudGreyVerb::requiredMemoryFloats(float sampleRate) {
+    if (sampleRate <= 0.0f) return 0;
+    const auto frames = [sampleRate](float seconds) {
+        return static_cast<size_t>(ceilf(seconds * sampleRate)) + 4u;
+    };
+    const size_t granulSize = frames(0.500f);
+    size_t diffuserL[4] = {};
+    constexpr float diffuserSeconds[4] = {0.007f, 0.011f, 0.017f, 0.029f};
+    diffuserL[0] = cgv_dsp::nextPrime(frames(diffuserSeconds[0])) + 1;
+    diffuserL[1] = cgv_dsp::nextPrime(frames(diffuserSeconds[1])) + 1;
+#if CGV_NUM_ALLPASS > 2
+    diffuserL[2] = cgv_dsp::nextPrime(frames(diffuserSeconds[2])) + 1;
+    diffuserL[3] = cgv_dsp::nextPrime(frames(diffuserSeconds[3])) + 1;
+#endif
+    size_t result = 2 * granulSize + 2 * (frames(kPreDelayCapacitySeconds) + 4)
+                  + 2 * earlyDelayCapacityFrames(sampleRate);
+    for (int i = 0; i < CGV_NUM_ALLPASS; ++i)
+        result += diffuserL[i] + cgv_dsp::nextPrime(diffuserL[i] + 5);
+#if CGV_NUM_LOOP_ALLPASS > 0
+    constexpr float loopSeconds[4] = {0.0047f, 0.0059f, 0.0073f, 0.0091f};
+    for (int i = 0; i < CGV_FDN_ORDER; ++i)
+        result += cgv_dsp::nextPrime(frames(loopSeconds[i])) + 1;
+#endif
+#if CGV_ENABLE_SHIMMER
+    result += frames(0.064f);
+#endif
+    return result + frames(kSizeMaxExtendedSeconds + 0.020f) * CGV_FDN_ORDER;
+}
+
 #if CGV_ENABLE_SHIMMER
 bool ShimmerPitcher::init(float sampleRate, float* buffer, uint32_t bufferSize) {
     if (!buffer || bufferSize == 0 || sampleRate <= 0.0f) return false;

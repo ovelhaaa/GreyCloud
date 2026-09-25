@@ -22,12 +22,14 @@ latency or dry timing. To avoid stale tails, an HQ change resets the incoming
 core (and its matching oversampling/latency state); it intentionally does not
 attempt to transfer a mathematically identical tail.
 
-Preset changes retain the existing short reset transition policy: the previous
-engine is held while the transition begins, then both engine histories are reset
-before the new acoustic state fades in. Freeze, grain, feedback, and hard-freeze
-state therefore cannot leak into an incompatible preset. `freeze`, `hardFreeze`,
-HQ, sync enable, division, and stereo-core are sampled as discrete values, not
-interpolated DSP controls.
+Preset and HQ changes share one state machine: **wet fade-out → reset/switch
+target wet core → wet fade-in**. No tail is transferred between Normal/HQ.
+Freeze, grain, feedback, and hard-freeze state therefore cannot leak into an
+incompatible preset/core. The dry reference and its fixed PDC delay are never
+reset; dry reconstruction includes input gain, equal-power mix, and output gain.
+Factory selection publishes a complete pending target after its APVTS
+transaction, while the callback holds the preceding complete state if it
+overlaps that transaction. Individual parameter automation remains direct.
 
 ## Tempo-sync contract
 
@@ -38,9 +40,12 @@ value (with 120 BPM as the non-finite fallback).
 
 The visible manual Pre-Delay remains 0–200 ms. A runtime-only
 `Params::preDelaySeconds` override carries sync time to the DSP without changing
-the persisted parameter ID/range. Physical history is 8 seconds plus interpolation
-guard samples: at 60 BPM a quarter note is one second and 2/1 spans eight quarter
-notes. Large target changes use a 20 ms
+the persisted parameter ID/range. Physical history is profile-owned: H5 Low CPU
+= 250 ms, H5 Balanced/WASM = 1 s, H7 = 2 s, Desktop = 8 s. Requests clamp to
+the profile budget, so only Desktop supports 2/1 at 60 BPM. The pool is derived
+as `2*granular + 2*preDelay + 2*early + diffuser + loop-allpass + shimmer + FDN`
+with interpolation guards; `requiredMemoryFloats(sampleRate)` is the shared
+allocation contract and exact-capacity test. Large target changes use a 20 ms
 crossfade between stationary delay taps; small automation changes retain the
 existing one-pole smoothing. This prevents the former silent 200 ms clamp and
 avoids a long moving-read-head Doppler sweep.
@@ -61,9 +66,8 @@ algorithm or parameter identity.
 
 ## Regression coverage
 
-`CloudGreyVerbRealtimeTransitionTest` verifies the division math at 120 BPM,
-valid tempo range/fallback behavior, 8-second capacity, custom-state round trip,
-and finite/bounded output during sync, HQ, freeze, preset, and manual/sync
-transitions across block sizes 16–1024 and 44.1/48/96/192 kHz. Its gross-click
-guard flags a sample-to-sample delta above 8 for a 0.15 input; it is a regression
-tripwire, not a psychoacoustic loudness metric.
+`CloudGreyVerbRealtimeTransitionTest` verifies exact memory capacity, core
+initialization, restore after prepare, real `AudioPlayHead` BPM (120→90→180→72,
+manual↔sync, 1/8→2/1), HQ/preset/freeze coverage, and bounded output across
+block sizes/rates. It measures in-block deltas and N(last)→N+1(first), using a
+baseline-derived click limit alongside the independent runaway guard.
