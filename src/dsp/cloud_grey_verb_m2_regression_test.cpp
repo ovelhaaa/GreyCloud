@@ -24,7 +24,8 @@ struct CloudGreyVerbEarlyTestAccess {
 };
 
 namespace {
-size_t memoryFor(float sr) { return sr <= 96000.0f ? 1600000u : 3200000u; }
+// M4 reserves the official 4 s tempo-sync pre-delay at every rate.
+size_t memoryFor(float sr) { return sr <= 96000.0f ? 4000000u : 6000000u; }
 struct Render { std::vector<float> l, r; };
 
 Render renderEarly(float sr, CloudGreyVerb::Params params, float seconds = 0.06f) {

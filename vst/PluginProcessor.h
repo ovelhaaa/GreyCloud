@@ -62,6 +62,11 @@ private:
     std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;
     juce::dsp::DelayLine<float> latencyCompensationL { 1024 };
     juce::dsp::DelayLine<float> latencyCompensationR { 1024 };
+    // Separate delayed dry reference used only to fade wet state during preset
+    // resets; it prevents the transition envelope from punching a hole in dry.
+    juce::dsp::DelayLine<float> transitionDryDelayL { 1024 };
+    juce::dsp::DelayLine<float> transitionDryDelayR { 1024 };
+    juce::AudioBuffer<float> transitionDryBuffer;
     float currentLatencySamples = 0.0f;
     
     int currentPresetIndex = 0;

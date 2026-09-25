@@ -303,8 +303,9 @@ void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferS
     size_t shimmerSize = 0;
 #endif
     
-    // Allocate predelay (up to 200ms per channel)
-    size_t predelaySize = frames(0.200f);
+    // Manual control stays 0..200 ms, while sync supports 2/1 at 60 BPM.
+    // The guard preserves the interpolation neighbourhood at the longest read.
+    size_t predelaySize = frames(kPreDelayCapacitySeconds) + 4;
 
     // One history per channel serves all feed-forward reflections.  Capacity
     // derives from the actual longest acoustic request, not a hand-tuned
@@ -418,7 +419,13 @@ void CloudGreyVerb::reset() {
     // A reset is also the boundary used by preset changes.  Snap to the
     // already-selected target so a factory program's advertised pre-delay is
     // present from its first wet sample; only live parameter edits glide.
-    preDelaySmoothed_ = fmaxf(1.0f, params_.preDelay * 0.200f * sampleRate_);
+    const float resetPreDelaySeconds = params_.preDelaySeconds >= 0.0f
+        ? params_.preDelaySeconds : params_.preDelay * kManualPreDelayMaximumSeconds;
+    preDelaySmoothed_ = fmaxf(1.0f, fminf(kPreDelayCapacitySeconds * sampleRate_, resetPreDelaySeconds * sampleRate_));
+    preDelayTargetFrames_ = preDelaySmoothed_;
+    preDelayPreviousFrames_ = preDelaySmoothed_;
+    preDelayCrossfadeSamplesRemaining_ = 0;
+    preDelayCrossfadeSamplesTotal_ = 0;
 #if CGV_NUM_LOOP_ALLPASS > 0
     for (int i = 0; i < CGV_FDN_ORDER; ++i)
         fdnLoopAp_[i].clear();
@@ -491,6 +498,7 @@ void CloudGreyVerb::setParams(const Params& p) {
     params_.inputGain = clampParam(params_.inputGain, 0.0f, 2.0f);
     params_.outputGain = clampParam(params_.outputGain, 0.0f, 2.0f);
     params_.preDelay = clampParam(params_.preDelay, 0.0f, 1.0f);
+    params_.preDelaySeconds = clampParam(params_.preDelaySeconds, -1.0f, kPreDelayCapacitySeconds);
     params_.stereoWidth = clampParam(params_.stereoWidth, 0.0f, 2.0f);
     params_.lowDamping = clampParam(params_.lowDamping, 0.0f, 1.0f);
     params_.sizeScale = clampParam(params_.sizeScale, 1.0f,
@@ -500,6 +508,21 @@ void CloudGreyVerb::setParams(const Params& p) {
     float m = params_.mix;
     gainDry_ = sqrtf(1.0f - m);
     gainWet_ = sqrtf(m);
+
+    const float requestedPreDelaySeconds = params_.preDelaySeconds >= 0.0f
+        ? params_.preDelaySeconds : params_.preDelay * kManualPreDelayMaximumSeconds;
+    const float requestedPreDelayFrames = fmaxf(1.0f, fminf(kPreDelayCapacitySeconds * sampleRate_, requestedPreDelaySeconds * sampleRate_));
+    if (fabsf(requestedPreDelayFrames - preDelayTargetFrames_) > 0.5f) {
+        // Large jumps use two stationary taps; moving a single read head over
+        // seconds of history produces an obvious Doppler sweep.
+        if (fabsf(requestedPreDelayFrames - preDelaySmoothed_) > sampleRate_ * 0.020f) {
+            preDelayPreviousFrames_ = preDelaySmoothed_;
+            preDelaySmoothed_ = requestedPreDelayFrames;
+            preDelayCrossfadeSamplesTotal_ = static_cast<int>(fmaxf(1.0f, sampleRate_ * 0.020f));
+            preDelayCrossfadeSamplesRemaining_ = preDelayCrossfadeSamplesTotal_;
+        }
+        preDelayTargetFrames_ = requestedPreDelayFrames;
+    }
 
     // O resto será recalculado condicionalmente no processSample() para o smoothing
 
@@ -726,8 +749,7 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     cgv_dsp::sanitize(inR);
     
     // 1.5. Pre-Delay
-    float targetPredelayFrames = params_.preDelay * 0.2f * sampleRate_;
-    preDelaySmoothed_ += preDelaySmoothingCoeff_ * (targetPredelayFrames - preDelaySmoothed_);
+    preDelaySmoothed_ += preDelaySmoothingCoeff_ * (preDelayTargetFrames_ - preDelaySmoothed_);
     if (preDelaySmoothed_ < 1.0f) preDelaySmoothed_ = 1.0f; // minimum 1 sample delay
     
     preDelayL_.write(inL);
@@ -735,6 +757,15 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     
     float pdL = preDelayL_.read(preDelaySmoothed_);
     float pdR = preDelayR_.read(preDelaySmoothed_);
+    if (preDelayCrossfadeSamplesRemaining_ > 0) {
+        const float oldL = preDelayL_.read(preDelayPreviousFrames_);
+        const float oldR = preDelayR_.read(preDelayPreviousFrames_);
+        const float fade = 1.0f - static_cast<float>(preDelayCrossfadeSamplesRemaining_)
+            / static_cast<float>(preDelayCrossfadeSamplesTotal_);
+        pdL = oldL + (pdL - oldL) * fade;
+        pdR = oldR + (pdR - oldR) * fade;
+        --preDelayCrossfadeSamplesRemaining_;
+    }
     float pdMono = (pdL + pdR) * 0.5f;
 
     // Kill-Dry dinâmico na injeção da malha: permite solar por cima da nuvem travada

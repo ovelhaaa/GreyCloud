@@ -62,7 +62,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     params.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"preDelaySync", 1}, "Pre-Delay Sync", false));
     params.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"sizeSync", 1}, "Size Sync", false));
     
-    juce::StringArray syncChoices = { "1/32", "1/16", "1/16T", "1/16D", "1/8", "1/8T", "1/8D", "1/4", "1/4T", "1/4D", "1/2", "1/1", "2/1" };
+    juce::StringArray syncChoices;
+    for (const auto* name : TempoSyncUtils::kDivisionNames)
+        syncChoices.add(name);
     params.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"syncDivision", 1}, "Sync Division", syncChoices, 7)); // Default "1/4"
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"reverseMix", 1}, "Reverse Mix", 0.0f, 1.0f, 0.0f));
@@ -100,9 +102,11 @@ void CloudGreyVerbProcessor::setCurrentProgram (int index)
     if (index >= 0 && index < getNumPrograms())
     {
         currentPresetIndex = index;
-        requestPresetTransition();
         applyFactoryPresetToParameters(parameters,
                                        CloudGreyVerb::getFactoryPreset(static_cast<size_t>(index)));
+        // Publish the request after the complete APVTS transaction, so the
+        // audio thread never starts a transition against half a preset.
+        requestPresetTransition();
     }
 }
 
@@ -128,9 +132,9 @@ void CloudGreyVerbProcessor::prepareToPlay (double sampleRate, int samplesPerBlo
     presetTransitionSamplesRemaining = 0;
     presetTransitionSamplesTotal = 0;
 
-    // 1.6M + 3.2M floats reserve 19.2 MB decimal (about 18.3 MiB) total.
-    // The two pools keep normal and 2x HQ state independent.
-    size_t requiredFloats = 1600000; 
+    // Prepared outside the callback. The pools include the 4 s physical
+    // pre-delay capacity at 192 kHz as well as independent normal/HQ state.
+    size_t requiredFloats = 6000000;
     dspMemoryNormal.resize(requiredFloats, 0.0f);
     
     // For HQ mode (2x oversampling), we need to handle 2x sample rate without halving max delay times.
@@ -160,8 +164,13 @@ void CloudGreyVerbProcessor::prepareToPlay (double sampleRate, int samplesPerBlo
     
     latencyCompensationL.prepare(spec);
     latencyCompensationR.prepare(spec);
+    transitionDryDelayL.prepare(spec);
+    transitionDryDelayR.prepare(spec);
     latencyCompensationL.setDelay(currentLatencySamples);
     latencyCompensationR.setDelay(currentLatencySamples);
+    transitionDryDelayL.setDelay(currentLatencySamples);
+    transitionDryDelayR.setDelay(currentLatencySamples);
+    transitionDryBuffer.setSize(2, samplesPerBlock, false, false, true);
 }
 
 void CloudGreyVerbProcessor::requestPresetTransition()
@@ -182,6 +191,8 @@ void CloudGreyVerbProcessor::resetDspStateForPresetChange()
     }
     latencyCompensationL.reset();
     latencyCompensationR.reset();
+    transitionDryDelayL.reset();
+    transitionDryDelayR.reset();
 
     if (oversampling != nullptr)
         oversampling->reset();
@@ -219,8 +230,15 @@ void CloudGreyVerbProcessor::applyPresetTransition (juce::AudioBuffer<float>& bu
                          / static_cast<float> (presetTransitionSamplesTotal));
         }
 
+        // Fade wet only. The dry reference has the same fixed latency policy
+        // as the processor output, so a preset reset never mutes dry audio.
+        const float dryGain = std::sqrt (1.0f - currentDspParams.mix) * currentDspParams.outputGain;
         for (int channel = 0; channel < numChannels; ++channel)
-            buffer.getWritePointer (channel)[sample] *= gain;
+        {
+            const float dry = transitionDryBuffer.getReadPointer(channel)[sample] * dryGain;
+            const float wet = buffer.getWritePointer(channel)[sample] - dry;
+            buffer.getWritePointer(channel)[sample] = dry + wet * gain;
+        }
 
         --presetTransitionSamplesRemaining;
 
@@ -332,11 +350,9 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
         float syncMs = TempoSyncUtils::getMsFromBpm(bpm, syncDivision);
         
         if (preDelaySync) {
-            // max predelay is 200ms based on engine logic
-            // normalized preDelay: ms / 200.0f
-            // silently clamped as 200ms is the physical buffer limit of the engine
-            float normalized = syncMs / 200.0f;
-            p.preDelay = juce::jlimit(0.0f, 1.0f, normalized);
+            // Keep the persisted manual knob at 0..200 ms. The DSP receives a
+            // separate runtime target backed by its 4 s sync history.
+            p.preDelaySeconds = syncMs / 1000.0f;
         }
         
         if (sizeSync) {
@@ -351,8 +367,37 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
 
     if (! holdPreviousDspState)
     {
+        // HQ cores deliberately do not share tail memory. Resetting the
+        // incoming core makes an OFF->ON->OFF sequence deterministic instead
+        // of resurrecting an old inactive tail. The reported maximum latency
+        // remains fixed and normal mode retains matching internal delay.
+        if (currentDspHqMode != hqMode)
+        {
+            if (hqMode) {
+                dspCoreHQ.reset();
+                if (oversampling != nullptr) oversampling->reset();
+            } else {
+                dspCoreNormal.reset();
+                latencyCompensationL.reset();
+                latencyCompensationR.reset();
+            }
+        }
         currentDspParams = p;
         currentDspHqMode = hqMode;
+    }
+
+    // Keep a latency-matched dry reference for the wet-only preset envelope.
+    // This is preallocated in prepareToPlay and has no callback allocation.
+    for (int i = 0; i < buffer.getNumSamples(); ++i)
+    {
+        const float inL = buffer.getReadPointer(0)[i];
+        const float inR = totalNumOutputChannels > 1 ? buffer.getReadPointer(1)[i] : inL;
+        transitionDryBuffer.setSample(0, i, transitionDryDelayL.popSample(0));
+        transitionDryDelayL.pushSample(0, inL);
+        if (totalNumOutputChannels > 1) {
+            transitionDryBuffer.setSample(1, i, transitionDryDelayR.popSample(0));
+            transitionDryDelayR.pushSample(0, inR);
+        }
     }
 
     if (hqModeToProcess) {
@@ -432,8 +477,10 @@ void CloudGreyVerbProcessor::setStateInformation (const void* data, int sizeInBy
 {
     if (auto xmlState = getXmlFromBinary (data, sizeInBytes))
     {
-        requestPresetTransition();
         parameters.replaceState (juce::ValueTree::fromXml (*xmlState));
+        // Restore is a complete custom APVTS state; do not subsequently apply
+        // factory program zero. Request only after the state is visible.
+        requestPresetTransition();
     }
 }
 

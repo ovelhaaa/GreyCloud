@@ -145,7 +145,8 @@ public:
         int shimmerRatioIndex = 2; // 0=-1oct, 1=+5th, 2=+1oct, 3=+1oct+5th, 4=+2oct
         float inputGain = 1.0f;    // 0.0 a 2.0 -> Compensação / Excitação de entrada
         float outputGain = 1.0f;   // 0.0 a 2.0 -> Saída geral
-        float preDelay = 0.0f;     // 0.0 a 1.0 -> 0ms a 200ms
+        float preDelay = 0.0f;     // Persisted manual control: 0ms a 200ms
+        float preDelaySeconds = -1.0f; // Runtime-only sync override; negative = manual
         float stereoWidth = 1.0f;  // 0.0 a 2.0 -> 0=Mono, 1=Stereo, 2=Extra Wide
         float lowDamping = 0.5f;   // ID legado: Low Cut do feedback. 0=20 Hz, 1=400 Hz
         bool stereoCore = true;    // True: Processa grãos e diffusor em estéreo discreto
@@ -171,6 +172,8 @@ public:
     static constexpr float kSizeMinSeconds = 0.035f;
     static constexpr float kSizeMaxNormalSeconds = 0.900f;
     static constexpr float kSizeMaxExtendedSeconds = 3.200f;
+    static constexpr float kManualPreDelayMaximumSeconds = 0.200f;
+    static constexpr float kPreDelayCapacitySeconds = 4.0f; // 2/1 at 60 BPM
     static constexpr size_t kFdnOrder = CGV_FDN_ORDER;
 
     // Canonical factory preset catalogue. getPreset remains for source
@@ -279,6 +282,10 @@ private:
     
     cgv_dsp::DelayLine preDelayL_, preDelayR_;
     float preDelaySmoothed_ = 0.0f;
+    float preDelayTargetFrames_ = 0.0f;
+    float preDelayPreviousFrames_ = 0.0f;
+    int preDelayCrossfadeSamplesRemaining_ = 0;
+    int preDelayCrossfadeSamplesTotal_ = 0;
 
     // Early Energy Layer: a feed-forward, post-pre-delay reflection network.
     // It deliberately has no granular dependency, feedback loop or modulation.

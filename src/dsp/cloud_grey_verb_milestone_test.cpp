@@ -20,8 +20,8 @@ struct IrMetrics {
 };
 
 size_t memoryFor(float sampleRate) {
-    // The production desktop allocation is 1.6M at <=96 kHz and 3.2M for HQ.
-    return sampleRate <= 96000.0f ? 1600000u : 3200000u;
+    // M4 reserves the official 4 s tempo-sync pre-delay at every rate.
+    return sampleRate <= 96000.0f ? 4000000u : 6000000u;
 }
 
 IrMetrics render(float sampleRate, CloudGreyVerb::Preset preset, float seconds = 8.0f) {

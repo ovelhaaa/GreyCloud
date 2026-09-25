@@ -17,7 +17,7 @@ namespace {
 constexpr float kSr = 48000.0f;
 constexpr int kFrames = 48000 * 8;
 constexpr double kPi = 3.14159265358979323846;
-size_t memoryFor() { return 1600000u; }
+size_t memoryFor() { return 4000000u; }
 const char* renderMode(const CloudGreyVerb::FactoryPreset& p) { return p.hqMode ? "hq_approx" : "normal"; }
 
 struct Metrics {
