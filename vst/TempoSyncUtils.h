@@ -5,7 +5,8 @@
 
 namespace TempoSyncUtils {
     // Single tempo-sync contract: APVTS order, conversion and tests share it.
-    // 60..240 BPM through 2/1 is supported; the longest request is 4 seconds.
+    // 60..240 BPM through 2/1 is supported. At 60 BPM, 2/1 is eight
+    // quarter notes, so the longest request is 8 seconds.
     inline constexpr float kMinimumSupportedBpm = 60.0f;
     inline constexpr float kMaximumSupportedBpm = 240.0f;
     inline constexpr float kFallbackBpm = 120.0f;

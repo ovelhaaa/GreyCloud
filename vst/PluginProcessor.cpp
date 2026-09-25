@@ -132,7 +132,7 @@ void CloudGreyVerbProcessor::prepareToPlay (double sampleRate, int samplesPerBlo
     presetTransitionSamplesRemaining = 0;
     presetTransitionSamplesTotal = 0;
 
-    // Prepared outside the callback. The pools include the 4 s physical
+    // Prepared outside the callback. The pools include the 8 s physical
     // pre-delay capacity at 192 kHz as well as independent normal/HQ state.
     size_t requiredFloats = 6000000;
     dspMemoryNormal.resize(requiredFloats, 0.0f);

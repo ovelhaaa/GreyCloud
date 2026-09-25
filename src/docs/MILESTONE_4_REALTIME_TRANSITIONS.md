@@ -38,8 +38,9 @@ value (with 120 BPM as the non-finite fallback).
 
 The visible manual Pre-Delay remains 0–200 ms. A runtime-only
 `Params::preDelaySeconds` override carries sync time to the DSP without changing
-the persisted parameter ID/range. Physical history is 4 seconds plus interpolation
-guard samples, derived from 2/1 at 60 BPM. Large target changes use a 20 ms
+the persisted parameter ID/range. Physical history is 8 seconds plus interpolation
+guard samples: at 60 BPM a quarter note is one second and 2/1 spans eight quarter
+notes. Large target changes use a 20 ms
 crossfade between stationary delay taps; small automation changes retain the
 existing one-pole smoothing. This prevents the former silent 200 ms clamp and
 avoids a long moving-read-head Doppler sweep.
@@ -61,7 +62,7 @@ algorithm or parameter identity.
 ## Regression coverage
 
 `CloudGreyVerbRealtimeTransitionTest` verifies the division math at 120 BPM,
-valid tempo range/fallback behavior, 4-second capacity, custom-state round trip,
+valid tempo range/fallback behavior, 8-second capacity, custom-state round trip,
 and finite/bounded output during sync, HQ, freeze, preset, and manual/sync
 transitions across block sizes 16–1024 and 44.1/48/96/192 kHz. Its gross-click
 guard flags a sample-to-sample delta above 8 for a 0.15 input; it is a regression

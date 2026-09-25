@@ -173,7 +173,10 @@ public:
     static constexpr float kSizeMaxNormalSeconds = 0.900f;
     static constexpr float kSizeMaxExtendedSeconds = 3.200f;
     static constexpr float kManualPreDelayMaximumSeconds = 0.200f;
-    static constexpr float kPreDelayCapacitySeconds = 4.0f; // 2/1 at 60 BPM
+    // A quarter note at the minimum supported 60 BPM is one second and the
+    // 2/1 division is eight quarter notes. Keep this physical capacity in
+    // lockstep with the VST tempo-sync contract.
+    static constexpr float kPreDelayCapacitySeconds = 8.0f;
     static constexpr size_t kFdnOrder = CGV_FDN_ORDER;
 
     // Canonical factory preset catalogue. getPreset remains for source

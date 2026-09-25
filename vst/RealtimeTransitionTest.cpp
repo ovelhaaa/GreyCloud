@@ -63,7 +63,9 @@ int main() {
         if (!std::isfinite(TempoSyncUtils::getMsFromBpm(bpm, 12))) return 2;
     if (!closeEnough(TempoSyncUtils::getMsFromBpm(0.f, 7), 500.f)
         || !closeEnough(TempoSyncUtils::getMsFromBpm(std::numeric_limits<float>::quiet_NaN(), 7), 500.f)) return 3;
-    if (CloudGreyVerb::kPreDelayCapacitySeconds * 1000.f < TempoSyncUtils::getMsFromBpm(TempoSyncUtils::kMinimumSupportedBpm, 12)) return 4;
+    if (!closeEnough(TempoSyncUtils::getMsFromBpm(TempoSyncUtils::kMinimumSupportedBpm, 12), 8000.f)
+        || !closeEnough(CloudGreyVerb::kPreDelayCapacitySeconds, 8.0f)
+        || CloudGreyVerb::kPreDelayCapacitySeconds * 1000.f < TempoSyncUtils::getMsFromBpm(TempoSyncUtils::kMinimumSupportedBpm, 12)) return 4;
 
     for (int blockSize : {16, 32, 64, 128, 256, 512, 1024})
         if (!processTransitionMatrix(blockSize, 44100.0)) return 5;
