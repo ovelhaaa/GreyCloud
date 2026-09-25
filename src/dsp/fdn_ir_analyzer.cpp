@@ -26,7 +26,7 @@ struct PresetSpec {
     CloudGreyVerb::Preset preset;
 };
 
-constexpr std::array<PresetSpec, 9> kPresets = {{
+constexpr std::array<PresetSpec, 10> kPresets = {{
     {"SmallCloudRoom", CloudGreyVerb::Preset::SmallCloudRoom},
     {"BassAmbientWash", CloudGreyVerb::Preset::BassAmbientWash},
     {"FrozenOrganPad", CloudGreyVerb::Preset::FrozenOrganPad},
@@ -36,6 +36,7 @@ constexpr std::array<PresetSpec, 9> kPresets = {{
     {"AlwaysOnSubtle", CloudGreyVerb::Preset::AlwaysOnSubtle},
     {"BrightCloud", CloudGreyVerb::Preset::BrightCloud},
     {"ShimmerCloud", CloudGreyVerb::Preset::ShimmerCloud},
+    {"ReverseSmear", CloudGreyVerb::Preset::ReverseSmear},
 }};
 
 struct Options {

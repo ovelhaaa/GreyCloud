@@ -30,6 +30,6 @@ int main() {
     const auto& greyhole = CloudGreyVerb::getFactoryPreset(CloudGreyVerb::Preset::GreyholeDelayVerb);
     const auto& shimmer = CloudGreyVerb::getFactoryPreset(CloudGreyVerb::Preset::ShimmerCloud);
     if (!same(bass.dsp.preDelay,.10f) || !same(bass.dsp.stereoWidth,1.5f)
-        || !same(greyhole.dsp.preDelay,.20f) || !shimmer.hqMode || !same(shimmer.dsp.stereoWidth,1.4f)) return 5;
+        || !same(greyhole.dsp.preDelay,.18f) || !shimmer.hqMode || !same(shimmer.dsp.stereoWidth,1.4f)) return 5;
     std::cout << "Factory preset parity: 10 canonical states verified\n";
 }

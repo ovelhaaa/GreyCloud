@@ -48,13 +48,19 @@ using P = CloudGreyVerb::Params;
 const std::array<FP, 10>& factoryPresets() {
     static const std::array<FP, 10> presets = {{
         [] { P p; p.mix=.40f;p.texture=.32f;p.feedback=.44f;p.size=.35f;p.diffusion=.66f;p.modDepth=.05f;p.modRate=.12f;p.damping=.52f;p.lowDamping=.48f;p.tone=.56f;p.outputGain=.96f; return FP{"SmallCloudRoom",p}; }(),
-        [] { P p; p.mix=.36f;p.texture=.48f;p.feedback=.58f;p.size=.56f;p.diffusion=.60f;p.modDepth=.10f;p.modRate=.12f;p.damping=.68f;p.lowDamping=.68f;p.tone=.44f;p.inputGain=.90f;p.outputGain=.94f;p.preDelay=.10f;p.stereoWidth=1.5f; return FP{"BassAmbientWash",p}; }(),
+        // Restore useful low-mid tail body without changing the wide-but-Mid-led
+        // character. Output compensation keeps preset changes manageable.
+        [] { P p; p.mix=.36f;p.texture=.48f;p.feedback=.58f;p.size=.56f;p.diffusion=.60f;p.modDepth=.10f;p.modRate=.12f;p.damping=.68f;p.lowDamping=.63f;p.tone=.44f;p.inputGain=.90f;p.outputGain=.92f;p.preDelay=.10f;p.stereoWidth=1.5f; return FP{"BassAmbientWash",p}; }(),
         [] { P p; p.mix=.70f;p.texture=.85f;p.freeze=1.f;p.feedback=.65f;p.size=.70f;p.diffusion=.80f;p.modDepth=.40f;p.modRate=.05f;p.damping=.40f;p.lowDamping=.60f;p.tone=.45f;p.stereoWidth=1.2f; return FP{"FrozenOrganPad",p}; }(),
-        [] { P p; p.mix=.60f;p.texture=.58f;p.feedback=.75f;p.size=.76f;p.sizeScale=3.f;p.diffusion=.72f;p.modDepth=.36f;p.modRate=.22f;p.damping=.62f;p.lowDamping=.58f;p.tone=.52f;p.outputGain=.92f;p.preDelay=.20f; return FP{"GreyholeDelayVerb",p}; }(),
-        [] { P p; p.mix=.55f;p.texture=.75f;p.feedback=.75f;p.size=.84f;p.sizeScale=3.5f;p.diffusion=.70f;p.modDepth=.26f;p.modRate=.08f;p.damping=.32f;p.lowDamping=.60f;p.tone=.32f;p.inputGain=.76f;p.outputGain=.78f;p.preDelay=.30f; return FP{"DarkLongCloud",p}; }(),
+        // A 36 ms pre-delay retains Greyhole depth while reducing the perceived gap.
+        [] { P p; p.mix=.60f;p.texture=.58f;p.feedback=.75f;p.size=.76f;p.sizeScale=3.f;p.diffusion=.72f;p.modDepth=.36f;p.modRate=.22f;p.damping=.62f;p.lowDamping=.58f;p.tone=.52f;p.outputGain=.92f;p.preDelay=.18f; return FP{"GreyholeDelayVerb",p}; }(),
+        // Slightly more high-frequency survival differentiates cinematic darkness
+        // from a simply muffled tail; output trim avoids using level as brightness.
+        [] { P p; p.mix=.55f;p.texture=.75f;p.feedback=.75f;p.size=.84f;p.sizeScale=3.5f;p.diffusion=.70f;p.modDepth=.26f;p.modRate=.08f;p.damping=.35f;p.lowDamping=.60f;p.tone=.35f;p.inputGain=.76f;p.outputGain=.78f;p.preDelay=.30f; return FP{"DarkLongCloud",p}; }(),
         [] { P p; p.mix=.50f;p.texture=.05f;p.feedback=.50f;p.size=.25f;p.diffusion=.20f;p.modDepth=.90f;p.modRate=.80f;p.damping=.50f;p.tone=.50f; return FP{"GlitchSmear",p}; }(),
         [] { P p; p.mix=.25f;p.texture=.20f;p.feedback=.28f;p.size=.20f;p.diffusion=.46f;p.modDepth=.02f;p.modRate=.10f;p.damping=.50f;p.lowDamping=.52f;p.tone=.50f;p.outputGain=.98f;p.preDelay=.05f;p.stereoWidth=.8f; return FP{"AlwaysOnSubtle",p}; }(),
-        [] { P p; p.mix=.50f;p.texture=.60f;p.feedback=.72f;p.size=.60f;p.diffusion=.72f;p.modDepth=.30f;p.modRate=.28f;p.damping=.66f;p.lowDamping=.56f;p.tone=.72f;p.outputGain=.96f;p.preDelay=.10f;p.stereoWidth=1.2f; return FP{"BrightCloud",p}; }(),
+        // Air comes from a clear, diffuse tail rather than a hard tilt boost.
+        [] { P p; p.mix=.50f;p.texture=.60f;p.feedback=.70f;p.size=.60f;p.diffusion=.72f;p.modDepth=.30f;p.modRate=.28f;p.damping=.64f;p.lowDamping=.56f;p.tone=.68f;p.outputGain=.96f;p.preDelay=.10f;p.stereoWidth=1.2f; return FP{"BrightCloud",p}; }(),
         [] { P p; p.mix=.55f;p.texture=.58f;p.feedback=.60f;p.size=.62f;p.diffusion=.72f;p.modDepth=.16f;p.modRate=.10f;p.damping=.52f;p.lowDamping=.56f;p.tone=.58f;p.shimmer=.20f;p.inputGain=.82f;p.outputGain=.90f;p.preDelay=.15f;p.stereoWidth=1.4f; return FP{"ShimmerCloud",p,true}; }(),
         [] { P p; p.mix=.65f;p.texture=.60f;p.feedback=.70f;p.size=.50f;p.diffusion=.60f;p.modDepth=.40f;p.modRate=.20f;p.damping=.60f;p.lowDamping=.50f;p.tone=.50f;p.stereoWidth=1.2f;p.reverseMix=1.f;p.grainScan=1.f; return FP{"ReverseSmear",p}; }()
     }};
