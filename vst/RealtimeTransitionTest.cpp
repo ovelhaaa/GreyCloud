@@ -2,7 +2,9 @@
 #include "TempoSyncUtils.h"
 #include <algorithm>
 #include <cmath>
+#include <initializer_list>
 #include <iostream>
+#include <utility>
 
 namespace {
 bool closeEnough(float a, float b, float e = .01f) { return std::abs(a - b) <= e; }
@@ -17,8 +19,33 @@ public:
         PositionInfo p; p.setBpm(bpm); return p;
     }
 };
+struct Metrics {
+    float peak = 0.0f;
+    float inside = 0.0f;
+    float cross[2] {};
+    float last[2] {};
+    bool hasPreviousBlock = false;
+};
+struct ClickLimits {
+    float inside = 0.0f;
+    float cross = 0.0f;
+};
+ClickLimits clickLimits(float baseline) {
+    // The floor permits harmless floating-point/modulation noise. The multiplier
+    // leaves substantial headroom over the transition-free measured baseline,
+    // while a clearly discontinuous 0.5-scale jump still fails this test.
+    return { std::max(.035f, baseline * 6.0f),
+             std::max(.035f, baseline * 8.0f) };
+}
+bool bounded(const Metrics& metrics, const ClickLimits& limits) {
+    // Independent guards: runaway signal, in-block click, boundary click.
+    return metrics.peak < 16.0f
+        && metrics.inside < limits.inside
+        && metrics.cross[0] < limits.cross
+        && metrics.cross[1] < limits.cross;
+}
 bool run(CloudGreyVerbProcessor& p, juce::MidiBuffer& midi, int n, int ordinal,
-         float& peak, float& inside, float& cross, float& last) {
+         Metrics& metrics) {
     juce::AudioBuffer<float> b(2, n);
     for (int i = 0; i < n; ++i) {
         const float x = .15f * std::sin(float((ordinal * n + i) * .019));
@@ -29,19 +56,21 @@ bool run(CloudGreyVerbProcessor& p, juce::MidiBuffer& midi, int n, int ordinal,
         const auto* d = b.getReadPointer(ch);
         for (int i = 0; i < n; ++i) {
             if (!std::isfinite(d[i])) return false;
-            peak = std::max(peak, std::abs(d[i]));
-            if (i) inside = std::max(inside, std::abs(d[i] - d[i - 1]));
+            metrics.peak = std::max(metrics.peak, std::abs(d[i]));
+            if (i) metrics.inside = std::max(metrics.inside, std::abs(d[i] - d[i - 1]));
         }
-        if (ordinal) cross = std::max(cross, std::abs(d[0] - last));
-        if (!ch) last = d[n - 1];
+        if (metrics.hasPreviousBlock)
+            metrics.cross[ch] = std::max(metrics.cross[ch], std::abs(d[0] - metrics.last[ch]));
+        metrics.last[ch] = d[n - 1];
     }
+    metrics.hasPreviousBlock = true;
     return true;
 }
 bool matrix(int n, double rate) {
     CloudGreyVerbProcessor p; p.prepareToPlay(rate, n);
     if (!p.areCoresReadyForTest()) return false;
     TestPlayHead host; p.setPlayHead(&host); juce::MidiBuffer midi;
-    float peak = 0, inside = 0, cross = 0, last = 0, baseline = 0;
+    Metrics metrics; float baseline = 0;
     for (int block = 0; block < 112; ++block) {
         if (block == 8) set(p, "hqMode", 1); if (block == 20) set(p, "hqMode", 0);
         if (block == 28) p.setCurrentProgram(7); // Bright
@@ -51,30 +80,62 @@ bool matrix(int n, double rate) {
         if (block == 72) set(p, "hardFreeze", 1); if (block == 80) set(p, "hardFreeze", 0);
         if (block == 84) { set(p, "hardFreeze", 1); p.setCurrentProgram(7); }
         if (block == 96) set(p, "hardFreeze", 0);
-        if (!run(p, midi, n, block, peak, inside, cross, last)) return false;
-        if (block < 8) baseline = std::max(baseline, inside);
+        if (!run(p, midi, n, block, metrics)) return false;
+        if (block < 8) baseline = std::max(baseline, metrics.inside);
     }
-    // Cross-block N(last)->N+1(first) guard, separate from runaway guard.
-    return peak < 16.f && inside < 8.f && cross < std::max(.50f, baseline * 12.f);
+    const auto limits = clickLimits(baseline);
+    std::cout << "matrix " << n << " @ " << rate << " Hz: baseline=" << baseline
+              << ", in-block=" << metrics.inside << '/' << limits.inside
+              << ", cross L=" << metrics.cross[0] << '/' << limits.cross
+              << ", R=" << metrics.cross[1] << '/' << limits.cross << '\n';
+    return bounded(metrics, limits);
 }
 bool hostTempo() {
     CloudGreyVerbProcessor p; p.prepareToPlay(48000, 64);
     if (!p.areCoresReadyForTest()) return false;
     TestPlayHead host; p.setPlayHead(&host); juce::MidiBuffer midi;
-    float peak = 0, inside = 0, cross = 0, last = 0;
+    Metrics metrics;
     set(p, "preDelay", 1); // Manual maximum must remain distinguishable from sync.
-    if (!run(p, midi, 64, 200, peak, inside, cross, last) || p.getLastRuntimePreDelaySecondsForTest() >= 0) return false;
+    if (!run(p, midi, 64, 200, metrics) || p.getLastRuntimePreDelaySecondsForTest() >= 0) return false;
     set(p, "preDelaySync", 1); set(p, "syncDivision", 4); // 1/8
     for (double bpm : {120., 90., 180., 72.}) {
         host.bpm = bpm;
-        if (!run(p, midi, 64, int(bpm), peak, inside, cross, last)
+        if (!run(p, midi, 64, int(bpm), metrics)
             || !closeEnough(p.getLastRuntimePreDelaySecondsForTest(), .5f * 60.f / float(bpm))) return false;
     }
     set(p, "preDelaySync", 0);
-    if (!run(p, midi, 64, 201, peak, inside, cross, last) || p.getLastRuntimePreDelaySecondsForTest() >= 0) return false;
+    if (!run(p, midi, 64, 201, metrics) || p.getLastRuntimePreDelaySecondsForTest() >= 0) return false;
     set(p, "preDelaySync", 1); set(p, "syncDivision", 12); host.bpm = 72;
-    return run(p, midi, 64, 202, peak, inside, cross, last)
+    return run(p, midi, 64, 202, metrics)
         && closeEnough(p.getLastRuntimePreDelaySecondsForTest(), 8.f * 60.f / 72.f);
+}
+bool stateRestore() {
+    CloudGreyVerbProcessor source; source.prepareToPlay(48000, 64);
+    set(source, "hqMode", 1); set(source, "preDelaySync", 1); set(source, "sizeSync", 1);
+    set(source, "syncDivision", 12); set(source, "sizeScale", 2.5f);
+    set(source, "mix", .71f); set(source, "feedback", .63f); set(source, "stereoWidth", 1.35f);
+    juce::MemoryBlock state; source.getStateInformation(state);
+
+    CloudGreyVerbProcessor restored; restored.prepareToPlay(48000, 64);
+    TestPlayHead host; host.bpm = 90.0; restored.setPlayHead(&host);
+    restored.setStateInformation(state.getData(), int(state.getSize()));
+    if (!restored.areCoresReadyForTest()) return false;
+    for (const auto& expected : std::initializer_list<std::pair<const char*, float>> {
+             {"hqMode", 1}, {"preDelaySync", 1}, {"sizeSync", 1}, {"syncDivision", 12},
+             {"sizeScale", 2.5f}, {"mix", .71f}, {"feedback", .63f}, {"stereoWidth", 1.35f} })
+        if (!closeEnough(restored.getVTS().getRawParameterValue(expected.first)->load(), expected.second, .0001f)) return false;
+
+    juce::MidiBuffer midi; Metrics metrics; float baseline = 0.0f;
+    for (int block = 0; block < 48; ++block) {
+        if (!run(restored, midi, 64, 300 + block, metrics)) return false;
+        if (block >= 24) baseline = std::max(baseline, metrics.inside);
+    }
+    const auto limits = clickLimits(baseline);
+    std::cout << "restore: baseline=" << baseline << ", in-block=" << metrics.inside
+              << '/' << limits.inside << ", cross L=" << metrics.cross[0] << '/' << limits.cross
+              << ", R=" << metrics.cross[1] << '/' << limits.cross << '\n';
+    return closeEnough(restored.getLastRuntimePreDelaySecondsForTest(), 8.f * 60.f / 90.f)
+        && bounded(metrics, limits);
 }
 }
 int main() {
@@ -86,9 +147,6 @@ int main() {
     for (int n : {16, 64, 256, 1024}) if (!matrix(n, 48000)) return 3;
     for (double r : {44100., 96000., 192000.}) if (!matrix(64, r)) return 4;
     if (!hostTempo()) return 5;
-    CloudGreyVerbProcessor a; a.prepareToPlay(48000, 64); set(a, "mix", .71f);
-    juce::MemoryBlock state; a.getStateInformation(state);
-    CloudGreyVerbProcessor b; b.prepareToPlay(48000, 64); b.setStateInformation(state.getData(), int(state.getSize()));
-    if (!b.areCoresReadyForTest() || !closeEnough(a.getVTS().getRawParameterValue("mix")->load(), b.getVTS().getRawParameterValue("mix")->load())) return 6;
-    std::cout << "Realtime cross-block, BPM mock, core init and restore verified\n";
+    if (!stateRestore()) return 6;
+    std::cout << "Realtime L/R cross-block, BPM mock, exact core init and state restore verified\n";
 }

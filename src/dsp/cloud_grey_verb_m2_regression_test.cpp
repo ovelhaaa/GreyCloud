@@ -24,12 +24,12 @@ struct CloudGreyVerbEarlyTestAccess {
 };
 
 namespace {
-// M4 reserves the official 4 s tempo-sync pre-delay at every rate.
-size_t memoryFor(float sr) { return sr <= 96000.0f ? 4000000u : 6000000u; }
 struct Render { std::vector<float> l, r; };
 
 Render renderEarly(float sr, CloudGreyVerb::Params params, float seconds = 0.06f) {
-    std::vector<float> memory(memoryFor(sr), 0.0f);
+    // Every profile must initialize from its exact published pool, rather than
+    // passing through a desktop-sized test-only over-allocation.
+    std::vector<float> memory(CloudGreyVerb::requiredMemoryFloats(sr), 0.0f);
     CloudGreyVerb verb; verb.init(sr, memory.data(), memory.size());
     if (!verb.isInitialized()) throw std::runtime_error("early test init failed");
     verb.setParams(params); verb.reset();
@@ -72,6 +72,8 @@ constexpr const char* profileName() {
 int main() {
     int failures = 0;
     auto check = [&](bool ok, const char* message) { if (!ok) { std::cerr << "FAIL [" << profileName() << "]: " << message << '\n'; ++failures; } };
+    std::cout << "PROFILE [" << profileName() << "]: requiredMemoryFloats(48000)="
+              << CloudGreyVerb::requiredMemoryFloats(48000.0f) << '\n';
     const auto preset = CloudGreyVerb::getPreset(CloudGreyVerb::Preset::SmallCloudRoom);
 
     // Deterministic time-domain contract: capacity comes from active acoustic taps plus the Hermite guard.

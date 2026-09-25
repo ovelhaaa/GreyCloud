@@ -332,8 +332,8 @@ void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferS
     size_t shimmerSize = 0;
 #endif
     
-    // Manual control stays 0..200 ms, while sync supports the full 8 s 2/1
-    // request at 60 BPM.
+    // Manual control stays 0..200 ms. Sync requests are clamped by this
+    // build profile's documented history capacity (only Desktop reaches 8 s).
     // The guard preserves the interpolation neighbourhood at the longest read.
     size_t predelaySize = frames(kPreDelayCapacitySeconds) + 4;
 
