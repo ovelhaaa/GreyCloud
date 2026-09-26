@@ -427,7 +427,14 @@ void CloudGreyVerb::reset() {
         grainPan_[i] = prng_.randFloat();
         grainOffsetMs_[i] = 5.0f + prng_.randFloat() * 35.0f;
         grainAnchorPos_[i] = 0.0f;
-        grainPhaseLocal_[i] = static_cast<float>(i) / static_cast<float>(CGV_NUM_GRAINS);
+        // Start slightly off the perfect i/N quadrature so a fresh reset (or
+        // unfreeze) does not briefly re-introduce the even, mechanical grid
+        // before the per-grain rate desync has time to diverge.
+        float startPhase = static_cast<float>(i) / static_cast<float>(CGV_NUM_GRAINS)
+                         + (prng_.randFloat() - 0.5f) * 0.05f;
+        startPhase = fmodf(startPhase, 1.0f);
+        if (startPhase < 0.0f) startPhase += 1.0f;
+        grainPhaseLocal_[i] = startPhase;
         grainLenMult_[i] = 1.0f;
         grainDensityMult_[i] = 1.0f;
         grainAmpJitter_[i] = 1.0f;
