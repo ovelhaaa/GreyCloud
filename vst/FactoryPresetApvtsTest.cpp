@@ -63,13 +63,15 @@ int main() {
         if (!p || p->getName(64) != c.name || !equal(p->getNormalisableRange().start,c.lo) || !equal(p->getNormalisableRange().end,c.hi) || !equal(p->convertFrom0to1(p->getDefaultValue()),c.def)) return 10;
     }
     const char* choices[] = { "-1 Oct", "+5th", "+1 Oct", "+1 Oct & 5th", "+2 Oct" };
-    auto* shimmerRatio = dynamic_cast<juce::AudioParameterChoice*>(processor.getVTS().getParameter("shimmerRatio"));
-    auto* division = dynamic_cast<juce::AudioParameterChoice*>(processor.getVTS().getParameter("syncDivision"));
+    auto* shimmerRatioParam = processor.getVTS().getParameter("shimmerRatio");
+    auto* divisionParam = processor.getVTS().getParameter("syncDivision");
+    auto* shimmerRatio = dynamic_cast<juce::AudioParameterChoice*>(shimmerRatioParam);
+    auto* division = dynamic_cast<juce::AudioParameterChoice*>(divisionParam);
     if (!shimmerRatio || !division || shimmerRatio->getName(64) != "Shimmer Ratio"
         || division->getName(64) != "Sync Division" || shimmerRatio->choices.size() != 5
         || division->choices.size() != TempoSyncUtils::kDivisionNames.size()
-        || shimmerRatio->convertFrom0to1(shimmerRatio->getDefaultValue()) != 2.0f
-        || division->convertFrom0to1(division->getDefaultValue()) != 7.0f) return 11;
+        || shimmerRatio->convertFrom0to1(shimmerRatioParam->getDefaultValue()) != 2.0f
+        || division->convertFrom0to1(divisionParam->getDefaultValue()) != 7.0f) return 11;
     for (int i=0;i<5;++i) if (shimmerRatio->choices[i] != choices[i]) return 12;
     for (size_t i = 0; i < TempoSyncUtils::kDivisionNames.size(); ++i)
         if (division->choices[static_cast<int>(i)] != TempoSyncUtils::kDivisionNames[i]) return 20;
@@ -77,9 +79,10 @@ int main() {
     const BoolContract bools[] = { {"stereoCore", "Stereo Core", true}, {"hardFreeze", "Hard Freeze", false},
         {"hqMode", "HQ Mode", false}, {"preDelaySync", "Pre-Delay Sync", false}, {"sizeSync", "Size Sync", false} };
     for (const auto& c : bools) {
-        auto* p = dynamic_cast<juce::AudioParameterBool*>(processor.getVTS().getParameter(c.id));
+        auto* base = processor.getVTS().getParameter(c.id);
+        auto* p = dynamic_cast<juce::AudioParameterBool*>(base);
         if (p == nullptr || p->getName(64) != c.name
-            || (p->convertFrom0to1(p->getDefaultValue()) > .5f) != c.def) return 19;
+            || (p->convertFrom0to1(base->getDefaultValue()) > .5f) != c.def) return 19;
     }
     if (processor.getVTS().getParameter("mix")->getText(.5f, 16) != "50 %"
         || processor.getVTS().getParameter("preDelay")->getText(.5f, 16) != "100 ms"
