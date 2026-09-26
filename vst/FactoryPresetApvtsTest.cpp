@@ -84,13 +84,20 @@ static int runChecks() {
         if (p == nullptr || p->getName(64) != c.name
             || (p->convertFrom0to1(base->getDefaultValue()) > .5f) != c.def) return 19;
     }
-    if (processor.getVTS().getParameter("mix")->getText(.5f, 16) != "50 %"
-        || processor.getVTS().getParameter("preDelay")->getText(.5f, 16) != "100 ms"
-        || processor.getVTS().getParameter("preDelay")->getText(1.0f, 16) != "200 ms"
-        || processor.getVTS().getParameter("inputGain")->getText(.5f, 16) != "0.0 dB"
-        || processor.getVTS().getParameter("inputGain")->getText(0.0f, 16) != "-∞ dB"
-        || processor.getVTS().getParameter("inputGain")->getText(1.0f, 16) != "6.0 dB"
-        || processor.getVTS().getParameter("feedback")->getText(.5f, 16) != "47 %") return 13;
+    struct TextContract { const char* id; float value; const char* expected; };
+    const TextContract texts[] = {
+        {"mix", .5f, "50 %"}, {"preDelay", .5f, "100 ms"}, {"preDelay", 1.0f, "200 ms"},
+        {"inputGain", .5f, "0.0 dB"}, {"inputGain", 0.0f, "-∞ dB"}, {"inputGain", 1.0f, "6.0 dB"},
+        {"feedback", .5f, "47 %"}
+    };
+    for (const auto& t : texts) {
+        const auto actual = processor.getVTS().getParameter(t.id)->getText(t.value, 16);
+        if (actual != t.expected) {
+            std::cout << "text mismatch " << t.id << " @ " << t.value
+                      << ": got [" << actual << "] expected [" << t.expected << "]\n";
+            return 13;
+        }
+    }
     // Slider double-click reset uses this conversion. In particular, a gain
     // default is plain 1.0, not its normalized .5 representation.
     for (const auto* id : { "inputGain", "outputGain", "stereoWidth", "feedback", "mix" }) {
