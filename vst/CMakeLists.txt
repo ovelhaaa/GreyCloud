@@ -154,3 +154,18 @@ add_executable(CloudGreyVerbOfflineMetricsTest
 target_compile_features(CloudGreyVerbOfflineMetricsTest PRIVATE cxx_std_17)
 target_include_directories(CloudGreyVerbOfflineMetricsTest PRIVATE ../src/dsp)
 add_test(NAME CloudGreyVerbOfflineMetricsTest COMMAND CloudGreyVerbOfflineMetricsTest)
+
+# JUCE treats narrow string literals as UTF-8, and several user-facing labels
+# use that (for example the "-∞ dB" gain text). MSVC otherwise reads the
+# sources in the system code page and mangles those labels, so force UTF-8 for
+# both the source and execution charsets on the plugin and its JUCE-side tests.
+if (MSVC)
+    foreach(cgv_target
+            NimbusReverbPlugin
+            CloudGreyVerbFactoryPresetApvtsTest
+            CloudGreyVerbRealtimeTransitionTest)
+        if (TARGET ${cgv_target})
+            target_compile_options(${cgv_target} PRIVATE /utf-8)
+        endif()
+    endforeach()
+endif()
