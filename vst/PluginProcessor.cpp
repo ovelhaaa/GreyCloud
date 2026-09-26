@@ -704,12 +704,17 @@ void CloudGreyVerbProcessor::setStateInformation (const void* data, int sizeInBy
     if (auto xmlState = getXmlFromBinary (data, sizeInBytes))
     {
         const auto restoredState = juce::ValueTree::fromXml (*xmlState);
+        // ValueTree XML round-trips properties as strings, so accept both an
+        // integral var and its textual form before validating the index.
         const auto storedIndex = restoredState.getProperty ("factoryPresetIndex");
-        const auto validIndex = (storedIndex.isInt() || storedIndex.isInt64())
-            ? static_cast<int> (storedIndex) : -1;
+        int numericIndex = -1;
+        if (storedIndex.isInt() || storedIndex.isInt64())
+            numericIndex = static_cast<int> (storedIndex);
+        else if (storedIndex.isString())
+            numericIndex = storedIndex.toString().getIntValue();
         // Pre-M5 sessions have no metadata; invalid data safely retains the
         // historical default base instead of exposing an arbitrary program.
-        currentPresetIndex = validIndex >= 0 && validIndex < getNumPrograms() ? validIndex : 0;
+        currentPresetIndex = numericIndex >= 0 && numericIndex < getNumPrograms() ? numericIndex : 0;
         presetTransactionGeneration.fetch_add (1, std::memory_order_acq_rel);
         parameters.replaceState (restoredState);
         const auto target = makeDspSnapshotFromParameters();
