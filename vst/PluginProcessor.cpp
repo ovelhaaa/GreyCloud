@@ -2,6 +2,8 @@
 #include "PluginEditor.h"
 #include "TempoSyncUtils.h"
 
+#include <cmath>
+
 namespace {
 // The sole FactoryPreset -> APVTS mapping.  Keep this list exhaustive: it is
 // exercised by the JUCE-side parity test, including the non-DSP persisted flags.
@@ -33,24 +35,30 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"mix", 1}, "Mix", 0.0f, 1.0f, 0.5f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"texture", 1}, "Texture", 0.0f, 1.0f, 0.5f));
+    const auto percentText = [] (float v, int) { return juce::String (juce::roundToInt (v * 100.0f)) + " %"; };
+    const auto msText = [] (float v, int) { return juce::String (juce::roundToInt (v * 200.0f)) + " ms"; };
+    const auto gainText = [] (float v, int) { return v <= 0.00001f ? juce::String ("-∞ dB") : juce::String (20.0f * std::log10 (v), 1) + " dB"; };
+    const auto pct = [&] (const char* id, const char* name, float lo, float hi, float def) {
+        params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{id, 1}, name, juce::NormalisableRange<float>(lo, hi), def, {}, juce::AudioProcessorParameter::genericParameter, percentText));
+    };
+    pct("mix", "Mix", 0.0f, 1.0f, 0.5f);
+    pct("texture", "Texture", 0.0f, 1.0f, 0.5f);
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"freeze", 1}, "Freeze", 0.0f, 1.0f, 0.0f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"feedback", 1}, "Feedback", 0.0f, 0.94f, 0.5f));
+    pct("feedback", "Feedback", 0.0f, 0.94f, 0.5f);
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"size", 1}, "Size", 0.0f, 1.0f, 0.5f));
     // Persisted policy for exceptional Greyhole-scale spaces; it is not a UI control.
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"sizeScale", 1}, "Size Scale", 1.0f, CloudGreyVerb::kSizeMaxExtendedSeconds / CloudGreyVerb::kSizeMaxNormalSeconds, 1.0f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"diffusion", 1}, "Diffusion", 0.0f, 1.0f, 0.5f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"modDepth", 1}, "Mod Depth", 0.0f, 1.0f, 0.2f));
+    pct("diffusion", "Diffusion", 0.0f, 1.0f, 0.5f);
+    pct("modDepth", "Mod Depth", 0.0f, 1.0f, 0.2f);
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"modRate", 1}, "Mod Rate", 0.0f, 1.0f, 0.2f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"damping", 1}, "Damping", 0.0f, 1.0f, 0.5f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"lowDamping", 1}, "Low Cut", 0.0f, 1.0f, 0.5f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"tone", 1}, "Tone", 0.0f, 1.0f, 0.5f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"shimmer", 1}, "Shimmer", 0.0f, 1.0f, 0.0f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"inputGain", 1}, "Input Gain", 0.0f, 2.0f, 1.0f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"outputGain", 1}, "Output Gain", 0.0f, 2.0f, 1.0f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"preDelay", 1}, "Pre-Delay", 0.0f, 1.0f, 0.0f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"stereoWidth", 1}, "Stereo Width", 0.0f, 2.0f, 1.0f));
+    pct("shimmer", "Shimmer", 0.0f, 1.0f, 0.0f);
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"inputGain", 1}, "Input Gain", juce::NormalisableRange<float>(0.0f, 2.0f), 1.0f, {}, juce::AudioProcessorParameter::genericParameter, gainText));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"outputGain", 1}, "Output Gain", juce::NormalisableRange<float>(0.0f, 2.0f), 1.0f, {}, juce::AudioProcessorParameter::genericParameter, gainText));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"preDelay", 1}, "Pre-Delay", juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f, {}, juce::AudioProcessorParameter::genericParameter, msText));
+    pct("stereoWidth", "Stereo Width", 0.0f, 2.0f, 1.0f);
 
     juce::StringArray shimmerChoices = { "-1 Oct", "+5th", "+1 Oct", "+1 Oct & 5th", "+2 Oct" };
     params.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"shimmerRatio", 1}, "Shimmer Ratio", shimmerChoices, 2));
@@ -187,6 +195,60 @@ void CloudGreyVerbProcessor::requestPresetTransition()
     presetTransitionRequested.store (true, std::memory_order_release);
 }
 
+bool CloudGreyVerbProcessor::importParameterSnapshot (const juce::NamedValueSet& values)
+{
+    // First pass is deliberately side-effect free. Unknown IDs are retained as
+    // forward-compatible metadata; every known value must be finite and in its
+    // public range, so no malformed file can leave a half-applied preset.
+    for (const auto& property : values)
+    {
+        if (auto* parameter = parameters.getParameter (property.name.toString()))
+        {
+            const auto value = static_cast<float> (static_cast<double> (property.value));
+            if (!std::isfinite (value) || value < parameter->getNormalisableRange().start
+                || value > parameter->getNormalisableRange().end)
+                return false;
+        }
+    }
+    presetTransactionGeneration.fetch_add (1, std::memory_order_acq_rel);
+    for (const auto& property : values)
+        if (auto* parameter = parameters.getParameter (property.name.toString()))
+        {
+            const auto value = static_cast<float> (static_cast<double> (property.value));
+            parameter->setValueNotifyingHost (parameter->convertTo0to1 (value));
+        }
+    const auto target = makeDspSnapshotFromParameters();
+    publishRestoreTarget (target);
+    requestPresetTransition();
+    presetTransactionGeneration.fetch_add (1, std::memory_order_release);
+    return true;
+}
+
+bool CloudGreyVerbProcessor::isCurrentPresetEdited() const
+{
+    if (currentPresetIndex < 0 || currentPresetIndex >= static_cast<int> (CloudGreyVerb::factoryPresetCount())) return true;
+    const auto& f = CloudGreyVerb::getFactoryPreset (static_cast<size_t> (currentPresetIndex));
+    const auto target = makeDspSnapshotFromParameters();
+    const auto& p = target.params;
+    const auto same = [] (float a, float b) { return std::abs (a - b) < 1.0e-6f; };
+    return !(same(p.mix,f.dsp.mix) && same(p.texture,f.dsp.texture) && same(p.freeze,f.dsp.freeze)
+        && same(p.feedback,f.dsp.feedback) && same(p.size,f.dsp.size) && same(p.sizeScale,f.dsp.sizeScale)
+        && same(p.diffusion,f.dsp.diffusion) && same(p.modDepth,f.dsp.modDepth) && same(p.modRate,f.dsp.modRate)
+        && same(p.damping,f.dsp.damping) && same(p.lowDamping,f.dsp.lowDamping) && same(p.tone,f.dsp.tone)
+        && same(p.shimmer,f.dsp.shimmer) && p.shimmerRatioIndex == f.dsp.shimmerRatioIndex
+        && same(p.inputGain,f.dsp.inputGain) && same(p.outputGain,f.dsp.outputGain) && same(p.preDelay,f.dsp.preDelay)
+        && same(p.stereoWidth,f.dsp.stereoWidth) && p.stereoCore == f.dsp.stereoCore && p.hardFreeze == f.dsp.hardFreeze
+        && same(p.reverseMix,f.dsp.reverseMix) && same(p.grainScan,f.dsp.grainScan) && target.hqMode == f.hqMode
+        && target.preDelaySync == f.preDelaySync && target.sizeSync == f.sizeSync && target.syncDivision == f.syncDivisionIndex);
+}
+
+juce::String CloudGreyVerbProcessor::getCurrentPresetDisplayName() const
+{
+    const auto name = (currentPresetIndex >= 0 && currentPresetIndex < static_cast<int> (CloudGreyVerb::factoryPresetCount()))
+        ? juce::String (CloudGreyVerb::getFactoryPreset (static_cast<size_t> (currentPresetIndex)).name) : juce::String ("Custom");
+    return isCurrentPresetEdited() ? name + " • Edited" : name;
+}
+
 void CloudGreyVerbProcessor::publishPresetTarget (const CloudGreyVerb::FactoryPreset& preset)
 {
     const int next = 1 - pendingPresetTargetIndex.load (std::memory_order_relaxed);
@@ -242,6 +304,8 @@ CloudGreyVerb::Params CloudGreyVerbProcessor::resolveRuntimeParams (const Transi
         if (auto* playHead = getPlayHead())
             if (auto pos = playHead->getPosition())
                 if (pos->getBpm().hasValue()) bpm = static_cast<float>(*pos->getBpm());
+        bpm = TempoSyncUtils::sanitizeBpm (bpm);
+        displayBpm.store (bpm, std::memory_order_relaxed);
         const float syncMs = TempoSyncUtils::getMsFromBpm(bpm, target.syncDivision);
         if (target.preDelaySync) p.preDelaySeconds = syncMs / 1000.0f;
         if (target.sizeSync) p.size = CloudGreyVerb::secondsToSize(syncMs / 1000.0f, p.sizeScale);

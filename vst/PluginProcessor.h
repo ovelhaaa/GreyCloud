@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 #include "cloud_grey_verb.hpp"
+#include "TempoSyncUtils.h"
 #include <atomic>
 #include <vector>
 #include <memory>
@@ -39,6 +40,13 @@ public:
 
     juce::AudioProcessorValueTreeState& getVTS() { return parameters; }
     void requestPresetTransition();
+    // UI/file import entry point. Values are already expressed in each
+    // parameter's plain range; this validates everything before one coherent
+    // APVTS commit and one M4 transition publication.
+    bool importParameterSnapshot (const juce::NamedValueSet& values);
+    bool isCurrentPresetEdited() const;
+    juce::String getCurrentPresetDisplayName() const;
+    float getDisplayBpm() const { return displayBpm.load (std::memory_order_relaxed); }
 #if defined(CLOUD_GREY_VERB_TESTING)
     // Test-only inspection of the effective target after state restoration.
     // These declarations are absent from production plugin builds.
@@ -113,6 +121,7 @@ private:
     int presetTransitionSamplesTotal = 0;
     std::atomic<bool> hasProcessedAudio { false };
     std::atomic<float> lastRuntimePreDelaySeconds { -1.0f };
+    mutable std::atomic<float> displayBpm { TempoSyncUtils::kFallbackBpm };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CloudGreyVerbProcessor)
 };

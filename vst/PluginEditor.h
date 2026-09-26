@@ -47,7 +47,7 @@ private:
     juce::String name;
 };
 
-class CloudGreyVerbEditor  : public juce::AudioProcessorEditor, private juce::AudioProcessorParameter::Listener
+class CloudGreyVerbEditor  : public juce::AudioProcessorEditor, private juce::AudioProcessorParameter::Listener, private juce::Timer
 {
 public:
     CloudGreyVerbEditor (CloudGreyVerbProcessor&);
@@ -88,6 +88,9 @@ private:
     std::unique_ptr<juce::Component> nimbusLogo;
 
     juce::ComboBox presetSelector;
+    juce::Label presetStatus;
+    juce::TextButton previousPreset { "◀" }, nextPreset { "▶" };
+    std::unique_ptr<juce::TooltipWindow> tooltipWindow;
 
     void addRotaryControl(const juce::String& paramID, const juce::String& name);
     void addFaderControl(const juce::String& paramID, const juce::String& name);
@@ -101,6 +104,7 @@ private:
     void loadJSONPreset();
     void exportJSONPreset();
     void updateSyncState();
+    void timerCallback() override;
 
     juce::TextButton importButton;
     juce::TextButton exportButton;

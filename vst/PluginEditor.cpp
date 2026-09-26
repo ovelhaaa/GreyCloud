@@ -128,6 +128,12 @@ CloudGreyVerbEditor::CloudGreyVerbEditor (CloudGreyVerbProcessor& p)
     }
     presetSelector.setSelectedId(p.getCurrentProgram() + 1, juce::dontSendNotification);
     presetSelector.onChange = [this, &p] { p.setCurrentProgram(presetSelector.getSelectedId() - 1); };
+    presetStatus.setJustificationType(juce::Justification::centred);
+    presetStatus.setFont(12.0f);
+    addAndMakeVisible(presetStatus);
+    previousPreset.onClick = [this] { audioProcessor.setCurrentProgram((audioProcessor.getCurrentProgram() + audioProcessor.getNumPrograms() - 1) % audioProcessor.getNumPrograms()); };
+    nextPreset.onClick = [this] { audioProcessor.setCurrentProgram((audioProcessor.getCurrentProgram() + 1) % audioProcessor.getNumPrograms()); };
+    addAndMakeVisible(previousPreset); addAndMakeVisible(nextPreset);
 
     addRotaryControl("mix", "Mix");
     addRotaryControl("size", "Size");
@@ -141,9 +147,9 @@ CloudGreyVerbEditor::CloudGreyVerbEditor (CloudGreyVerbProcessor& p)
     addAndMakeVisible(freezeSubgroup.get());
     addRotaryControl("diffusion", "Diffusion");
     addRotaryControl("grainScan", "Grain Scan");
-    addRotaryControl("reverseMix", "Rev Mix");
-    addToggleControl("freeze", "Soft");
-    addToggleControl("hardFreeze", "Hard");
+    addRotaryControl("reverseMix", "Reverse");
+    addToggleControl("freeze", "Freeze");
+    addToggleControl("hardFreeze", "Hard Freeze");
     addToggleControl("stereoCore", "Stereo Core");
 
     cards.push_back(std::make_unique<CardComponent>("Tone / Decay"));
@@ -162,12 +168,12 @@ CloudGreyVerbEditor::CloudGreyVerbEditor (CloudGreyVerbProcessor& p)
     addRotaryControl("shimmer", "Shimmer");
     addChoiceControl("shimmerRatio", "Ratio", true);
 
-    addRotaryControl("preDelay", "PreDelay");
+    addRotaryControl("preDelay", "Pre-Delay");
     addToggleControl("preDelaySync", "Sync");
     addChoiceControl("syncDivision", "Div", true);
     addRotaryControl("stereoWidth", "Width");
-    addFaderControl("inputGain", "In");
-    addFaderControl("outputGain", "Out");
+    addFaderControl("inputGain", "Input");
+    addFaderControl("outputGain", "Output");
     
     addToggleControl("hqMode", "HQ");
 
@@ -178,6 +184,8 @@ CloudGreyVerbEditor::CloudGreyVerbEditor (CloudGreyVerbProcessor& p)
     exportButton.setButtonText("Export JSON");
     exportButton.onClick = [this] { exportJSONPreset(); };
     addAndMakeVisible(exportButton);
+    tooltipWindow = std::make_unique<juce::TooltipWindow>(this, 700);
+    startTimerHz(5);
 
     if (auto* pdSync = audioProcessor.getVTS().getParameter("preDelaySync"))
         pdSync->addListener(this);
@@ -205,7 +213,6 @@ void CloudGreyVerbEditor::updateSyncState()
     if (auto* pdSync = audioProcessor.getVTS().getRawParameterValue("preDelaySync")) {
         bool sync = *pdSync > 0.5f;
         if (auto* pd = getRotary("preDelay")) pd->slider.setEnabled(!sync);
-        if (auto* sd = getChoice("syncDivision")) sd->comboBox.setEnabled(sync);
     }
     
     if (auto* sSync = audioProcessor.getVTS().getRawParameterValue("sizeSync")) {
@@ -241,11 +248,25 @@ void CloudGreyVerbEditor::addRotaryControl(const juce::String& paramID, const ju
     wrapper->slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     wrapper->slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     wrapper->slider.setPopupDisplayEnabled(true, true, this);
+    wrapper->slider.setDoubleClickReturnValue(true, audioProcessor.getVTS().getParameter(paramID)->getDefaultValue());
+    if (auto* parameter = audioProcessor.getVTS().getParameter(paramID))
+        wrapper->slider.textFromValueFunction = [parameter] (double v) { return parameter->getText(parameter->convertTo0to1((float) v), 32); };
+    if (paramID == "size")
+        wrapper->slider.textFromValueFunction = [this] (double v) {
+            const auto* scale = audioProcessor.getVTS().getRawParameterValue("sizeScale");
+            const auto ms = CloudGreyVerb::sizeToSeconds((float) v, scale != nullptr ? scale->load() : 1.0f) * 1000.0f;
+            return juce::String(juce::roundToInt((float) v * 100.0f)) + " %  ≈ " + juce::String(juce::roundToInt(ms)) + " ms";
+        };
     addAndMakeVisible(wrapper->slider);
 
     wrapper->label.setText(name, juce::dontSendNotification);
     wrapper->label.setJustificationType(juce::Justification::centred);
     wrapper->label.setFont(12.0f);
+    if (name == "Texture") wrapper->slider.setTooltip("Changes the cloud from tighter, grainier detail to a smoother smear.");
+    if (name == "Diffusion") wrapper->slider.setTooltip("Controls how quickly reflections blend into a dense reverb field.");
+    if (name == "Low Cut") wrapper->slider.setTooltip("Removes low frequencies from the feedback tail.");
+    if (name == "Grain Scan") wrapper->slider.setTooltip("Moves the granular read position through captured history.");
+    if (name == "Reverse") wrapper->slider.setTooltip("Blends reverse-moving grains into the cloud.");
     addAndMakeVisible(wrapper->label);
 
     wrapper->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
@@ -260,6 +281,9 @@ void CloudGreyVerbEditor::addFaderControl(const juce::String& paramID, const juc
     wrapper->slider.setSliderStyle(juce::Slider::LinearHorizontal);
     wrapper->slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     wrapper->slider.setPopupDisplayEnabled(true, true, this);
+    wrapper->slider.setDoubleClickReturnValue(true, audioProcessor.getVTS().getParameter(paramID)->getDefaultValue());
+    if (auto* parameter = audioProcessor.getVTS().getParameter(paramID))
+        wrapper->slider.textFromValueFunction = [parameter] (double v) { return parameter->getText(parameter->convertTo0to1((float) v), 32); };
     addAndMakeVisible(wrapper->slider);
 
     wrapper->label.setText(name, juce::dontSendNotification);
@@ -277,6 +301,9 @@ void CloudGreyVerbEditor::addToggleControl(const juce::String& paramID, const ju
     auto wrapper = std::make_unique<ToggleControl>();
     wrapper->button.setName(paramID);
     wrapper->button.setButtonText(name);
+    if (paramID == "freeze") wrapper->button.setTooltip("Holds the current cloud while dry input continues normally.");
+    if (paramID == "hardFreeze") wrapper->button.setTooltip("Stops new material entering the frozen reverb state.");
+    if (paramID == "hqMode") wrapper->button.setTooltip("Processes at 2x internal sample rate for higher quality at a higher CPU cost.");
     addAndMakeVisible(wrapper->button);
 
     wrapper->attachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
@@ -364,11 +391,17 @@ void CloudGreyVerbEditor::paint (juce::Graphics& g)
     auto preDelayWidth = juce::roundToInt(rightWidth * 0.32f);
     auto stereoWidth = juce::roundToInt(rightWidth * 0.36f);
 
-    drawFooterGroup(footerLayout.removeFromLeft(preDelayWidth), "PRE DELAY");
+    drawFooterGroup(footerLayout.removeFromLeft(preDelayWidth), "TEMPO SYNC / PRE-DELAY");
     footerLayout.removeFromLeft(groupGap);
     drawFooterGroup(footerLayout.removeFromLeft(stereoWidth), "STEREO FIELD");
     footerLayout.removeFromLeft(groupGap);
     drawFooterGroup(footerLayout, "GAIN");
+}
+
+void CloudGreyVerbEditor::timerCallback()
+{
+    presetStatus.setText(audioProcessor.getCurrentPresetDisplayName(), juce::dontSendNotification);
+    presetSelector.setSelectedId(audioProcessor.getCurrentProgram() + 1, juce::dontSendNotification);
 }
 
 void CloudGreyVerbEditor::resized()
@@ -387,7 +420,11 @@ void CloudGreyVerbEditor::resized()
 
     if (auto* hq = getToggle("hqMode"))
         hq->button.setBounds(header.removeFromRight(scaled(80)).withSizeKeepingCentre(scaled(60), scaled(22)));
-    presetSelector.setBounds(header.removeFromRight(scaled(220)).withSizeKeepingCentre(scaled(200), scaled(24)));
+    auto presetArea = header.removeFromRight(scaled(250));
+    previousPreset.setBounds(presetArea.removeFromLeft(scaled(24)).withSizeKeepingCentre(scaled(22), scaled(22)));
+    nextPreset.setBounds(presetArea.removeFromRight(scaled(24)).withSizeKeepingCentre(scaled(22), scaled(22)));
+    presetSelector.setBounds(presetArea.removeFromTop(scaled(24)).reduced(scaled(2), 0));
+    presetStatus.setBounds(presetArea.withTrimmedTop(scaled(25)));
 
     auto footer = bounds.removeFromBottom(scaled(82));
 
@@ -523,21 +560,14 @@ void CloudGreyVerbEditor::exportJSONPreset()
         if (file.isDirectory() || file.getFileName().isEmpty()) return;
         
         juce::DynamicObject::Ptr presetObj = new juce::DynamicObject();
-        presetObj->setProperty("name", "VST Export");
+        presetObj->setProperty("name", audioProcessor.getCurrentPresetDisplayName());
         
         juce::DynamicObject::Ptr paramsObj = new juce::DynamicObject();
         auto* vts = &audioProcessor.getVTS();
         
-        auto state = vts->copyState();
-        for (auto child : state)
-        {
-            if (child.hasType("PARAM"))
-            {
-                auto id = child.getProperty("id").toString();
-                double val = static_cast<double>(child.getProperty("value"));
-                paramsObj->setProperty(id, val);
-            }
-        }
+        for (auto* parameter : vts->getParameters())
+            if (auto* raw = vts->getRawParameterValue(parameter->getParameterID()))
+                paramsObj->setProperty(parameter->getParameterID(), raw->load());
         
         presetObj->setProperty("params", juce::var(paramsObj.get()));
         
@@ -545,7 +575,7 @@ void CloudGreyVerbEditor::exportJSONPreset()
         presetsArray.add(juce::var(presetObj.get()));
         
         juce::DynamicObject::Ptr rootObj = new juce::DynamicObject();
-        rootObj->setProperty("app", "GreyCloud");
+        rootObj->setProperty("app", "Nimbus");
         rootObj->setProperty("version", 1);
         rootObj->setProperty("presets", juce::var(presetsArray));
         
@@ -577,6 +607,9 @@ void CloudGreyVerbEditor::loadJSONPreset()
         
         auto* obj = jsonObject.getDynamicObject();
         if (!(obj && obj->hasProperty("presets") && jsonObject["presets"].isArray())) return;
+        const auto app = obj->getProperty("app").toString();
+        if (app != "GreyCloud" && app != "Nimbus") return;
+        if (static_cast<int>(obj->getProperty("version")) != 1) return;
 
         auto* presetsArray = jsonObject["presets"].getArray();
         if (!presetsArray || presetsArray->isEmpty()) return;
@@ -607,17 +640,12 @@ void CloudGreyVerbEditor::loadJSONPreset()
                 if (paramsVar.isObject())
                 {
                     auto* paramsObj = paramsVar.getDynamicObject();
-                    auto* vts = &audioProcessor.getVTS();
-                    audioProcessor.requestPresetTransition();
+                    juce::NamedValueSet snapshot;
                     for (auto& prop : paramsObj->getProperties())
-                    {
-                        auto id = prop.name.toString();
-                        if (auto* param = vts->getParameter(id))
-                        {
-                            float normalized = param->convertTo0to1(static_cast<float>(static_cast<double>(prop.value)));
-                            param->setValueNotifyingHost(normalized);
-                        }
-                    }
+                        snapshot.set (prop.name, prop.value);
+                    // The processor validates the complete known subset before
+                    // mutating APVTS, then publishes precisely one M4 target.
+                    audioProcessor.importParameterSnapshot (snapshot);
                 }
             }
         });
