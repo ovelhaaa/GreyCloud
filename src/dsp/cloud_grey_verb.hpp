@@ -286,6 +286,10 @@ private:
     float grainLenMult_[CGV_NUM_GRAINS] = {1.0f};      // 0.7x..1.3x duration
     float grainDensityMult_[CGV_NUM_GRAINS] = {1.0f};  // 0.9x..1.1x phase rate
     float grainAmpJitter_[CGV_NUM_GRAINS] = {1.0f};    // 0.85x..1.0x gain
+    // Applied only to the scan sweep of the read pointer, never to the base
+    // tap/pitch of the material: it decorrelates the scan speed between
+    // simultaneous grains without detuning the source.
+    float grainRateMult_[CGV_NUM_GRAINS] = {1.0f};     // 0.99x..1.01x scan speed
     float freezeSmoothed_ = 0.0f;
 
     // Núcleo Diffuser (Smear Allpasses pré-delay)

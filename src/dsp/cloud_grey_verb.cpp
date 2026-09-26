@@ -431,6 +431,7 @@ void CloudGreyVerb::reset() {
         grainLenMult_[i] = 1.0f;
         grainDensityMult_[i] = 1.0f;
         grainAmpJitter_[i] = 1.0f;
+        grainRateMult_[i] = 1.0f;
     }
     
     if (grainMemoryL_) {
@@ -644,6 +645,7 @@ void CloudGreyVerb::processGranular(float inL, float inR, float lfoDrift, float&
             grainLenMult_[i] = 0.7f + prng_.randFloat() * 0.6f;      // 0.7x..1.3x duração
             grainDensityMult_[i] = 0.9f + prng_.randFloat() * 0.2f;  // 0.9x..1.1x dessincronia
             grainAmpJitter_[i] = 0.85f + prng_.randFloat() * 0.15f;  // 0.85x..1.0x
+            grainRateMult_[i] = 0.99f + prng_.randFloat() * 0.02f;   // 0.99x..1.01x scan speed
 
             float snapReadMs = grainOffsetMs_[i] + grainJitter_[i] + driftMs;
             float snapReadFrames = snapReadMs * (sampleRate_ / 1000.0f);
@@ -664,9 +666,11 @@ void CloudGreyVerb::processGranular(float inL, float inR, float lfoDrift, float&
         if (readFrames < 2.0f) readFrames = 2.0f;
         
         float tapFixoOriginal = static_cast<float>(grainWritePos_) - readFrames;
-        // The scan span follows the grain's own (variable) duration.
-        float anchorScanCompleto = grainAnchorPos_[i] + p * grainFrames;
-        float readPosReverse = grainAnchorPos_[i] - p * grainFrames;
+        // The scan span follows the grain's own (variable) duration; the rate
+        // multiplier only varies scan speed, never the base tap/pitch.
+        float scanOffset = p * grainFrames * grainRateMult_[i];
+        float anchorScanCompleto = grainAnchorPos_[i] + scanOffset;
+        float readPosReverse = grainAnchorPos_[i] - scanOffset;
         
         float readPosForward = cgv_dsp::lerp(tapFixoOriginal, anchorScanCompleto, effectiveScan);
         float readPos = cgv_dsp::lerp(readPosForward, readPosReverse, params_.reverseMix);
