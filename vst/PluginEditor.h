@@ -89,6 +89,7 @@ private:
 
     juce::ComboBox presetSelector;
     juce::Label presetStatus;
+    juce::Label syncFeedback;
     juce::TextButton previousPreset { "◀" }, nextPreset { "▶" };
     std::unique_ptr<juce::TooltipWindow> tooltipWindow;
 

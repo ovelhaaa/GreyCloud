@@ -44,6 +44,10 @@ public:
     // parameter's plain range; this validates everything before one coherent
     // APVTS commit and one M4 transition publication.
     bool importParameterSnapshot (const juce::NamedValueSet& values);
+    // Nimbus v1 preset interchange. These helpers deliberately have no file/UI
+    // dependency so the exact on-disk schema can be regression-tested.
+    juce::var serializePresetJson() const;
+    bool importPresetJson (const juce::var& root, int presetIndex = 0);
     bool isCurrentPresetEdited() const;
     juce::String getCurrentPresetDisplayName() const;
     float getDisplayBpm() const { return displayBpm.load (std::memory_order_relaxed); }
@@ -75,6 +79,8 @@ private:
     CloudGreyVerb::Params resolveRuntimeParams (const TransitionTarget& target) const;
     void publishRestoreTarget (const TransitionTarget& target);
     int getPresetTransitionLengthInSamples (double seconds) const;
+    bool validateSnapshotValue (juce::RangedAudioParameter& parameter,
+                                const juce::var& source, float& plainValue) const;
 
     juce::AudioProcessorValueTreeState parameters;
     

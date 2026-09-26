@@ -131,6 +131,10 @@ CloudGreyVerbEditor::CloudGreyVerbEditor (CloudGreyVerbProcessor& p)
     presetStatus.setJustificationType(juce::Justification::centred);
     presetStatus.setFont(12.0f);
     addAndMakeVisible(presetStatus);
+    syncFeedback.setJustificationType(juce::Justification::centred);
+    syncFeedback.setFont(9.0f);
+    syncFeedback.setTooltip("Shared by Pre-Delay Sync and Size Sync.");
+    addAndMakeVisible(syncFeedback);
     previousPreset.onClick = [this] { audioProcessor.setCurrentProgram((audioProcessor.getCurrentProgram() + audioProcessor.getNumPrograms() - 1) % audioProcessor.getNumPrograms()); };
     nextPreset.onClick = [this] { audioProcessor.setCurrentProgram((audioProcessor.getCurrentProgram() + 1) % audioProcessor.getNumPrograms()); };
     addAndMakeVisible(previousPreset); addAndMakeVisible(nextPreset);
@@ -248,9 +252,11 @@ void CloudGreyVerbEditor::addRotaryControl(const juce::String& paramID, const ju
     wrapper->slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     wrapper->slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     wrapper->slider.setPopupDisplayEnabled(true, true, this);
-    wrapper->slider.setDoubleClickReturnValue(true, audioProcessor.getVTS().getParameter(paramID)->getDefaultValue());
-    if (auto* parameter = audioProcessor.getVTS().getParameter(paramID))
+    if (auto* parameter = audioProcessor.getVTS().getParameter(paramID)) {
+        wrapper->slider.setDoubleClickReturnValue(true,
+            parameter->convertFrom0to1(parameter->getDefaultValue()));
         wrapper->slider.textFromValueFunction = [parameter] (double v) { return parameter->getText(parameter->convertTo0to1((float) v), 32); };
+    }
     if (paramID == "size")
         wrapper->slider.textFromValueFunction = [this] (double v) {
             const auto* scale = audioProcessor.getVTS().getRawParameterValue("sizeScale");
@@ -281,9 +287,11 @@ void CloudGreyVerbEditor::addFaderControl(const juce::String& paramID, const juc
     wrapper->slider.setSliderStyle(juce::Slider::LinearHorizontal);
     wrapper->slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     wrapper->slider.setPopupDisplayEnabled(true, true, this);
-    wrapper->slider.setDoubleClickReturnValue(true, audioProcessor.getVTS().getParameter(paramID)->getDefaultValue());
-    if (auto* parameter = audioProcessor.getVTS().getParameter(paramID))
+    if (auto* parameter = audioProcessor.getVTS().getParameter(paramID)) {
+        wrapper->slider.setDoubleClickReturnValue(true,
+            parameter->convertFrom0to1(parameter->getDefaultValue()));
         wrapper->slider.textFromValueFunction = [parameter] (double v) { return parameter->getText(parameter->convertTo0to1((float) v), 32); };
+    }
     addAndMakeVisible(wrapper->slider);
 
     wrapper->label.setText(name, juce::dontSendNotification);
@@ -402,6 +410,14 @@ void CloudGreyVerbEditor::timerCallback()
 {
     presetStatus.setText(audioProcessor.getCurrentPresetDisplayName(), juce::dontSendNotification);
     presetSelector.setSelectedId(audioProcessor.getCurrentProgram() + 1, juce::dontSendNotification);
+    const auto* division = audioProcessor.getVTS().getRawParameterValue("syncDivision");
+    const int index = juce::jlimit (0, static_cast<int> (TempoSyncUtils::kDivisionNames.size()) - 1,
+                                    division != nullptr ? juce::roundToInt (division->load()) : 7);
+    const float bpm = audioProcessor.getDisplayBpm();
+    const auto ms = TempoSyncUtils::getMsFromBpm (bpm, index);
+    syncFeedback.setText (juce::String (juce::roundToInt (bpm)) + " BPM • "
+                          + TempoSyncUtils::kDivisionNames[index] + " = "
+                          + juce::String (juce::roundToInt (ms)) + " ms", juce::dontSendNotification);
 }
 
 void CloudGreyVerbEditor::resized()
@@ -459,9 +475,11 @@ void CloudGreyVerbEditor::resized()
     auto fPreControls = fPre.withTrimmedTop(scaled(16));
     placeRotary(getRotary("preDelay"), fPreControls.removeFromLeft(scaled(60)), 34, 14);
     fPreControls.removeFromLeft(scaled(2));
+    auto feedbackArea = fPreControls.removeFromBottom(scaled(12));
     auto pdSyncTop = fPreControls.removeFromTop(fPreControls.getHeight() / 2);
     if (auto* pdSync = getToggle("preDelaySync")) pdSync->button.setBounds(pdSyncTop.withSizeKeepingCentre(scaled(56), scaled(20)));
     if (auto* syncDiv = getChoice("syncDivision")) syncDiv->comboBox.setBounds(fPreControls.withSizeKeepingCentre(scaled(56), scaled(20)));
+    syncFeedback.setBounds(feedbackArea.expanded(scaled(38), 0));
 
     footerLayout.removeFromLeft(groupGap);
     auto fStereo = footerLayout.removeFromLeft(stereoGroupWidth).reduced(scaled(4), scaled(5));
@@ -559,32 +577,12 @@ void CloudGreyVerbEditor::exportJSONPreset()
         auto file = chooser.getResult();
         if (file.isDirectory() || file.getFileName().isEmpty()) return;
         
-        juce::DynamicObject::Ptr presetObj = new juce::DynamicObject();
-        presetObj->setProperty("name", audioProcessor.getCurrentPresetDisplayName());
-        
-        juce::DynamicObject::Ptr paramsObj = new juce::DynamicObject();
-        auto* vts = &audioProcessor.getVTS();
-        
-        for (auto* parameter : vts->getParameters())
-            if (auto* raw = vts->getRawParameterValue(parameter->getParameterID()))
-                paramsObj->setProperty(parameter->getParameterID(), raw->load());
-        
-        presetObj->setProperty("params", juce::var(paramsObj.get()));
-        
-        juce::Array<juce::var> presetsArray;
-        presetsArray.add(juce::var(presetObj.get()));
-        
-        juce::DynamicObject::Ptr rootObj = new juce::DynamicObject();
-        rootObj->setProperty("app", "Nimbus");
-        rootObj->setProperty("version", 1);
-        rootObj->setProperty("presets", juce::var(presetsArray));
-        
         juce::FileOutputStream fos(file);
         if (fos.openedOk())
         {
             fos.setPosition(0);
             fos.truncate();
-            juce::JSON::writeToStream(fos, juce::var(rootObj.get()));
+            juce::JSON::writeToStream(fos, audioProcessor.serializePresetJson());
         }
     });
 }
@@ -631,23 +629,9 @@ void CloudGreyVerbEditor::loadJSONPreset()
         {
             if (result <= 0) return;
             int idx = result - 1;
-            auto* pArray = jsonObject["presets"].getArray();
-            if (!pArray) return;
-            auto presetVar = pArray->getReference(idx);
-            if (presetVar.isObject() && presetVar.getDynamicObject()->hasProperty("params"))
-            {
-                auto paramsVar = presetVar.getDynamicObject()->getProperty("params");
-                if (paramsVar.isObject())
-                {
-                    auto* paramsObj = paramsVar.getDynamicObject();
-                    juce::NamedValueSet snapshot;
-                    for (auto& prop : paramsObj->getProperties())
-                        snapshot.set (prop.name, prop.value);
-                    // The processor validates the complete known subset before
-                    // mutating APVTS, then publishes precisely one M4 target.
-                    audioProcessor.importParameterSnapshot (snapshot);
-                }
-            }
+            // The processor owns schema and transactional validation so file
+            // imports cannot differ from the testable JSON contract.
+            audioProcessor.importPresetJson (jsonObject, idx);
         });
     });
 }

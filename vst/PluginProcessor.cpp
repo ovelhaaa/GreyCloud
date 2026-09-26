@@ -39,7 +39,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     const auto msText = [] (float v, int) { return juce::String (juce::roundToInt (v * 200.0f)) + " ms"; };
     const auto gainText = [] (float v, int) { return v <= 0.00001f ? juce::String ("-∞ dB") : juce::String (20.0f * std::log10 (v), 1) + " dB"; };
     const auto pct = [&] (const char* id, const char* name, float lo, float hi, float def) {
-        params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{id, 1}, name, juce::NormalisableRange<float>(lo, hi), def, {}, juce::AudioProcessorParameter::genericParameter, percentText));
+        params.push_back(std::make_unique<juce::AudioParameterFloat>(
+            juce::ParameterID { id, 1 }, name, juce::NormalisableRange<float> (lo, hi), def,
+            juce::AudioParameterFloatAttributes().withStringFromValueFunction(percentText)));
     };
     pct("mix", "Mix", 0.0f, 1.0f, 0.5f);
     pct("texture", "Texture", 0.0f, 1.0f, 0.5f);
@@ -55,9 +57,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"lowDamping", 1}, "Low Cut", 0.0f, 1.0f, 0.5f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"tone", 1}, "Tone", 0.0f, 1.0f, 0.5f));
     pct("shimmer", "Shimmer", 0.0f, 1.0f, 0.0f);
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"inputGain", 1}, "Input Gain", juce::NormalisableRange<float>(0.0f, 2.0f), 1.0f, {}, juce::AudioProcessorParameter::genericParameter, gainText));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"outputGain", 1}, "Output Gain", juce::NormalisableRange<float>(0.0f, 2.0f), 1.0f, {}, juce::AudioProcessorParameter::genericParameter, gainText));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"preDelay", 1}, "Pre-Delay", juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f, {}, juce::AudioProcessorParameter::genericParameter, msText));
+    const auto gainAttributes = juce::AudioParameterFloatAttributes().withStringFromValueFunction(gainText);
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"inputGain", 1}, "Input Gain", juce::NormalisableRange<float>(0.0f, 2.0f), 1.0f, gainAttributes));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"outputGain", 1}, "Output Gain", juce::NormalisableRange<float>(0.0f, 2.0f), 1.0f, gainAttributes));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"preDelay", 1}, "Pre-Delay", juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f,
+        juce::AudioParameterFloatAttributes().withStringFromValueFunction(msText)));
     pct("stereoWidth", "Stereo Width", 0.0f, 2.0f, 1.0f);
 
     juce::StringArray shimmerChoices = { "-1 Oct", "+5th", "+1 Oct", "+1 Oct & 5th", "+2 Oct" };
@@ -204,9 +208,8 @@ bool CloudGreyVerbProcessor::importParameterSnapshot (const juce::NamedValueSet&
     {
         if (auto* parameter = parameters.getParameter (property.name.toString()))
         {
-            const auto value = static_cast<float> (static_cast<double> (property.value));
-            if (!std::isfinite (value) || value < parameter->getNormalisableRange().start
-                || value > parameter->getNormalisableRange().end)
+            float value = 0.0f;
+            if (! validateSnapshotValue (*parameter, property.value, value))
                 return false;
         }
     }
@@ -214,7 +217,9 @@ bool CloudGreyVerbProcessor::importParameterSnapshot (const juce::NamedValueSet&
     for (const auto& property : values)
         if (auto* parameter = parameters.getParameter (property.name.toString()))
         {
-            const auto value = static_cast<float> (static_cast<double> (property.value));
+            float value = 0.0f;
+            const auto valid = validateSnapshotValue (*parameter, property.value, value);
+            jassert (valid); // First pass above guarantees this remains true.
             parameter->setValueNotifyingHost (parameter->convertTo0to1 (value));
         }
     const auto target = makeDspSnapshotFromParameters();
@@ -222,6 +227,90 @@ bool CloudGreyVerbProcessor::importParameterSnapshot (const juce::NamedValueSet&
     requestPresetTransition();
     presetTransactionGeneration.fetch_add (1, std::memory_order_release);
     return true;
+}
+
+bool CloudGreyVerbProcessor::validateSnapshotValue (juce::RangedAudioParameter& parameter,
+                                                    const juce::var& source,
+                                                    float& plainValue) const
+{
+    // juce::var silently coerces strings ("banana" becomes zero), which is
+    // unsafe for an all-or-nothing import. Accept only JSON numbers, except
+    // that boolean parameters also accept native JSON true/false.
+    const auto numeric = source.isInt() || source.isInt64() || source.isDouble();
+    const auto isBool = dynamic_cast<juce::AudioParameterBool*> (&parameter) != nullptr;
+    const auto isChoice = dynamic_cast<juce::AudioParameterChoice*> (&parameter) != nullptr;
+
+    if (isBool && source.isBool())
+        plainValue = static_cast<bool> (source) ? 1.0f : 0.0f;
+    else if (numeric)
+        plainValue = static_cast<float> (static_cast<double> (source));
+    else
+        return false;
+
+    if (! std::isfinite (plainValue)
+        || plainValue < parameter.getNormalisableRange().start
+        || plainValue > parameter.getNormalisableRange().end)
+        return false;
+
+    // Choice values are public indices, not continuously scalable numbers.
+    if (isChoice && plainValue != std::round (plainValue))
+        return false;
+
+    // Numeric JSON remains supported for compatibility with earlier Nimbus
+    // files, but booleans must still be represented unambiguously.
+    if (isBool && plainValue != 0.0f && plainValue != 1.0f)
+        return false;
+
+    return true;
+}
+
+juce::var CloudGreyVerbProcessor::serializePresetJson() const
+{
+    juce::DynamicObject::Ptr preset = new juce::DynamicObject();
+    preset->setProperty ("name", getCurrentPresetDisplayName());
+    juce::DynamicObject::Ptr snapshot = new juce::DynamicObject();
+
+    // APVTS does not own an enumeration API in JUCE 8. The processor owns the
+    // actual parameter list, and raw APVTS values are already plain values.
+    for (auto* parameter : getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (parameter))
+            if (auto* raw = parameters.getRawParameterValue (ranged->getParameterID()))
+                snapshot->setProperty (ranged->getParameterID(), raw->load());
+
+    preset->setProperty ("params", juce::var (snapshot.get()));
+    juce::Array<juce::var> presets;
+    presets.add (juce::var (preset.get()));
+    juce::DynamicObject::Ptr root = new juce::DynamicObject();
+    root->setProperty ("app", "Nimbus");
+    root->setProperty ("version", 1);
+    root->setProperty ("presets", juce::var (presets));
+    return juce::var (root.get());
+}
+
+bool CloudGreyVerbProcessor::importPresetJson (const juce::var& root, int presetIndex)
+{
+    if (! root.isObject()) return false;
+    auto* object = root.getDynamicObject();
+    if (object == nullptr) return false;
+    const auto app = object->getProperty ("app");
+    const auto version = object->getProperty ("version");
+    if (! app.isString() || (app.toString() != "Nimbus" && app.toString() != "GreyCloud")
+        || !(version.isInt() || version.isInt64() || version.isDouble())
+        || static_cast<double> (version) != 1.0)
+        return false;
+
+    const auto presetsVar = object->getProperty ("presets");
+    auto* presets = presetsVar.getArray();
+    if (presets == nullptr || presetIndex < 0 || presetIndex >= presets->size()) return false;
+    const auto preset = presets->getReference (presetIndex);
+    if (! preset.isObject()) return false;
+    const auto params = preset.getDynamicObject()->getProperty ("params");
+    if (! params.isObject()) return false;
+
+    juce::NamedValueSet snapshot;
+    for (const auto& property : params.getDynamicObject()->getProperties())
+        snapshot.set (property.name, property.value);
+    return importParameterSnapshot (snapshot);
 }
 
 bool CloudGreyVerbProcessor::isCurrentPresetEdited() const
@@ -589,7 +678,10 @@ juce::AudioProcessorEditor* CloudGreyVerbProcessor::createEditor()
 
 void CloudGreyVerbProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    if (auto xmlState = parameters.copyState().createXml())
+    auto state = parameters.copyState();
+    // This is session metadata, deliberately not an automatable DSP parameter.
+    state.setProperty ("factoryPresetIndex", currentPresetIndex, nullptr);
+    if (auto xmlState = state.createXml())
         copyXmlToBinary (*xmlState, destData);
 }
 
@@ -597,8 +689,15 @@ void CloudGreyVerbProcessor::setStateInformation (const void* data, int sizeInBy
 {
     if (auto xmlState = getXmlFromBinary (data, sizeInBytes))
     {
+        const auto restoredState = juce::ValueTree::fromXml (*xmlState);
+        const auto storedIndex = restoredState.getProperty ("factoryPresetIndex");
+        const auto validIndex = (storedIndex.isInt() || storedIndex.isInt64())
+            ? static_cast<int> (storedIndex) : -1;
+        // Pre-M5 sessions have no metadata; invalid data safely retains the
+        // historical default base instead of exposing an arbitrary program.
+        currentPresetIndex = validIndex >= 0 && validIndex < getNumPrograms() ? validIndex : 0;
         presetTransactionGeneration.fetch_add (1, std::memory_order_acq_rel);
-        parameters.replaceState (juce::ValueTree::fromXml (*xmlState));
+        parameters.replaceState (restoredState);
         const auto target = makeDspSnapshotFromParameters();
         if (!hasProcessedAudio.load (std::memory_order_acquire))
         {
