@@ -90,7 +90,7 @@ private:
     juce::ComboBox presetSelector;
     juce::Label presetStatus;
     juce::Label syncFeedback;
-    juce::TextButton previousPreset { "◀" }, nextPreset { "▶" };
+    juce::TextButton previousPreset { juce::String::fromUTF8 ("\xE2\x97\x80") }, nextPreset { juce::String::fromUTF8 ("\xE2\x96\xB6") };
     std::unique_ptr<juce::TooltipWindow> tooltipWindow;
 
     void addRotaryControl(const juce::String& paramID, const juce::String& name);

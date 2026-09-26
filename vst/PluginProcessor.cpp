@@ -37,7 +37,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
 
     const auto percentText = [] (float v, int) { return juce::String (juce::roundToInt (v * 100.0f)) + " %"; };
     const auto msText = [] (float v, int) { return juce::String (juce::roundToInt (v * 200.0f)) + " ms"; };
-    const auto gainText = [] (float v, int) { return v <= 0.00001f ? juce::String ("-∞ dB") : juce::String (20.0f * std::log10 (v), 1) + " dB"; };
+    const auto gainText = [] (float v, int) { return v <= 0.00001f ? juce::String::fromUTF8 ("-\xE2\x88\x9E dB") : juce::String (20.0f * std::log10 (v), 1) + " dB"; };
     const auto pct = [&] (const char* id, const char* name, float lo, float hi, float def) {
         params.push_back(std::make_unique<juce::AudioParameterFloat>(
             juce::ParameterID { id, 1 }, name, juce::NormalisableRange<float> (lo, hi), def,
@@ -344,7 +344,7 @@ juce::String CloudGreyVerbProcessor::getCurrentPresetDisplayName() const
 {
     const auto name = (currentPresetIndex >= 0 && currentPresetIndex < static_cast<int> (CloudGreyVerb::factoryPresetCount()))
         ? juce::String (CloudGreyVerb::getFactoryPreset (static_cast<size_t> (currentPresetIndex)).name) : juce::String ("Custom");
-    return isCurrentPresetEdited() ? name + " • Edited" : name;
+    return isCurrentPresetEdited() ? name + juce::String::fromUTF8 (" \xE2\x80\xA2 Edited") : name;
 }
 
 void CloudGreyVerbProcessor::publishPresetTarget (const CloudGreyVerb::FactoryPreset& preset)

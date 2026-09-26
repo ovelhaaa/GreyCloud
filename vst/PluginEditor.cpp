@@ -261,7 +261,7 @@ void CloudGreyVerbEditor::addRotaryControl(const juce::String& paramID, const ju
         wrapper->slider.textFromValueFunction = [this] (double v) {
             const auto* scale = audioProcessor.getVTS().getRawParameterValue("sizeScale");
             const auto ms = CloudGreyVerb::sizeToSeconds((float) v, scale != nullptr ? scale->load() : 1.0f) * 1000.0f;
-            return juce::String(juce::roundToInt((float) v * 100.0f)) + " %  ≈ " + juce::String(juce::roundToInt(ms)) + " ms";
+            return juce::String(juce::roundToInt((float) v * 100.0f)) + juce::String::fromUTF8 (" %  \xE2\x89\x88 ") + juce::String(juce::roundToInt(ms)) + " ms";
         };
     addAndMakeVisible(wrapper->slider);
 
@@ -415,7 +415,7 @@ void CloudGreyVerbEditor::timerCallback()
                                     division != nullptr ? juce::roundToInt (division->load()) : 7);
     const float bpm = audioProcessor.getDisplayBpm();
     const auto ms = TempoSyncUtils::getMsFromBpm (bpm, index);
-    syncFeedback.setText (juce::String (juce::roundToInt (bpm)) + " BPM • "
+    syncFeedback.setText (juce::String (juce::roundToInt (bpm)) + juce::String::fromUTF8 (" BPM \xE2\x80\xA2 ")
                           + TempoSyncUtils::kDivisionNames[index] + " = "
                           + juce::String (juce::roundToInt (ms)) + " ms", juce::dontSendNotification);
 }

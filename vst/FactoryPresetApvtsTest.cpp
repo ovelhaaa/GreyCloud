@@ -84,10 +84,10 @@ static int runChecks() {
         if (p == nullptr || p->getName(64) != c.name
             || (p->convertFrom0to1(base->getDefaultValue()) > .5f) != c.def) return 19;
     }
-    struct TextContract { const char* id; float value; const char* expected; };
+    struct TextContract { const char* id; float value; juce::String expected; };
     const TextContract texts[] = {
         {"mix", .5f, "50 %"}, {"preDelay", .5f, "100 ms"}, {"preDelay", 1.0f, "200 ms"},
-        {"inputGain", .5f, "0.0 dB"}, {"inputGain", 0.0f, "-∞ dB"}, {"inputGain", 1.0f, "6.0 dB"},
+        {"inputGain", .5f, "0.0 dB"}, {"inputGain", 0.0f, juce::String::fromUTF8 ("-\xE2\x88\x9E dB")}, {"inputGain", 1.0f, "6.0 dB"},
         {"feedback", .5f, "47 %"}
     };
     for (const auto& t : texts) {
