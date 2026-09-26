@@ -427,6 +427,10 @@ void CloudGreyVerb::reset() {
         grainPan_[i] = prng_.randFloat();
         grainOffsetMs_[i] = 5.0f + prng_.randFloat() * 35.0f;
         grainAnchorPos_[i] = 0.0f;
+        grainPhaseLocal_[i] = static_cast<float>(i) / static_cast<float>(CGV_NUM_GRAINS);
+        grainLenMult_[i] = 1.0f;
+        grainDensityMult_[i] = 1.0f;
+        grainAmpJitter_[i] = 1.0f;
     }
     
     if (grainMemoryL_) {
@@ -599,30 +603,48 @@ void CloudGreyVerb::processGranular(float inL, float inR, float lfoDrift, float&
     // Freeze drift: move a base de leitura levemente para dar vida à nuvem congelada
     float driftMs = lfoDrift * params_.texture * 150.0f * freezeSmoothed_;
     
+    // Shared nominal backbone phase.  Each grain owns a local phase advanced at
+    // its own rate, so durations/rates can diverge organically while the cloud
+    // keeps a common clock.
     grainPhase_ += increment;
     if (grainPhase_ >= 1.0f) grainPhase_ -= 1.0f;
 
     float accL = 0.0f;
     float accR = 0.0f;
-    
-    float grainPhaseSpan = 1.0f / static_cast<float>(CGV_NUM_GRAINS);
+
+    // Guarantee a minimum read sweep: even with grainScan fully down a grain
+    // must still travel through real buffer content instead of becoming a
+    // static amplitude-modulated delay tap.
+    constexpr float kMinGrainScan = 0.15f;
+    const float effectiveScan = params_.grainScan > kMinGrainScan
+        ? params_.grainScan : kMinGrainScan;
 
     // Grãos estéreo interpolados para uma nuvem difusa densa
     for(int i = 0; i < CGV_NUM_GRAINS; ++i) {
-        float p = grainPhase_ + (float)i * grainPhaseSpan;
-        if (p >= 1.0f) p -= 1.0f;
+        float fGranSize = static_cast<float>(grainMemorySize_);
+
+        // Per-grain duration and phase rate.  The rate carries a small extra
+        // variation so the perfectly even retrigger grid slowly desyncs.
+        float grainFrames = phaseFramesTotal * grainLenMult_[i];
+        if (grainFrames > fGranSize - 100.0f) grainFrames = fGranSize - 100.0f;
+        if (grainFrames < 10.0f) grainFrames = 10.0f;
+        float grainIncrement = grainDensityMult_[i] / grainFrames;
+
+        float oldP = grainPhaseLocal_[i];
+        float advancedP = oldP + grainIncrement;
+        bool restart = advancedP >= 1.0f;
+        float p = restart ? advancedP - 1.0f : advancedP;
+        grainPhaseLocal_[i] = p;
 
         // Atualiza Jitter de forma limpa apenas no recomeço individual do grão
-        float oldP = p - increment;
-        if (oldP < 0.0f) oldP += 1.0f;
-        
-        float fGranSize = static_cast<float>(grainMemorySize_);
-        
-        if (p < increment || p < oldP) {
+        if (restart) {
             grainJitter_[i] = prng_.randFloat() * params_.texture * 45.0f; // Jitter máx 45ms
             grainPan_[i] = cgv_dsp::lerp(grainPan_[i], prng_.randFloat(), 0.25f);
             grainOffsetMs_[i] = cgv_dsp::lerp(grainOffsetMs_[i], 5.0f + prng_.randFloat() * 45.0f, 0.25f);
-            
+            grainLenMult_[i] = 0.7f + prng_.randFloat() * 0.6f;      // 0.7x..1.3x duração
+            grainDensityMult_[i] = 0.9f + prng_.randFloat() * 0.2f;  // 0.9x..1.1x dessincronia
+            grainAmpJitter_[i] = 0.85f + prng_.randFloat() * 0.15f;  // 0.85x..1.0x
+
             float snapReadMs = grainOffsetMs_[i] + grainJitter_[i] + driftMs;
             float snapReadFrames = snapReadMs * (sampleRate_ / 1000.0f);
             snapReadFrames = fmodf(snapReadFrames, fGranSize - 4.0f);
@@ -631,7 +653,7 @@ void CloudGreyVerb::processGranular(float inL, float inR, float lfoDrift, float&
         }
 
         // Janela Parabólica Otimizada (Cheap e suave como Cosine) -> 4 * p * (1 - p)
-        float window = 4.0f * p * (1.0f - p);
+        float window = 4.0f * p * (1.0f - p) * grainAmpJitter_[i];
 
         // Onde ler? Pitch neutro (1x) -> delayTap fixo por grão (alterado no jitter)
         float readMs = grainOffsetMs_[i] + grainJitter_[i] + driftMs;
@@ -642,10 +664,11 @@ void CloudGreyVerb::processGranular(float inL, float inR, float lfoDrift, float&
         if (readFrames < 2.0f) readFrames = 2.0f;
         
         float tapFixoOriginal = static_cast<float>(grainWritePos_) - readFrames;
-        float anchorScanCompleto = grainAnchorPos_[i] + p * phaseFramesTotal;
-        float readPosReverse = grainAnchorPos_[i] - p * phaseFramesTotal;
+        // The scan span follows the grain's own (variable) duration.
+        float anchorScanCompleto = grainAnchorPos_[i] + p * grainFrames;
+        float readPosReverse = grainAnchorPos_[i] - p * grainFrames;
         
-        float readPosForward = cgv_dsp::lerp(tapFixoOriginal, anchorScanCompleto, params_.grainScan);
+        float readPosForward = cgv_dsp::lerp(tapFixoOriginal, anchorScanCompleto, effectiveScan);
         float readPos = cgv_dsp::lerp(readPosForward, readPosReverse, params_.reverseMix);
 
         if (readPos != readPos) readPos = 0.0f; // NaN check evasion

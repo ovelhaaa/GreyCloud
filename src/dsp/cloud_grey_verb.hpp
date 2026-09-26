@@ -3,8 +3,9 @@
 #include <cstddef>
 #include "dsp_utils.hpp"
 
-// Test-only adapter.  It is deliberately not part of the production API.
+// Test-only adapters.  They are deliberately not part of the production API.
 struct CloudGreyVerbEarlyTestAccess;
+struct CloudGreyVerbGranularTestAccess;
 
 /**
  * CloudGreyVerb DSP Core
@@ -251,6 +252,7 @@ private:
     }
 
     friend struct CloudGreyVerbEarlyTestAccess;
+    friend struct CloudGreyVerbGranularTestAccess;
 
     bool initialized_ = false;
     float sampleRate_ = 48000.0f;
@@ -272,10 +274,18 @@ private:
     // Controle Granular Estendido
     cgv_dsp::FastPRNG prng_;
     cgv_dsp::FastPRNG modulationPrng_;
+    // grainPhase_ is the shared nominal grain clock.  Individual grains own a
+    // local phase so each can advance at its own rate (organic length/rate
+    // variation) without disturbing the common backbone.
+    float grainPhaseLocal_[CGV_NUM_GRAINS] = {0.0f};
     float grainJitter_[CGV_NUM_GRAINS] = {0.0f};
     float grainPan_[CGV_NUM_GRAINS] = {0.5f};
     float grainOffsetMs_[CGV_NUM_GRAINS] = {0.0f};
     float grainAnchorPos_[CGV_NUM_GRAINS] = {0.0f};
+    // Per-grain organic variation, all fixed-size members (no RT allocation).
+    float grainLenMult_[CGV_NUM_GRAINS] = {1.0f};      // 0.7x..1.3x duration
+    float grainDensityMult_[CGV_NUM_GRAINS] = {1.0f};  // 0.9x..1.1x phase rate
+    float grainAmpJitter_[CGV_NUM_GRAINS] = {1.0f};    // 0.85x..1.0x gain
     float freezeSmoothed_ = 0.0f;
 
     // Núcleo Diffuser (Smear Allpasses pré-delay)
