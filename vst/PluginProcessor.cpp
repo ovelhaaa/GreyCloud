@@ -206,7 +206,6 @@ CloudGreyVerbProcessor::TransitionTarget CloudGreyVerbProcessor::makeDspSnapshot
     p.size = parameters.getRawParameterValue("size")->load();
     p.sizeScale = parameters.getRawParameterValue("sizeScale")->load();
     p.preDelaySeconds = parameters.getRawParameterValue("preDelay")->load() / 1000.0f;
-    p.density = parameters.getRawParameterValue("density")->load();
     p.stereoWidth = parameters.getRawParameterValue("stereoWidth")->load();
     p.inputGain = juce::Decibels::decibelsToGain(parameters.getRawParameterValue("inputGain")->load());
     p.outputGain = juce::Decibels::decibelsToGain(parameters.getRawParameterValue("outputGain")->load());
