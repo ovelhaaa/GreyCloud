@@ -145,6 +145,31 @@ bool stateRestore() {
     return closeEnough(restored.getLastRuntimePreDelaySecondsForTest(), 8.f * 60.f / 90.f)
         && bounded(transitionMetrics, limits);
 }
+bool stateRestoreDuringPlayback() {
+    CloudGreyVerbProcessor source; source.prepareToPlay(48000, 64);
+    set(source, "hqMode", 1); set(source, "preDelaySync", 1); set(source, "sizeSync", 1);
+    set(source, "syncDivision", 12); set(source, "sizeScale", 2.5f);
+    set(source, "mix", .71f); set(source, "feedback", .63f); set(source, "stereoWidth", 1.35f);
+    juce::MemoryBlock state; source.getStateInformation(state);
+
+    CloudGreyVerbProcessor playback; playback.prepareToPlay(48000, 64);
+    TestPlayHead host; host.bpm = 90.0; playback.setPlayHead(&host); juce::MidiBuffer midi;
+    Metrics warmup;
+    for (int block = 0; block < 12; ++block)
+        if (!run(playback, midi, 64, 500 + block, warmup)) return false;
+    playback.setStateInformation(state.getData(), int(state.getSize()));
+
+    Metrics transitionMetrics;
+    for (int block = 0; block < 24; ++block)
+        if (!run(playback, midi, 64, 512 + block, transitionMetrics)) return false;
+    Metrics stableMetrics;
+    for (int block = 24; block < 48; ++block)
+        if (!run(playback, midi, 64, 512 + block, stableMetrics)) return false;
+    const auto limits = clickLimits(stableMetrics.inside);
+    return playback.areCoresReadyForTest()
+        && closeEnough(playback.getLastRuntimePreDelaySecondsForTest(), 8.f * 60.f / 90.f)
+        && bounded(transitionMetrics, limits);
+}
 }
 int main() {
     if (!closeEnough(TempoSyncUtils::getMsFromBpm(60, 12), 8000)) return 1;
@@ -156,5 +181,6 @@ int main() {
     for (double r : {44100., 96000., 192000.}) if (!matrix(64, r)) return 4;
     if (!hostTempo()) return 5;
     if (!stateRestore()) return 6;
+    if (!stateRestoreDuringPlayback()) return 7;
     std::cout << "Realtime L/R cross-block, BPM mock, exact core init and state restore verified\n";
 }

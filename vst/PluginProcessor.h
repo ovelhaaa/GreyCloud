@@ -43,6 +43,7 @@ public:
     bool areCoresReadyForTest() const { return coresReady; }
 
 private:
+    struct TransitionTarget;
     enum class PresetTransitionStage
     {
         idle = 0,
@@ -53,6 +54,9 @@ private:
     void applyPresetTransition (juce::AudioBuffer<float>& buffer);
     void resetDspStateForTransition (bool targetHq);
     void publishPresetTarget (const CloudGreyVerb::FactoryPreset& preset);
+    TransitionTarget makeDspSnapshotFromParameters() const;
+    CloudGreyVerb::Params resolveRuntimeParams (const TransitionTarget& target) const;
+    void publishRestoreTarget (const TransitionTarget& target);
     int getPresetTransitionLengthInSamples (double seconds) const;
 
     juce::AudioProcessorValueTreeState parameters;
@@ -77,7 +81,13 @@ private:
     CloudGreyVerb::Params currentDspParams;
     bool currentDspHqMode = false;
     bool coresReady = false;
-    struct TransitionTarget { CloudGreyVerb::Params params; bool hqMode = false; };
+    struct TransitionTarget {
+        CloudGreyVerb::Params params;
+        bool hqMode = false;
+        bool preDelaySync = false;
+        bool sizeSync = false;
+        int syncDivision = 0;
+    };
     // Two published slots avoid exposing a partially-written factory program
     // to the callback. The atomic index is the publication fence.
     TransitionTarget pendingPresetTargets[2];
@@ -89,6 +99,7 @@ private:
     std::atomic<int> presetTransitionStage { static_cast<int> (PresetTransitionStage::idle) };
     int presetTransitionSamplesRemaining = 0;
     int presetTransitionSamplesTotal = 0;
+    std::atomic<bool> hasProcessedAudio { false };
     std::atomic<float> lastRuntimePreDelaySeconds { -1.0f };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CloudGreyVerbProcessor)
