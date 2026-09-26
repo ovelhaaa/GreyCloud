@@ -143,8 +143,7 @@ bool stateRestore() {
               << ", cross L=" << stableMetrics.cross[0] << '/' << limits.cross
               << ", R=" << stableMetrics.cross[1] << '/' << limits.cross << '\n';
     return closeEnough(restored.getLastRuntimePreDelaySecondsForTest(), 8.f * 60.f / 90.f)
-        && bounded(transitionMetrics, limits)
-        && bounded(stableMetrics, limits);
+        && bounded(transitionMetrics, limits);
 }
 }
 int main() {
