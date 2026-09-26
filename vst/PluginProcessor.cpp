@@ -378,7 +378,7 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
         
         if (preDelaySync) {
             // Keep the persisted manual knob at 0..200 ms. The DSP receives a
-            // separate runtime target backed by its 4 s sync history.
+            // separate runtime target backed by its profile-specific sync history.
             p.preDelaySeconds = syncMs / 1000.0f;
         }
         

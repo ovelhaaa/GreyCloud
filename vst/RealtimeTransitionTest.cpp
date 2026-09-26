@@ -125,17 +125,26 @@ bool stateRestore() {
              {"sizeScale", 2.5f}, {"mix", .71f}, {"feedback", .63f}, {"stereoWidth", 1.35f} })
         if (!closeEnough(restored.getVTS().getRawParameterValue(expected.first)->load(), expected.second, .0001f)) return false;
 
-    juce::MidiBuffer midi; Metrics metrics; float baseline = 0.0f;
-    for (int block = 0; block < 48; ++block) {
-        if (!run(restored, midi, 64, 300 + block, metrics)) return false;
-        if (block >= 24) baseline = std::max(baseline, metrics.inside);
-    }
+    juce::MidiBuffer midi; Metrics transitionMetrics;
+    for (int block = 0; block < 24; ++block)
+        if (!run(restored, midi, 64, 300 + block, transitionMetrics)) return false;
+
+    Metrics stableMetrics;
+    for (int block = 24; block < 48; ++block)
+        if (!run(restored, midi, 64, 300 + block, stableMetrics)) return false;
+
+    const float baseline = stableMetrics.inside;
     const auto limits = clickLimits(baseline);
-    std::cout << "restore: baseline=" << baseline << ", in-block=" << metrics.inside
-              << '/' << limits.inside << ", cross L=" << metrics.cross[0] << '/' << limits.cross
-              << ", R=" << metrics.cross[1] << '/' << limits.cross << '\n';
+    std::cout << "restore: baseline=" << baseline
+              << ", transition in-block=" << transitionMetrics.inside << '/' << limits.inside
+              << ", cross L=" << transitionMetrics.cross[0] << '/' << limits.cross
+              << ", R=" << transitionMetrics.cross[1] << '/' << limits.cross
+              << ", stable in-block=" << stableMetrics.inside << '/' << limits.inside
+              << ", cross L=" << stableMetrics.cross[0] << '/' << limits.cross
+              << ", R=" << stableMetrics.cross[1] << '/' << limits.cross << '\n';
     return closeEnough(restored.getLastRuntimePreDelaySecondsForTest(), 8.f * 60.f / 90.f)
-        && bounded(metrics, limits);
+        && bounded(transitionMetrics, limits)
+        && bounded(stableMetrics, limits);
 }
 }
 int main() {
