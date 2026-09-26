@@ -49,7 +49,7 @@ bool remainsUnknownOnlyNoOp(CloudGreyVerbProcessor& target,
 }
 }
 
-int main() {
+static int runChecks() {
     CloudGreyVerbProcessor processor;
     // M5 public APVTS contract: persisted IDs, host names, ranges/defaults and
     // choice order are deliberately asserted here rather than inferred by UI.
@@ -185,4 +185,11 @@ int main() {
         || !knownAndUnknownTarget.isPendingPresetTargetPublishedForTest()
         || !knownAndUnknownTarget.isPresetTransitionIdleForTest()) return 34;
     std::cout << "FactoryPreset -> APVTS parity and persistence verified\n";
+    return 0;
+}
+
+int main() {
+    const auto code = runChecks();
+    if (code != 0) std::cout << "FactoryPresetApvtsTest FAILED code=" << code << std::endl;
+    return code;
 }
