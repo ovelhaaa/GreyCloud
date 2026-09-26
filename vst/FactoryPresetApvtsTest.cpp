@@ -57,7 +57,7 @@ int main() {
     const FloatContract floats[] = {
         {"mix","Mix",0,1,.5f},{"texture","Texture",0,1,.5f},{"freeze","Freeze",0,1,0},{"feedback","Feedback",0,.94f,.5f},{"size","Size",0,1,.5f},{"sizeScale","Size Scale",1,CloudGreyVerb::kSizeMaxExtendedSeconds / CloudGreyVerb::kSizeMaxNormalSeconds,1},{"diffusion","Diffusion",0,1,.5f},{"modDepth","Mod Depth",0,1,.2f},{"modRate","Mod Rate",0,1,.2f},{"damping","Damping",0,1,.5f},{"lowDamping","Low Cut",0,1,.5f},{"tone","Tone",0,1,.5f},{"shimmer","Shimmer",0,1,0},{"inputGain","Input Gain",0,2,1},{"outputGain","Output Gain",0,2,1},{"preDelay","Pre-Delay",0,1,0},{"stereoWidth","Stereo Width",0,2,1},{"reverseMix","Reverse Mix",0,1,0},{"grainScan","Grain Scan",0,1,0}
     };
-    if (processor.getVTS().getParameters().size() != 26) return 9;
+    if (processor.getParameters().size() != 26) return 9;
     for (const auto& c : floats) {
         auto* p = processor.getVTS().getParameter(c.id);
         if (!p || p->getName(64) != c.name || !equal(p->getNormalisableRange().start,c.lo) || !equal(p->getNormalisableRange().end,c.hi) || !equal(p->convertFrom0to1(p->getDefaultValue()),c.def)) return 10;
