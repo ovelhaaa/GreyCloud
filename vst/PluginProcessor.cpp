@@ -204,15 +204,24 @@ bool CloudGreyVerbProcessor::importParameterSnapshot (const juce::NamedValueSet&
     // First pass is deliberately side-effect free. Unknown IDs are retained as
     // forward-compatible metadata; every known value must be finite and in its
     // public range, so no malformed file can leave a half-applied preset.
+    size_t knownCount = 0;
     for (const auto& property : values)
     {
         if (auto* parameter = parameters.getParameter (property.name.toString()))
         {
+            ++knownCount;
             float value = 0.0f;
             if (! validateSnapshotValue (*parameter, property.value, value))
                 return false;
         }
     }
+
+    // A forward-compatible snapshot can contain only parameters introduced by
+    // a newer version. It is valid, but must not create a no-op M4 transition
+    // (or otherwise mutate this instance's APVTS/transaction state).
+    if (knownCount == 0)
+        return true;
+
     presetTransactionGeneration.fetch_add (1, std::memory_order_acq_rel);
     for (const auto& property : values)
         if (auto* parameter = parameters.getParameter (property.name.toString()))
@@ -389,12 +398,7 @@ CloudGreyVerb::Params CloudGreyVerbProcessor::resolveRuntimeParams (const Transi
 {
     auto p = target.params;
     if (target.preDelaySync || target.sizeSync) {
-        float bpm = 120.0f;
-        if (auto* playHead = getPlayHead())
-            if (auto pos = playHead->getPosition())
-                if (pos->getBpm().hasValue()) bpm = static_cast<float>(*pos->getBpm());
-        bpm = TempoSyncUtils::sanitizeBpm (bpm);
-        displayBpm.store (bpm, std::memory_order_relaxed);
+        const auto bpm = displayBpm.load (std::memory_order_relaxed);
         const float syncMs = TempoSyncUtils::getMsFromBpm(bpm, target.syncDivision);
         if (target.preDelaySync) p.preDelaySeconds = syncMs / 1000.0f;
         if (target.sizeSync) p.size = CloudGreyVerb::secondsToSize(syncMs / 1000.0f, p.sizeScale);
@@ -532,6 +536,16 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     juce::ScopedNoDenormals noDenormals;
     auto totalNumInputChannels  = getTotalNumInputChannels();
     auto totalNumOutputChannels = getTotalNumOutputChannels();
+
+    // The UI reads this atomically, but the host playhead is only queried from
+    // the audio callback. Publish a sanitized value for every block, whether
+    // or not either tempo-sync target is currently enabled.
+    float hostBpm = TempoSyncUtils::kFallbackBpm;
+    if (auto* playHead = getPlayHead())
+        if (auto position = playHead->getPosition())
+            if (position->getBpm().hasValue())
+                hostBpm = static_cast<float> (*position->getBpm());
+    displayBpm.store (TempoSyncUtils::sanitizeBpm (hostBpm), std::memory_order_relaxed);
 
     const bool presetRequested = presetTransitionRequested.exchange (false, std::memory_order_acq_rel);
 

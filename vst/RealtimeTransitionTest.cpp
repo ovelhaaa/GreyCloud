@@ -15,8 +15,11 @@ void set(CloudGreyVerbProcessor& p, const char* id, float v) {
 class TestPlayHead final : public juce::AudioPlayHead {
 public:
     double bpm = 120.0;
+    bool hasBpm = true;
     juce::Optional<PositionInfo> getPosition() const override {
-        PositionInfo p; p.setBpm(bpm); return p;
+        PositionInfo p;
+        if (hasBpm) p.setBpm(bpm);
+        return p;
     }
 };
 struct Metrics {
@@ -108,6 +111,22 @@ bool hostTempo() {
     set(p, "preDelaySync", 1); set(p, "syncDivision", 12); host.bpm = 72;
     return run(p, midi, 64, 202, metrics)
         && closeEnough(p.getLastRuntimePreDelaySecondsForTest(), 8.f * 60.f / 72.f);
+}
+bool displayTempoWithoutSync() {
+    CloudGreyVerbProcessor p; p.prepareToPlay(48000, 64);
+    if (!p.areCoresReadyForTest()) return false;
+    TestPlayHead host; host.bpm = 92.0; p.setPlayHead(&host); juce::MidiBuffer midi;
+    Metrics metrics;
+    set(p, "preDelaySync", 0); set(p, "sizeSync", 0);
+    if (!run(p, midi, 64, 203, metrics) || !closeEnough(p.getDisplayBpm(), 92.0f, .0001f)) return false;
+
+    host.bpm = 0.0;
+    if (!run(p, midi, 64, 204, metrics)
+        || !closeEnough(p.getDisplayBpm(), TempoSyncUtils::kFallbackBpm, .0001f)) return false;
+
+    host.hasBpm = false;
+    return run(p, midi, 64, 205, metrics)
+        && closeEnough(p.getDisplayBpm(), TempoSyncUtils::kFallbackBpm, .0001f);
 }
 bool snapshotParityBeforeFirstBlock() {
     CloudGreyVerbProcessor source; source.prepareToPlay(48000, 64);
@@ -223,9 +242,10 @@ int main() {
     for (int n : {16, 64, 256, 1024}) if (!matrix(n, 48000)) return 3;
     for (double r : {44100., 96000., 192000.}) if (!matrix(64, r)) return 4;
     if (!hostTempo()) return 5;
-    if (!snapshotParityBeforeFirstBlock()) return 6;
-    if (!syncPreDelayParityBeforeFirstBlock()) return 7;
-    if (!stateRestore()) return 8;
-    if (!stateRestoreDuringPlayback()) return 9;
+    if (!displayTempoWithoutSync()) return 6;
+    if (!snapshotParityBeforeFirstBlock()) return 7;
+    if (!syncPreDelayParityBeforeFirstBlock()) return 8;
+    if (!stateRestore()) return 9;
+    if (!stateRestoreDuringPlayback()) return 10;
     std::cout << "Realtime L/R cross-block, BPM mock, exact core init and state restore verified\n";
 }

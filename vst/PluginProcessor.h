@@ -52,13 +52,21 @@ public:
     juce::String getCurrentPresetDisplayName() const;
     float getDisplayBpm() const { return displayBpm.load (std::memory_order_relaxed); }
 #if defined(CLOUD_GREY_VERB_TESTING)
-    // Test-only inspection of the effective target after state restoration.
-    // These declarations are absent from production plugin builds.
+    // Test-only inspection of effective restored state and M4 transaction
+    // publication. These declarations are absent from production plugin builds.
     CloudGreyVerb::Params getCurrentDspParamsForTest() const { return currentDspParams; }
     bool getCurrentDspHqModeForTest() const { return currentDspHqMode; }
     bool getCurrentPreDelaySyncForTest() const { return currentPreDelaySync; }
     bool getCurrentSizeSyncForTest() const { return currentSizeSync; }
     int getCurrentSyncDivisionForTest() const { return currentSyncDivision; }
+    unsigned getPresetTransactionGenerationForTest() const { return presetTransactionGeneration.load (std::memory_order_acquire); }
+    bool isPresetTransitionRequestedForTest() const { return presetTransitionRequested.load (std::memory_order_acquire); }
+    bool isPendingPresetTargetPublishedForTest() const { return pendingPresetTargetPublished.load (std::memory_order_acquire); }
+    bool isPresetTransitionIdleForTest() const
+    {
+        return presetTransitionStage.load (std::memory_order_acquire)
+            == static_cast<int> (PresetTransitionStage::idle);
+    }
 #endif
     float getLastRuntimePreDelaySecondsForTest() const { return lastRuntimePreDelaySeconds.load(); }
     bool areCoresReadyForTest() const { return coresReady; }

@@ -37,6 +37,16 @@ bool samePersistedParameters(CloudGreyVerbProcessor& a, CloudGreyVerbProcessor& 
     }
     return true;
 }
+bool remainsUnknownOnlyNoOp(CloudGreyVerbProcessor& target,
+                            CloudGreyVerbProcessor& before,
+                            unsigned generationBefore) {
+    return samePersistedParameters(target, before)
+        && target.getCurrentProgram() == before.getCurrentProgram()
+        && target.getPresetTransactionGenerationForTest() == generationBefore
+        && !target.isPresetTransitionRequestedForTest()
+        && !target.isPendingPresetTargetPublishedForTest()
+        && target.isPresetTransitionIdleForTest();
+}
 }
 
 int main() {
@@ -116,8 +126,6 @@ int main() {
     if (processor.importParameterSnapshot(fractionalBool)) return 32;
     juce::NamedValueSet boolContract; boolContract.set("hqMode", true);
     if (!processor.importParameterSnapshot(boolContract) || !value(processor, "hqMode", 1.0f)) return 24;
-    juce::NamedValueSet unknown; unknown.set("futureParameter", 42.0f);
-    if (!processor.importParameterSnapshot(unknown)) return 18;
     // APVTS serialization must retain canonical acoustic state, including HQ/sync flags.
     processor.setCurrentProgram(8);
     juce::MemoryBlock state; processor.getStateInformation(state);
@@ -148,6 +156,30 @@ int main() {
                                R"({"app":"Nimbus","version":1,"presets":[{"params":{"syncDivision":7.5}}]})" })
         if (jsonTarget.importPresetJson(juce::JSON::parse(text))
             || !equal(jsonBefore, jsonTarget.getVTS().getRawParameterValue("mix")->load())) return 29;
-    if (!jsonTarget.importPresetJson(juce::JSON::parse(R"({"app":"Nimbus","version":1,"presets":[{"params":{"futureParameter":42}}]})"))) return 30;
+    // A valid v1 snapshot containing only future parameters is a true no-op:
+    // it must preserve the APVTS and must not publish an M4 restore target.
+    juce::NamedValueSet unknownOnly; unknownOnly.set("futureParameter", 42.0f);
+    CloudGreyVerbProcessor directUnknownTarget;
+    CloudGreyVerbProcessor directUnknownBefore;
+    const auto directGenerationBefore = directUnknownTarget.getPresetTransactionGenerationForTest();
+    if (!directUnknownTarget.importParameterSnapshot(unknownOnly)) return 30;
+    if (!remainsUnknownOnlyNoOp(directUnknownTarget, directUnknownBefore, directGenerationBefore)) return 33;
+    CloudGreyVerbProcessor jsonUnknownTarget;
+    CloudGreyVerbProcessor jsonUnknownBefore;
+    const auto jsonGenerationBefore = jsonUnknownTarget.getPresetTransactionGenerationForTest();
+    if (!jsonUnknownTarget.importPresetJson(juce::JSON::parse(R"({"app":"Nimbus","version":1,"presets":[{"params":{"futureParameter":42}}]})"))) return 35;
+    if (!remainsUnknownOnlyNoOp(jsonUnknownTarget, jsonUnknownBefore, jsonGenerationBefore)) return 36;
+    // An otherwise identical snapshot with a known ID must retain the normal
+    // transactional import behavior; unknown IDs remain harmless metadata.
+    CloudGreyVerbProcessor knownAndUnknownTarget;
+    juce::NamedValueSet knownAndUnknown;
+    knownAndUnknown.set("mix", 0.123f); knownAndUnknown.set("futureParameter", 42.0f);
+    const auto knownGenerationBefore = knownAndUnknownTarget.getPresetTransactionGenerationForTest();
+    if (!knownAndUnknownTarget.importParameterSnapshot(knownAndUnknown)
+        || !value(knownAndUnknownTarget, "mix", 0.123f)
+        || knownAndUnknownTarget.getPresetTransactionGenerationForTest() != knownGenerationBefore + 2
+        || !knownAndUnknownTarget.isPresetTransitionRequestedForTest()
+        || !knownAndUnknownTarget.isPendingPresetTargetPublishedForTest()
+        || !knownAndUnknownTarget.isPresetTransitionIdleForTest()) return 34;
     std::cout << "FactoryPreset -> APVTS parity and persistence verified\n";
 }

@@ -119,7 +119,7 @@ add_executable(CloudGreyVerbFactoryPresetApvtsTest
 target_compile_features(CloudGreyVerbFactoryPresetApvtsTest PRIVATE cxx_std_17)
 target_compile_definitions(CloudGreyVerbFactoryPresetApvtsTest PRIVATE
     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0
-    CLOUD_GREY_PROFILE_DESKTOP_STUDIO=1 JucePlugin_Name="Nimbus")
+    CLOUD_GREY_PROFILE_DESKTOP_STUDIO=1 CLOUD_GREY_VERB_TESTING=1 JucePlugin_Name="Nimbus")
 target_include_directories(CloudGreyVerbFactoryPresetApvtsTest PRIVATE
     ../src/dsp ${CMAKE_CURRENT_BINARY_DIR}/NimbusReverbPlugin_artefacts/JuceLibraryCode)
 target_link_libraries(CloudGreyVerbFactoryPresetApvtsTest PRIVATE
