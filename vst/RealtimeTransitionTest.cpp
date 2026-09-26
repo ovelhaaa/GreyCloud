@@ -109,6 +109,49 @@ bool hostTempo() {
     return run(p, midi, 64, 202, metrics)
         && closeEnough(p.getLastRuntimePreDelaySecondsForTest(), 8.f * 60.f / 72.f);
 }
+bool snapshotParityBeforeFirstBlock() {
+    CloudGreyVerbProcessor source; source.prepareToPlay(48000, 64);
+    set(source, "mix", .71f); set(source, "texture", .37f); set(source, "freeze", 1);
+    set(source, "feedback", .63f); set(source, "size", .42f); set(source, "sizeScale", 2.5f);
+    set(source, "diffusion", .81f); set(source, "modDepth", .33f); set(source, "modRate", .27f);
+    set(source, "damping", .44f); set(source, "lowDamping", .61f); set(source, "tone", .69f);
+    set(source, "shimmer", .23f); set(source, "shimmerRatio", 3); set(source, "inputGain", .82f);
+    set(source, "outputGain", .91f); set(source, "preDelay", .57f); set(source, "stereoWidth", 1.35f);
+    set(source, "stereoCore", 0); set(source, "hardFreeze", 1); set(source, "reverseMix", .41f);
+    set(source, "grainScan", .73f); set(source, "hqMode", 1); set(source, "preDelaySync", 0);
+    set(source, "sizeSync", 0); set(source, "syncDivision", 7);
+    juce::MemoryBlock state; source.getStateInformation(state);
+
+    CloudGreyVerbProcessor restored; restored.prepareToPlay(48000, 64);
+    restored.setStateInformation(state.getData(), int(state.getSize()));
+    const auto p = restored.getCurrentDspParamsForTest();
+    const bool paramsMatch = closeEnough(p.mix, .71f, .0001f) && closeEnough(p.texture, .37f, .0001f)
+        && closeEnough(p.freeze, 1, .0001f) && closeEnough(p.feedback, .63f, .0001f)
+        && closeEnough(p.size, .42f, .0001f) && closeEnough(p.sizeScale, 2.5f, .0001f)
+        && closeEnough(p.diffusion, .81f, .0001f) && closeEnough(p.modDepth, .33f, .0001f)
+        && closeEnough(p.modRate, .27f, .0001f) && closeEnough(p.damping, .44f, .0001f)
+        && closeEnough(p.lowDamping, .61f, .0001f) && closeEnough(p.tone, .69f, .0001f)
+        && closeEnough(p.shimmer, .23f, .0001f) && p.shimmerRatioIndex == 3
+        && closeEnough(p.inputGain, .82f, .0001f) && closeEnough(p.outputGain, .91f, .0001f)
+        && closeEnough(p.preDelay, .57f, .0001f) && p.preDelaySeconds < 0.0f
+        && closeEnough(p.stereoWidth, 1.35f, .0001f) && !p.stereoCore && p.hardFreeze
+        && closeEnough(p.reverseMix, .41f, .0001f) && closeEnough(p.grainScan, .73f, .0001f)
+        && !p.clipOutput;
+    return paramsMatch && restored.getCurrentDspHqModeForTest()
+        && !restored.getCurrentPreDelaySyncForTest() && !restored.getCurrentSizeSyncForTest()
+        && restored.getCurrentSyncDivisionForTest() == 7;
+}
+bool syncPreDelayParityBeforeFirstBlock() {
+    CloudGreyVerbProcessor source; source.prepareToPlay(48000, 64);
+    set(source, "preDelay", .5f); set(source, "preDelaySync", 1); set(source, "syncDivision", 7);
+    juce::MemoryBlock state; source.getStateInformation(state);
+    CloudGreyVerbProcessor restored; restored.prepareToPlay(48000, 64);
+    TestPlayHead host; host.bpm = 120.0; restored.setPlayHead(&host);
+    restored.setStateInformation(state.getData(), int(state.getSize()));
+    const auto p = restored.getCurrentDspParamsForTest();
+    return closeEnough(p.preDelay, .5f, .0001f) && closeEnough(p.preDelaySeconds, .5f, .0001f)
+        && restored.getCurrentPreDelaySyncForTest() && restored.getCurrentSyncDivisionForTest() == 7;
+}
 bool stateRestore() {
     CloudGreyVerbProcessor source; source.prepareToPlay(48000, 64);
     set(source, "hqMode", 1); set(source, "preDelaySync", 1); set(source, "sizeSync", 1);
@@ -180,7 +223,9 @@ int main() {
     for (int n : {16, 64, 256, 1024}) if (!matrix(n, 48000)) return 3;
     for (double r : {44100., 96000., 192000.}) if (!matrix(64, r)) return 4;
     if (!hostTempo()) return 5;
-    if (!stateRestore()) return 6;
-    if (!stateRestoreDuringPlayback()) return 7;
+    if (!snapshotParityBeforeFirstBlock()) return 6;
+    if (!syncPreDelayParityBeforeFirstBlock()) return 7;
+    if (!stateRestore()) return 8;
+    if (!stateRestoreDuringPlayback()) return 9;
     std::cout << "Realtime L/R cross-block, BPM mock, exact core init and state restore verified\n";
 }

@@ -39,6 +39,15 @@ public:
 
     juce::AudioProcessorValueTreeState& getVTS() { return parameters; }
     void requestPresetTransition();
+#if defined(CLOUD_GREY_VERB_TESTING)
+    // Test-only inspection of the effective target after state restoration.
+    // These declarations are absent from production plugin builds.
+    CloudGreyVerb::Params getCurrentDspParamsForTest() const { return currentDspParams; }
+    bool getCurrentDspHqModeForTest() const { return currentDspHqMode; }
+    bool getCurrentPreDelaySyncForTest() const { return currentPreDelaySync; }
+    bool getCurrentSizeSyncForTest() const { return currentSizeSync; }
+    int getCurrentSyncDivisionForTest() const { return currentSyncDivision; }
+#endif
     float getLastRuntimePreDelaySecondsForTest() const { return lastRuntimePreDelaySeconds.load(); }
     bool areCoresReadyForTest() const { return coresReady; }
 
@@ -80,6 +89,9 @@ private:
     double currentSampleRate = 44100.0;
     CloudGreyVerb::Params currentDspParams;
     bool currentDspHqMode = false;
+    bool currentPreDelaySync = false;
+    bool currentSizeSync = false;
+    int currentSyncDivision = 0;
     bool coresReady = false;
     struct TransitionTarget {
         CloudGreyVerb::Params params;

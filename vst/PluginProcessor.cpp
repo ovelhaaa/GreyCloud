@@ -177,6 +177,9 @@ void CloudGreyVerbProcessor::prepareToPlay (double sampleRate, int samplesPerBlo
     const auto initialTarget = makeDspSnapshotFromParameters();
     currentDspParams = resolveRuntimeParams (initialTarget);
     currentDspHqMode = initialTarget.hqMode;
+    currentPreDelaySync = initialTarget.preDelaySync;
+    currentSizeSync = initialTarget.sizeSync;
+    currentSyncDivision = initialTarget.syncDivision;
 }
 
 void CloudGreyVerbProcessor::requestPresetTransition()
@@ -189,7 +192,8 @@ void CloudGreyVerbProcessor::publishPresetTarget (const CloudGreyVerb::FactoryPr
     const int next = 1 - pendingPresetTargetIndex.load (std::memory_order_relaxed);
     auto target = preset.dsp;
     target.clipOutput = false;
-    pendingPresetTargets[next] = { target, preset.hqMode };
+    pendingPresetTargets[next] = { target, preset.hqMode, preset.preDelaySync,
+                                   preset.sizeSync, preset.syncDivisionIndex };
     pendingPresetTargetIndex.store (next, std::memory_order_release);
     pendingPresetTargetPublished.store (true, std::memory_order_release);
     requestPresetTransition();
@@ -205,14 +209,23 @@ CloudGreyVerbProcessor::TransitionTarget CloudGreyVerbProcessor::makeDspSnapshot
     p.feedback = parameters.getRawParameterValue("feedback")->load();
     p.size = parameters.getRawParameterValue("size")->load();
     p.sizeScale = parameters.getRawParameterValue("sizeScale")->load();
-    p.preDelaySeconds = parameters.getRawParameterValue("preDelay")->load() / 1000.0f;
-    p.stereoWidth = parameters.getRawParameterValue("stereoWidth")->load();
-    p.inputGain = juce::Decibels::decibelsToGain(parameters.getRawParameterValue("inputGain")->load());
-    p.outputGain = juce::Decibels::decibelsToGain(parameters.getRawParameterValue("outputGain")->load());
-    p.damping = parameters.getRawParameterValue("damping")->load();
+    p.diffusion = parameters.getRawParameterValue("diffusion")->load();
     p.modDepth = parameters.getRawParameterValue("modDepth")->load();
     p.modRate = parameters.getRawParameterValue("modRate")->load();
+    p.damping = parameters.getRawParameterValue("damping")->load();
+    p.lowDamping = parameters.getRawParameterValue("lowDamping")->load();
+    p.tone = parameters.getRawParameterValue("tone")->load();
     p.shimmer = parameters.getRawParameterValue("shimmer")->load();
+    p.shimmerRatioIndex = static_cast<int> (parameters.getRawParameterValue("shimmerRatio")->load());
+    p.inputGain = parameters.getRawParameterValue("inputGain")->load();
+    p.outputGain = parameters.getRawParameterValue("outputGain")->load();
+    p.preDelay = parameters.getRawParameterValue("preDelay")->load();
+    p.preDelaySeconds = -1.0f;
+    p.stereoWidth = parameters.getRawParameterValue("stereoWidth")->load();
+    p.stereoCore = parameters.getRawParameterValue("stereoCore")->load() > 0.5f;
+    p.hardFreeze = parameters.getRawParameterValue("hardFreeze")->load() > 0.5f;
+    p.reverseMix = parameters.getRawParameterValue("reverseMix")->load();
+    p.grainScan = parameters.getRawParameterValue("grainScan")->load();
     p.clipOutput = false;
     target.hqMode = parameters.getRawParameterValue("hqMode")->load() > 0.5f;
     target.preDelaySync = parameters.getRawParameterValue("preDelaySync")->load() > 0.5f;
@@ -336,6 +349,9 @@ void CloudGreyVerbProcessor::applyPresetTransition (juce::AudioBuffer<float>& bu
         resetDspStateForTransition (transitionTarget.hqMode);
         currentDspParams = resolveRuntimeParams (transitionTarget);
         currentDspHqMode = transitionTarget.hqMode;
+        currentPreDelaySync = transitionTarget.preDelaySync;
+        currentSizeSync = transitionTarget.sizeSync;
+        currentSyncDivision = transitionTarget.syncDivision;
         presetTransitionSamplesTotal = getPresetTransitionLengthInSamples (0.008);
         presetTransitionSamplesRemaining = presetTransitionSamplesTotal;
         presetTransitionStage.store (static_cast<int> (PresetTransitionStage::fadeIn), std::memory_order_release);
@@ -376,85 +392,34 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     hasProcessedAudio.store (true, std::memory_order_release);
 
     const auto transactionBefore = presetTransactionGeneration.load (std::memory_order_acquire);
-    // Update DSP parameters from VTS
-    CloudGreyVerb::Params p;
-    p.mix = parameters.getRawParameterValue("mix")->load();
-    p.texture = parameters.getRawParameterValue("texture")->load();
-    p.freeze = parameters.getRawParameterValue("freeze")->load();
-    p.feedback = parameters.getRawParameterValue("feedback")->load();
-    p.size = parameters.getRawParameterValue("size")->load();
-    p.sizeScale = parameters.getRawParameterValue("sizeScale")->load();
-    p.diffusion = parameters.getRawParameterValue("diffusion")->load();
-    p.modDepth = parameters.getRawParameterValue("modDepth")->load();
-    p.modRate = parameters.getRawParameterValue("modRate")->load();
-    p.damping = parameters.getRawParameterValue("damping")->load();
-    p.lowDamping = parameters.getRawParameterValue("lowDamping")->load();
-    p.tone = parameters.getRawParameterValue("tone")->load();
-    p.shimmer = parameters.getRawParameterValue("shimmer")->load();
-    p.shimmerRatioIndex = static_cast<int>(parameters.getRawParameterValue("shimmerRatio")->load());
-    p.inputGain = parameters.getRawParameterValue("inputGain")->load();
-    p.outputGain = parameters.getRawParameterValue("outputGain")->load();
-    p.preDelay = parameters.getRawParameterValue("preDelay")->load();
-    p.stereoWidth = parameters.getRawParameterValue("stereoWidth")->load();
-    p.stereoCore = parameters.getRawParameterValue("stereoCore")->load() > 0.5f;
-    p.hardFreeze = parameters.getRawParameterValue("hardFreeze")->load() > 0.5f;
-    p.reverseMix = parameters.getRawParameterValue("reverseMix")->load();
-    p.grainScan = parameters.getRawParameterValue("grainScan")->load();
-    p.clipOutput = false; // VST3 float may legally deliver samples above 0 dBFS.
-    
-    bool hqMode = parameters.getRawParameterValue("hqMode")->load() > 0.5f;
-    bool preDelaySync = parameters.getRawParameterValue("preDelaySync")->load() > 0.5f;
-    bool sizeSync = parameters.getRawParameterValue("sizeSync")->load() > 0.5f;
-    int syncDivision = static_cast<int>(parameters.getRawParameterValue("syncDivision")->load());
+    // This is the sole APVTS -> DSP mapping; restore and live processing must
+    // consume exactly the same persisted state.
+    auto liveTarget = makeDspSnapshotFromParameters();
 
     const auto transactionAfter = presetTransactionGeneration.load (std::memory_order_acquire);
     if ((transactionBefore & 1u) != 0 || transactionBefore != transactionAfter)
     {
         // A program update overlapped this callback: keep the last complete
         // state until its published target begins the transition.
-        p = currentDspParams;
-        hqMode = currentDspHqMode;
-        preDelaySync = false;
-        sizeSync = false;
+        liveTarget = { currentDspParams, currentDspHqMode, currentPreDelaySync,
+                       currentSizeSync, currentSyncDivision };
     }
-
-    if (preDelaySync || sizeSync) {
-        float bpm = 120.0f;
-        if (auto* playHead = getPlayHead()) {
-            if (auto pos = playHead->getPosition()) {
-                if (pos->getBpm().hasValue()) {
-                    bpm = static_cast<float>(*pos->getBpm());
-                }
-            }
-        }
-        
-        float syncMs = TempoSyncUtils::getMsFromBpm(bpm, syncDivision);
-        
-        if (preDelaySync) {
-            // Keep the persisted manual knob at 0..200 ms. The DSP receives a
-            // separate runtime target backed by its profile-specific sync history.
-            p.preDelaySeconds = syncMs / 1000.0f;
-        }
-        
-        if (sizeSync) {
-            p.size = CloudGreyVerb::secondsToSize(syncMs / 1000.0f, p.sizeScale);
-        }
-    }
+    const auto liveParams = resolveRuntimeParams (liveTarget);
 
     auto transitionStage = static_cast<PresetTransitionStage> (presetTransitionStage.load (std::memory_order_acquire));
     if (presetRequested)
     {
         transitionTarget = pendingPresetTargetPublished.exchange (false, std::memory_order_acq_rel)
             ? pendingPresetTargets[pendingPresetTargetIndex.load (std::memory_order_acquire)]
-            : TransitionTarget { p, hqMode };
+            : liveTarget;
         presetTransitionSamplesRemaining = 0;
         presetTransitionSamplesTotal = 0;
         presetTransitionStage.store (static_cast<int> (PresetTransitionStage::fadeOut), std::memory_order_release);
         transitionStage = PresetTransitionStage::fadeOut;
     }
-    else if (transitionStage == PresetTransitionStage::idle && hqMode != currentDspHqMode)
+    else if (transitionStage == PresetTransitionStage::idle && liveTarget.hqMode != currentDspHqMode)
     {
-        transitionTarget = { p, hqMode };
+        transitionTarget = liveTarget;
         presetTransitionSamplesRemaining = 0;
         presetTransitionSamplesTotal = 0;
         presetTransitionStage.store (static_cast<int> (PresetTransitionStage::fadeOut), std::memory_order_release);
@@ -463,14 +428,17 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     const bool holdPreviousDspState = transitionStage == PresetTransitionStage::fadeOut;
     const bool useTransitionTarget = transitionStage == PresetTransitionStage::fadeIn;
     const auto paramsToProcess = holdPreviousDspState ? currentDspParams
-                               : (useTransitionTarget ? resolveRuntimeParams (transitionTarget) : p);
+                               : (useTransitionTarget ? resolveRuntimeParams (transitionTarget) : liveParams);
     const auto hqModeToProcess = holdPreviousDspState ? currentDspHqMode
-                               : (useTransitionTarget ? transitionTarget.hqMode : hqMode);
+                               : (useTransitionTarget ? transitionTarget.hqMode : liveTarget.hqMode);
 
     if (! holdPreviousDspState && ! useTransitionTarget)
     {
-        currentDspParams = p;
-        currentDspHqMode = hqMode;
+        currentDspParams = liveParams;
+        currentDspHqMode = liveTarget.hqMode;
+        currentPreDelaySync = liveTarget.preDelaySync;
+        currentSizeSync = liveTarget.sizeSync;
+        currentSyncDivision = liveTarget.syncDivision;
     }
 
     // Keep a latency-matched dry reference for the wet-only preset envelope.
@@ -486,7 +454,7 @@ void CloudGreyVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
             transitionDryDelayR.pushSample(0, inR);
         }
     }
-    lastRuntimePreDelaySeconds.store (p.preDelaySeconds, std::memory_order_relaxed);
+    lastRuntimePreDelaySeconds.store (paramsToProcess.preDelaySeconds, std::memory_order_relaxed);
 
     if (hqModeToProcess) {
         dspCoreHQ.setParams(paramsToProcess);
@@ -573,6 +541,9 @@ void CloudGreyVerbProcessor::setStateInformation (const void* data, int sizeInBy
             resetDspStateForTransition (target.hqMode);
             currentDspParams = resolveRuntimeParams (target);
             currentDspHqMode = target.hqMode;
+            currentPreDelaySync = target.preDelaySync;
+            currentSizeSync = target.sizeSync;
+            currentSyncDivision = target.syncDivision;
             pendingPresetTargetPublished.store (false, std::memory_order_release);
             presetTransitionRequested.store (false, std::memory_order_release);
             presetTransitionStage.store (static_cast<int> (PresetTransitionStage::idle), std::memory_order_release);
