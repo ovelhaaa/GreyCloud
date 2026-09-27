@@ -620,12 +620,6 @@ void CloudGreyVerb::processGranular(float inL, float inR, float lfoDrift, float&
     float accL = 0.0f;
     float accR = 0.0f;
 
-    // Guarantee a minimum read sweep: even with grainScan fully down a grain
-    // must still travel through real buffer content instead of becoming a
-    // static amplitude-modulated delay tap.
-    constexpr float kMinGrainScan = 0.15f;
-    const float effectiveScan = params_.grainScan > kMinGrainScan
-        ? params_.grainScan : kMinGrainScan;
 
     // Grãos estéreo interpolados para uma nuvem difusa densa
     for(int i = 0; i < CGV_NUM_GRAINS; ++i) {
@@ -679,7 +673,7 @@ void CloudGreyVerb::processGranular(float inL, float inR, float lfoDrift, float&
         float anchorScanCompleto = grainAnchorPos_[i] + scanOffset;
         float readPosReverse = grainAnchorPos_[i] - scanOffset;
         
-        float readPosForward = cgv_dsp::lerp(tapFixoOriginal, anchorScanCompleto, effectiveScan);
+        float readPosForward = cgv_dsp::lerp(tapFixoOriginal, anchorScanCompleto, params_.grainScan);
         float readPos = cgv_dsp::lerp(readPosForward, readPosReverse, params_.reverseMix);
 
         if (readPos != readPos) readPos = 0.0f; // NaN check evasion
