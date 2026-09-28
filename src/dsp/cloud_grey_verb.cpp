@@ -6,6 +6,21 @@ namespace {
 static_assert(CGV_FDN_ORDER == 2 || CGV_FDN_ORDER == 4,
               "CloudGreyVerb supports only 2x2 or 4x4 feedback networks");
 
+// --- Stochastic FDN modulation milestone constants ---
+// All depths are referenced to modDepth = 1.0 and expressed in seconds.  They
+// are deliberately a small fraction of the legacy 15 ms excursion: the new
+// architecture trades total excursion for temporal complexity.
+constexpr float kPeriodicModDepthSeconds = 0.0020f;   // +-2.0 ms at modDepth = 1
+constexpr float kStochasticModDepthSeconds = 0.0008f; // +-0.8 ms at modDepth = 1
+// Mutually incommensurate periodic rates (relative to the modRate base) and
+// independent start phases: the bank is not a phase-shifted copy of one LFO.
+constexpr float kModLfoRatios[4] = {1.0f, 0.70710678f, 0.57735027f, 0.44721360f};
+constexpr float kModLfoPhases[4] = {0.00f, 0.31f, 0.62f, 0.84f};
+// Independent stochastic time scales and amplitudes per FDN line (Hz).
+constexpr float kLineDriftHz[4] = {0.11f, 0.073f, 0.047f, 0.031f};
+constexpr float kLineStochAmp[4] = {1.00f, 0.92f, 0.84f, 0.76f};
+constexpr uint32_t kLineDriftSeeds[4] = {0x1f123bb5u, 0x9e3779b9u, 0x85ebca6bu, 0xc2b2ae35u};
+
 inline void encodeStereoForFdn(float left, float right, float output[CGV_FDN_ORDER]) {
 #if CGV_FDN_ORDER == 4
     // Two orthonormal stereo injection vectors spanning all four delay lines.
@@ -431,7 +446,14 @@ void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferS
     safetyReleaseCoeff_ = cgv_dsp::timeConstantCoefficient(0.0208f, sampleRate_);
     driftLCoeff_ = cgv_dsp::timeConstantCoefficient(0.417f, sampleRate_);
     driftRCoeff_ = cgv_dsp::timeConstantCoefficient(0.521f, sampleRate_);
-    
+
+    // Multiphase periodic bank + independent stochastic drift bank (modes B/C).
+    for (int i = 0; i < CGV_FDN_ORDER; ++i) {
+        const int idx = (i < 4) ? i : 3;
+        modLfo_[i].setRate(0.5f, sampleRate_); // refined from modRate on first sample
+        lineDrift_[i].init(sampleRate_, kLineDriftHz[idx], kLineDriftSeeds[idx]);
+    }
+
     spectralGuard_.init(sampleRate_);
     initialized_ = true;
     reset();
@@ -516,6 +538,13 @@ void CloudGreyVerb::reset() {
         fdnHighPassState_[i].clear();
     }
     lfo1_.clear(); lfo2_.clear(); spinLfo_.clear();
+    for (int i = 0; i < CGV_FDN_ORDER; ++i) {
+        const int idx = (i < 4) ? i : 3;
+        modLfo_[i].clear();
+        modLfo_[i].setPhase(kModLfoPhases[idx]);
+        lineDrift_[i].reset();
+        lineDelayOffsetFrames_[i] = 0.0f;
+    }
     toneL_.clear(); toneR_.clear();
     duckingEnvState_ = 0.0f;
     loopEnergy_ = 0.0f;
@@ -801,6 +830,10 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
         lfo1_.setRate(lfoHz, sampleRate_);
         lfo2_.setRate(lfoHz * 0.87f, sampleRate_);
         spinLfo_.setRate(0.5f + params_.modRate * 2.0f, sampleRate_);
+        for (int i = 0; i < CGV_FDN_ORDER; ++i) {
+            const int idx = (i < 4) ? i : 3;
+            modLfo_[i].setRate(lfoHz * kModLfoRatios[idx], sampleRate_);
+        }
     }
 
     if (fabsf(sLowDamp - lastSmoothedLowDamping_) > 0.001f) {
@@ -947,21 +980,49 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
         0.61803399f  // golden-ratio conjugate
     };
 
-    float fdnModulation[4] = {
-        lfo1_val * 0.85f + modDriftL_ * 0.15f,
-        lfo2_val * 0.85f + modDriftR_ * 0.15f,
-        spinLfo_.getValue(0.125f) * 0.82f + modDriftL_ * 0.18f,
-        spinLfo_.getValue(0.625f) * 0.82f + modDriftR_ * 0.18f
-    };
-
     const float baseDelayTime = sizeToSeconds(sSize, params_.sizeScale) * sampleRate_;
-    const float modFrames = modulationEnabled_ ? (params_.modDepth * 0.015f * sampleRate_) : 0.0f;
     const float maxDelayAllowed = static_cast<float>(mainDelaySize_) - 2.0f;
+
+    float fdnDelayFrames[CGV_FDN_ORDER] = {0.0f};
+    if (modulationMode_ == ModulationMode::Legacy) {
+        // Architecture A: pristine legacy periodic modulation (bit-exact).
+        const float fdnModulation[4] = {
+            lfo1_val * 0.85f + modDriftL_ * 0.15f,
+            lfo2_val * 0.85f + modDriftR_ * 0.15f,
+            spinLfo_.getValue(0.125f) * 0.82f + modDriftL_ * 0.18f,
+            spinLfo_.getValue(0.625f) * 0.82f + modDriftR_ * 0.18f
+        };
+        const float modFrames = modulationEnabled_ ? (params_.modDepth * 0.015f * sampleRate_) : 0.0f;
+        for (int i = 0; i < CGV_FDN_ORDER; ++i) {
+            const float offsetFrames = fdnModulation[i] * modFrames * (1.0f - 0.06f * static_cast<float>(i));
+            lineDelayOffsetFrames_[i] = offsetFrames;
+            fdnDelayFrames[i] = baseDelayTime * kFdnDelayRatios[i] + offsetFrames;
+        }
+    } else {
+        // Architectures B/C: multiphase periodic bank with a reduced excursion,
+        // plus an independent band-limited stochastic drift per line in C.  No
+        // shared LFO and no phase-shifted copies: rates, phases, PRNG states,
+        // time scales and amplitudes all differ per line.
+        const float periodicFrames = modulationEnabled_
+            ? (params_.modDepth * kPeriodicModDepthSeconds * sampleRate_) : 0.0f;
+        const float stochasticFrames = modulationEnabled_
+            ? (params_.modDepth * kStochasticModDepthSeconds * sampleRate_) : 0.0f;
+        const bool useStochastic = (modulationMode_ == ModulationMode::MultiphaseStochastic);
+        for (int i = 0; i < CGV_FDN_ORDER; ++i) {
+            const int idx = (i < 4) ? i : 3;
+            const float periodic = modLfo_[i].process();
+            const float stochastic = useStochastic ? lineDrift_[i].process() : 0.0f;
+            const float legacyTaper = 1.0f - 0.06f * static_cast<float>(i);
+            const float offsetFrames = periodic * periodicFrames * legacyTaper
+                                     + stochastic * stochasticFrames * kLineStochAmp[idx] * legacyTaper;
+            lineDelayOffsetFrames_[i] = offsetFrames;
+            fdnDelayFrames[i] = baseDelayTime * kFdnDelayRatios[i] + offsetFrames;
+        }
+    }
 
     float fdnRead[CGV_FDN_ORDER] = {0.0f};
     for (int i = 0; i < CGV_FDN_ORDER; ++i) {
-        float delayFrames = baseDelayTime * kFdnDelayRatios[i]
-                          + fdnModulation[i] * modFrames * (1.0f - 0.06f * static_cast<float>(i));
+        float delayFrames = fdnDelayFrames[i];
         if (delayFrames < 2.0f) delayFrames = 2.0f;
         else if (delayFrames > maxDelayAllowed) delayFrames = maxDelayAllowed;
         fdnRead[i] = fdnDelay_[i].read(delayFrames);

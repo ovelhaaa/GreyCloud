@@ -49,4 +49,9 @@ if(BUILD_TESTING)
     add_executable(long_tail_test cloud_grey_verb.cpp long_tail_test.cpp)
     target_compile_features(long_tail_test PRIVATE cxx_std_17)
     target_compile_definitions(long_tail_test PRIVATE CLOUD_GREY_PROFILE_DESKTOP_STUDIO=1)
+
+    # Stochastic FDN modulation milestone validation harness (diagnostic, not CTest).
+    add_executable(stochastic_modulation_test cloud_grey_verb.cpp stochastic_modulation_test.cpp)
+    target_compile_features(stochastic_modulation_test PRIVATE cxx_std_17)
+    target_compile_definitions(stochastic_modulation_test PRIVATE CLOUD_GREY_PROFILE_DESKTOP_STUDIO=1)
 endif()

@@ -143,6 +143,13 @@ public:
 
     void clear() { phase_ = 0.0f; }
 
+    // Explicit phase injection (used to stagger independent multiphase banks).
+    void setPhase(float p) {
+        if (p != p) return;
+        p = p - floorf(p);
+        phase_ = p;
+    }
+
     float process() {
         phase_ += phaseInc_;
         if (phase_ >= 1.0f) phase_ -= 1.0f;
@@ -177,6 +184,58 @@ public:
 private:
     float phase_ = 0.0f;
     float phaseInc_ = 0.0f;
+};
+
+// Band-limited stochastic drift source for per-line delay modulation.
+//
+// Produces a continuous trajectory in [-1, 1] built from random sample-and-hold
+// targets joined by a C1 smoothstep (3t^2 - 2t^3).  Because the interpolant has
+// zero derivative at both segment ends, the output has no sample jumps and no
+// abrupt derivative change at segment boundaries.  All variation is therefore
+// confined well below the segment rate, i.e. band-limited by construction.
+//
+// Each instance owns an independent PRNG, characteristic rate and phase so a
+// bank of them decorrelates without extra bookkeeping.  No allocation, no
+// transcendental calls and no branching beyond the wrap test on the audio path.
+class StochasticDrift {
+public:
+    void init(float sampleRate, float characteristicHz, uint32_t seed) {
+        const float sr = (sampleRate > 0.0f) ? sampleRate : 48000.0f;
+        const float hz = (characteristicHz > 0.0f) ? characteristicHz : 0.05f;
+        phaseInc_ = hz / sr;
+        if (!(phaseInc_ > 0.0f) || phaseInc_ > 1.0f) phaseInc_ = 1.0f / sr;
+        prng_.seed(seed);
+        reset();
+    }
+
+    void reset() {
+        phase_ = 0.0f;
+        current_ = prng_.randFloat() * 2.0f - 1.0f;
+        target_ = prng_.randFloat() * 2.0f - 1.0f;
+    }
+
+    float process() {
+        phase_ += phaseInc_;
+        if (phase_ >= 1.0f) {
+            phase_ -= 1.0f;
+            if (phase_ >= 1.0f) phase_ = 0.0f;
+            current_ = target_;
+            target_ = prng_.randFloat() * 2.0f - 1.0f;
+        }
+        const float t = phase_;
+        const float s = t * t * (3.0f - 2.0f * t);
+        return current_ + (target_ - current_) * s;
+    }
+
+    float currentValue() const { return current_; }
+    float targetValue() const { return target_; }
+
+private:
+    FastPRNG prng_;
+    float phase_ = 0.0f;
+    float phaseInc_ = 0.0f;
+    float current_ = 0.0f;
+    float target_ = 0.0f;
 };
 
 // Linha de atraso flexível baseada em buffer circular externo

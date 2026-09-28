@@ -145,6 +145,14 @@ public:
         FdnLateOnly
     };
 
+    // Test-only modulation architectures evaluated by this milestone.  A keeps
+    // the pristine legacy path so A/B offline comparisons are bit-exact.
+    enum class ModulationMode : int {
+        Legacy = 0,               // A: former periodic FDN modulation
+        ReducedPeriodic = 1,      // B: multiphase periodic, reduced excursion
+        MultiphaseStochastic = 2  // C: reduced periodic + independent stochastic drift
+    };
+
     struct ComponentProbe {
         float earlyL = 0.0f;
         float earlyR = 0.0f;
@@ -528,6 +536,7 @@ private:
     float granularLateGain_ = granularLateGain;
 
     bool modulationEnabled_ = true;
+    ModulationMode modulationMode_ = ModulationMode::MultiphaseStochastic;
     bool nonlinearitiesEnabled_ = true;
     FeedbackArchitecture feedbackArchitecture_ = FeedbackArchitecture::WeakSaturationSpectralGuard;
     SpectralFeedbackGuard spectralGuard_;
@@ -556,8 +565,19 @@ private:
     // LFOs dedicados (Fases cruzadas para imagem estéreo larga)
     cgv_dsp::LFO lfo1_, lfo2_;
     cgv_dsp::LFO spinLfo_;
-    
-    // Modulation drift state
+
+    // Multiphase bank for the reduced periodic component of the new modulation
+    // architecture.  Each line owns its own rate (mutually incommensurate) and
+    // an independent phase, so the lines are not just phase-shifted copies of a
+    // single LFO.
+    cgv_dsp::LFO modLfo_[CGV_FDN_ORDER];
+    // One independent, band-limited stochastic drift source per FDN line.
+    cgv_dsp::StochasticDrift lineDrift_[CGV_FDN_ORDER];
+    // Last applied delay offset per line, in frames.  Test-only observability
+    // covering every architecture (A/B/C); never feeds the audio path.
+    float lineDelayOffsetFrames_[CGV_FDN_ORDER] = {0.0f};
+
+    // Modulation drift state (legacy architecture A)
     float modDriftL_ = 0.0f;
     float modDriftR_ = 0.0f;
     float modTargetL_ = 0.0f;
@@ -642,6 +662,18 @@ struct CloudGreyVerbComponentTestAccess {
     }
     static bool getModulationEnabled(const CloudGreyVerb& verb) {
         return verb.modulationEnabled_;
+    }
+    static void setModulationMode(CloudGreyVerb& verb, CloudGreyVerb::ModulationMode mode) {
+        verb.modulationMode_ = mode;
+    }
+    static CloudGreyVerb::ModulationMode getModulationMode(const CloudGreyVerb& verb) {
+        return verb.modulationMode_;
+    }
+    // Actual applied per-line delay modulation, in milliseconds.  Works for
+    // all modulation architectures.  Test-only; not used by the audio path.
+    static float getLineDelayOffsetMs(const CloudGreyVerb& verb, int line) {
+        return (line >= 0 && line < static_cast<int>(CGV_FDN_ORDER))
+            ? verb.lineDelayOffsetFrames_[line] * 1000.0f / verb.sampleRate_ : 0.0f;
     }
     static void setNonlinearitiesEnabled(CloudGreyVerb& verb, bool enabled) {
         verb.nonlinearitiesEnabled_ = enabled;
