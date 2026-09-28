@@ -188,6 +188,120 @@ public:
     // Factory sound specification.  This is deliberately JUCE-free so the
     // embedded core, plugin and offline tools all consume identical state.
     // Do not add visual/editor-only state here.
+    enum class FeedbackArchitecture : int {
+        CurrentTapeClip = 0,               // A: feedback -> tapeClip -> loop
+        SpectralGuardOnly = 1,             // B: feedback -> spectral guard -> loop
+        WeakSaturationSpectralGuard = 2    // C: feedback -> gentle saturation -> spectral guard -> loop
+    };
+
+    class SpectralFeedbackGuard {
+    public:
+        void init(float sampleRate) {
+            sampleRate_ = sampleRate > 0.0f ? sampleRate : 48000.0f;
+            alpha1_ = 1.0f - std::exp(-2.0f * cgv_dsp::PI * 250.0f / sampleRate_);
+            alpha2_ = 1.0f - std::exp(-2.0f * cgv_dsp::PI * 3000.0f / sampleRate_);
+            envAttackCoeff_ = 1.0f - std::exp(-1.0f / (0.060f * sampleRate_));
+            envReleaseCoeff_ = 1.0f - std::exp(-1.0f / (0.600f * sampleRate_));
+            gainAttackCoeff_ = 1.0f - std::exp(-1.0f / (0.050f * sampleRate_));
+            gainReleaseCoeff_ = 1.0f - std::exp(-1.0f / (0.500f * sampleRate_));
+            reset();
+        }
+
+        void reset() {
+            for (size_t i = 0; i < CGV_FDN_ORDER; ++i) {
+                lp1State_[i] = 0.0f;
+                lp2State_[i] = 0.0f;
+            }
+            for (int b = 0; b < 3; ++b) {
+                bandEnergy_[b] = 0.0f;
+                bandGainSmoothed_[b] = 1.0f;
+            }
+        }
+
+        void process(float* feedLoop, size_t numChannels) {
+            if (!enabled_) return;
+
+            float lowParts[CGV_FDN_ORDER];
+            float midParts[CGV_FDN_ORDER];
+            float highParts[CGV_FDN_ORDER];
+            float instEnergy[3] = {0.0f, 0.0f, 0.0f};
+
+            for (size_t i = 0; i < numChannels; ++i) {
+                float x = feedLoop[i];
+
+                lp1State_[i] += alpha1_ * (x - lp1State_[i]);
+                cgv_dsp::sanitize(lp1State_[i]);
+                float xLow = lp1State_[i];
+                float xRest = x - xLow;
+
+                lp2State_[i] += alpha2_ * (xRest - lp2State_[i]);
+                cgv_dsp::sanitize(lp2State_[i]);
+                float xMid = lp2State_[i];
+                float xHigh = xRest - xMid;
+
+                lowParts[i] = xLow;
+                midParts[i] = xMid;
+                highParts[i] = xHigh;
+
+                instEnergy[0] += xLow * xLow;
+                instEnergy[1] += xMid * xMid;
+                instEnergy[2] += xHigh * xHigh;
+            }
+
+            for (int b = 0; b < 3; ++b) {
+                float coeff = (instEnergy[b] > bandEnergy_[b]) ? envAttackCoeff_ : envReleaseCoeff_;
+                bandEnergy_[b] += coeff * (instEnergy[b] - bandEnergy_[b]);
+                cgv_dsp::sanitize(bandEnergy_[b]);
+            }
+
+            constexpr float kThresholds[3] = { 0.030f, 0.035f, 0.025f };
+            float targetGains[3] = {1.0f, 1.0f, 1.0f};
+            for (int b = 0; b < 3; ++b) {
+                float r = bandEnergy_[b] / kThresholds[b];
+                if (r > 1.0f) {
+                    targetGains[b] = 1.0f / (1.0f + 0.30f * (r - 1.0f));
+                    if (targetGains[b] < 0.25f) targetGains[b] = 0.25f;
+                }
+            }
+
+            for (int b = 0; b < 3; ++b) {
+                float gCoeff = (targetGains[b] < bandGainSmoothed_[b]) ? gainAttackCoeff_ : gainReleaseCoeff_;
+                bandGainSmoothed_[b] += gCoeff * (targetGains[b] - bandGainSmoothed_[b]);
+                cgv_dsp::sanitize(bandGainSmoothed_[b]);
+            }
+
+            for (size_t i = 0; i < numChannels; ++i) {
+                feedLoop[i] = bandGainSmoothed_[0] * lowParts[i]
+                            + bandGainSmoothed_[1] * midParts[i]
+                            + bandGainSmoothed_[2] * highParts[i];
+                cgv_dsp::sanitize(feedLoop[i]);
+            }
+        }
+
+        float getBandGain(size_t band) const {
+            return band < 3 ? bandGainSmoothed_[band] : 1.0f;
+        }
+        float getBandEnergy(size_t band) const {
+            return band < 3 ? bandEnergy_[band] : 0.0f;
+        }
+        void setEnabled(bool enabled) { enabled_ = enabled; }
+        bool isEnabled() const { return enabled_; }
+
+    private:
+        float sampleRate_ = 48000.0f;
+        bool enabled_ = true;
+        float lp1State_[CGV_FDN_ORDER] = {0.0f};
+        float lp2State_[CGV_FDN_ORDER] = {0.0f};
+        float alpha1_ = 0.0322f;
+        float alpha2_ = 0.3247f;
+        float bandEnergy_[3] = {0.0f, 0.0f, 0.0f};
+        float envAttackCoeff_ = 0.0f;
+        float envReleaseCoeff_ = 0.0f;
+        float gainAttackCoeff_ = 0.0f;
+        float gainReleaseCoeff_ = 0.0f;
+        float bandGainSmoothed_[3] = {1.0f, 1.0f, 1.0f};
+    };
+
     struct FactoryPreset {
         const char* name;
         Params dsp;
@@ -335,6 +449,9 @@ private:
 
     bool modulationEnabled_ = true;
     bool nonlinearitiesEnabled_ = true;
+    FeedbackArchitecture feedbackArchitecture_ = FeedbackArchitecture::WeakSaturationSpectralGuard;
+    SpectralFeedbackGuard spectralGuard_;
+
 
     // Feedback Delay Network: Hadamard 4x4 nos perfis principais e
     // fallback cross-feedback 2x2 no perfil H5_LOW_CPU.
@@ -452,6 +569,16 @@ struct CloudGreyVerbComponentTestAccess {
     static bool getNonlinearitiesEnabled(const CloudGreyVerb& verb) {
         return verb.nonlinearitiesEnabled_;
     }
+    static void setFeedbackArchitecture(CloudGreyVerb& verb, CloudGreyVerb::FeedbackArchitecture arch) {
+        verb.feedbackArchitecture_ = arch;
+    }
+    static CloudGreyVerb::FeedbackArchitecture getFeedbackArchitecture(const CloudGreyVerb& verb) {
+        return verb.feedbackArchitecture_;
+    }
+    static const CloudGreyVerb::SpectralFeedbackGuard& getSpectralGuard(const CloudGreyVerb& verb) {
+        return verb.spectralGuard_;
+    }
+
     static void setSeedGains(CloudGreyVerb& verb, float seedGain, float granGain) {
         verb.earlyLateSeedGain_ = seedGain;
         verb.granularLateGain_ = granGain;

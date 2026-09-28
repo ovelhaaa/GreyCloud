@@ -437,33 +437,33 @@ int main() {
     }
     std::cout << "\n";
 
-    // Part 4: Dynamic Damping A/B/C Test
-    std::cout << "### TABELA 4: COMPARAÇÃO A/B/C DO DYNAMIC DAMPING (BrightCloud com HarpPluck)\n\n";
+    // Part 4: Dynamic Damping Test
+    std::cout << "### TABELA 4: COMPARAÇÃO DO DYNAMIC DAMPING (BrightCloud com HarpPluck)\n\n";
     auto harpSig = signals[1]; // HarpPluck
-    auto mA = runAudit(CloudGreyVerb::Preset::BrightCloud, harpSig, sampleRate, 0, "audit_output/BrightCloud_Harp_ModeA");
-    auto mB = runAudit(CloudGreyVerb::Preset::BrightCloud, harpSig, sampleRate, 1, "audit_output/BrightCloud_Harp_ModeB");
-    auto mC = runAudit(CloudGreyVerb::Preset::BrightCloud, harpSig, sampleRate, 2, "audit_output/BrightCloud_Harp_ModeC");
+    auto mSubtle = runAudit(CloudGreyVerb::Preset::BrightCloud, harpSig, sampleRate, 0, "audit_output/BrightCloud_Harp_Mode0_Subtle");
+    auto mOff    = runAudit(CloudGreyVerb::Preset::BrightCloud, harpSig, sampleRate, 1, "audit_output/BrightCloud_Harp_Mode1_Off");
+    auto mLegacy = runAudit(CloudGreyVerb::Preset::BrightCloud, harpSig, sampleRate, 2, "audit_output/BrightCloud_Harp_Mode2_Legacy");
 
-    std::cout << "| Modo Dynamic Damping | Cutoff Min (Hz) | Cutoff Max (Hz) | Variação (Delta Hz) | Peak Time (ms) | Energia 25-50ms | Energia 50-100ms |\n";
-    std::cout << "|:----------------------|:----------------|:----------------|:--------------------|:---------------|:----------------|:-----------------|\n";
-    std::cout << "| A (Atual / Baseline)  | " << std::fixed << std::setprecision(0) << mA.minDynamicLpFreq << " Hz"
-              << " | " << mA.maxDynamicLpFreq << " Hz"
-              << " | " << (mA.maxDynamicLpFreq - mA.minDynamicLpFreq) << " Hz (" << std::setprecision(1) << (100.0f * (mA.maxDynamicLpFreq - mA.minDynamicLpFreq) / mA.maxDynamicLpFreq) << "%)"
-              << " | " << mA.peakTimeMs << " ms"
-              << " | " << std::scientific << std::setprecision(2) << mA.energy_25_50
-              << " | " << mA.energy_50_100 << " |\n";
-    std::cout << "| B (Desabilitado)      | " << std::fixed << std::setprecision(0) << mB.minDynamicLpFreq << " Hz"
-              << " | " << mB.maxDynamicLpFreq << " Hz"
-              << " | " << (mB.maxDynamicLpFreq - mB.minDynamicLpFreq) << " Hz (0.0%)"
-              << " | " << mB.peakTimeMs << " ms"
-              << " | " << std::scientific << std::setprecision(2) << mB.energy_25_50
-              << " | " << mB.energy_50_100 << " |\n";
-    std::cout << "| C (Sutil / Proteção)  | " << std::fixed << std::setprecision(0) << mC.minDynamicLpFreq << " Hz"
-              << " | " << mC.maxDynamicLpFreq << " Hz"
-              << " | " << (mC.maxDynamicLpFreq - mC.minDynamicLpFreq) << " Hz (" << std::setprecision(1) << (100.0f * (mC.maxDynamicLpFreq - mC.minDynamicLpFreq) / mC.maxDynamicLpFreq) << "%)"
-              << " | " << mC.peakTimeMs << " ms"
-              << " | " << std::scientific << std::setprecision(2) << mC.energy_25_50
-              << " | " << mC.energy_50_100 << " |\n\n";
+    std::cout << "| Modo Dynamic Damping          | Cutoff Min (Hz) | Cutoff Max (Hz) | Variação (Delta Hz) | Peak Time (ms) | Energia 25-50ms | Energia 50-100ms |\n";
+    std::cout << "|:------------------------------|:----------------|:----------------|:--------------------|:---------------|:----------------|:-----------------|\n";
+    std::cout << "| Modo 0: Novo sutil (Default)  | " << std::fixed << std::setprecision(0) << mSubtle.minDynamicLpFreq << " Hz"
+              << " | " << mSubtle.maxDynamicLpFreq << " Hz"
+              << " | " << (mSubtle.maxDynamicLpFreq - mSubtle.minDynamicLpFreq) << " Hz (" << std::setprecision(1) << (100.0f * (mSubtle.maxDynamicLpFreq - mSubtle.minDynamicLpFreq) / mSubtle.maxDynamicLpFreq) << "%)"
+              << " | " << mSubtle.peakTimeMs << " ms"
+              << " | " << std::scientific << std::setprecision(2) << mSubtle.energy_25_50
+              << " | " << mSubtle.energy_50_100 << " |\n";
+    std::cout << "| Modo 1: Desligado             | " << std::fixed << std::setprecision(0) << mOff.minDynamicLpFreq << " Hz"
+              << " | " << mOff.maxDynamicLpFreq << " Hz"
+              << " | " << (mOff.maxDynamicLpFreq - mOff.minDynamicLpFreq) << " Hz (0.0%)"
+              << " | " << mOff.peakTimeMs << " ms"
+              << " | " << std::scientific << std::setprecision(2) << mOff.energy_25_50
+              << " | " << mOff.energy_50_100 << " |\n";
+    std::cout << "| Modo 2: Legacy                | " << std::fixed << std::setprecision(0) << mLegacy.minDynamicLpFreq << " Hz"
+              << " | " << mLegacy.maxDynamicLpFreq << " Hz"
+              << " | " << (mLegacy.maxDynamicLpFreq - mLegacy.minDynamicLpFreq) << " Hz (" << std::setprecision(1) << (100.0f * (mLegacy.maxDynamicLpFreq - mLegacy.minDynamicLpFreq) / mLegacy.maxDynamicLpFreq) << "%)"
+              << " | " << mLegacy.peakTimeMs << " ms"
+              << " | " << std::scientific << std::setprecision(2) << mLegacy.energy_25_50
+              << " | " << mLegacy.energy_50_100 << " |\n\n";
 
     return 0;
 }

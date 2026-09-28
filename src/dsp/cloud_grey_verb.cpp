@@ -432,11 +432,13 @@ void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferS
     driftLCoeff_ = cgv_dsp::timeConstantCoefficient(0.417f, sampleRate_);
     driftRCoeff_ = cgv_dsp::timeConstantCoefficient(0.521f, sampleRate_);
     
+    spectralGuard_.init(sampleRate_);
     initialized_ = true;
     reset();
 }
 
 void CloudGreyVerb::reset() {
+    spectralGuard_.reset();
     grainWritePos_ = 0;
     grainPhase_ = 0.0f;
     freezeSmoothed_ = 0.0f;
@@ -1072,11 +1074,29 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     constexpr float kLoopWriteHeadroom = 0.88f;
     for (int i = 0; i < CGV_FDN_ORDER; ++i) {
         feedLoop[i] *= kLoopWriteHeadroom;
-        if (nonlinearitiesEnabled_) {
-            // tapeClip normaliza o pico com ganho de 1.5. A compensação abaixo
-            // devolve ganho unitário em sinais pequenos, essencial numa FDN.
-            feedLoop[i] = cgv_dsp::tapeClip(feedLoop[i]) * (2.0f / 3.0f);
-        }
+    }
+
+    switch (feedbackArchitecture_) {
+        case FeedbackArchitecture::CurrentTapeClip: // A: feedback -> tapeClip -> loop
+            if (nonlinearitiesEnabled_) {
+                for (int i = 0; i < CGV_FDN_ORDER; ++i) {
+                    feedLoop[i] = cgv_dsp::tapeClip(feedLoop[i]) * (2.0f / 3.0f);
+                }
+            }
+            break;
+
+        case FeedbackArchitecture::SpectralGuardOnly: // B: feedback -> spectral guard -> loop
+            spectralGuard_.process(feedLoop, CGV_FDN_ORDER);
+            break;
+
+        case FeedbackArchitecture::WeakSaturationSpectralGuard: // C: feedback -> gentle saturation -> spectral guard -> loop
+            if (nonlinearitiesEnabled_) {
+                for (int i = 0; i < CGV_FDN_ORDER; ++i) {
+                    feedLoop[i] = cgv_dsp::gentleSaturate(feedLoop[i]);
+                }
+            }
+            spectralGuard_.process(feedLoop, CGV_FDN_ORDER);
+            break;
     }
 
     // --- Safety Energy Guard (v2) ---
