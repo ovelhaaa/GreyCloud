@@ -189,8 +189,21 @@ public:
         bool hardFreeze = false;   // True: Corta input 100% e congela estado instantaneamente
         bool clipOutput = true;    // Proteção de conversor no core embarcado; VST float desabilita
         float sizeScale = 1.0f;    // Extensão explícita para presets Greyhole; normal = 1
+        // reverseMix is a pure forward/reverse direction crossfade.  Both read
+        // heads always advance at their nominal speed (+1x / -1x), so this
+        // control never bends the read speed and never shifts pitch.
         float reverseMix = 0.0f;   // 0.0 a 1.0 -> Direção do grão (Forward -> Reverse)
         float grainScan = 0.0f;    // 0.0 a 1.0 -> Janela estática vs varredura real completa
+
+        // NOTE (future, not implemented here): the old reverseMix behavior
+        // lerped the two read *positions* in position space:
+        //     readPos = lerp(readPosForward, readPosReverse, reverseMix);
+        // which made the effective speed (and therefore pitch) equal to
+        //     1 - 2 * reverseMix   (forward 0 -> +1x, center -> 0x, 1 -> -1x).
+        // That position-domain interpolation is intentionally reserved for a
+        // separate future control, "Grain Motion / Grain Speed", with the
+        // approximate semantics -1 = reverse, 0 = stationary/frozen, +1 =
+        // forward.  Do not expose it through reverseMix again.
     };
 
     // Factory sound specification.  This is deliberately JUCE-free so the
@@ -631,6 +644,10 @@ private:
 
     // Helpers
     void processGranular(float inL, float inR, float lfoDrift, float& outL, float& outR);
+    // Interpolated read of a single granular head.  Wraps into the circular
+    // grain history and is NaN-safe.  Both the forward and reverse heads use
+    // this exact routine so their interpolation stays bit-identical.
+    void readGrainHead(float readPos, float& outL, float& outR);
     void processEarly(float inL, float inR, float diffusion, float size,
                       float& outL, float& outR);
 };

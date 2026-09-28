@@ -18,6 +18,14 @@ if(BUILD_TESTING)
     target_compile_definitions(CloudGreyVerbFactoryPresetParityTest PRIVATE CLOUD_GREY_PROFILE_DESKTOP_STUDIO=1)
     add_test(NAME CloudGreyVerbFactoryPresetParityTest COMMAND CloudGreyVerbFactoryPresetParityTest)
 
+    # reverseMix must be a direction crossfade only: it may never shift the
+    # nominal granular pitch or stall the read head at intermediate values.
+    add_executable(CloudGreyVerbReverseMixTest cloud_grey_verb.cpp cloud_grey_verb_reverse_mix_test.cpp)
+    target_compile_features(CloudGreyVerbReverseMixTest PRIVATE cxx_std_17)
+    target_compile_definitions(CloudGreyVerbReverseMixTest PRIVATE CLOUD_GREY_PROFILE_DESKTOP_STUDIO=1)
+    add_test(NAME CloudGreyVerbReverseMixTest COMMAND CloudGreyVerbReverseMixTest)
+    set_tests_properties(CloudGreyVerbReverseMixTest PROPERTIES TIMEOUT 120)
+
     function(add_cgv_m2_profile_test target profile)
         add_executable(${target} cloud_grey_verb.cpp cloud_grey_verb_m2_regression_test.cpp)
         target_compile_features(${target} PRIVATE cxx_std_17)

@@ -647,6 +647,24 @@ void CloudGreyVerb::setParams(const Params& p) {
 #endif
 }
 
+void CloudGreyVerb::readGrainHead(float readPos, float& outL, float& outR) {
+    const float fGranSize = static_cast<float>(grainMemorySize_);
+
+    if (readPos != readPos) readPos = 0.0f; // NaN check evasion
+
+    if (readPos < 0.0f || readPos >= fGranSize) {
+        readPos = fmodf(readPos, fGranSize);
+        if (readPos < 0.0f) readPos += fGranSize;
+    }
+
+    const size_t idx1 = static_cast<size_t>(readPos);
+    const size_t idx2 = (idx1 + 1) % grainMemorySize_;
+    const float frac = readPos - static_cast<float>(idx1);
+
+    outL = cgv_dsp::lerp(grainMemoryL_[idx1], grainMemoryL_[idx2], frac);
+    outR = cgv_dsp::lerp(grainMemoryR_[idx1], grainMemoryR_[idx2], frac);
+}
+
 void CloudGreyVerb::processGranular(float inL, float inR, float lfoDrift, float& outL, float& outR) {
     // FREEZE Smoothed: Transição musical (Real buffer freeze misturado)
     freezeSmoothed_ = cgv_dsp::lerp(freezeSmoothed_, params_.freeze, freezeSmoothingCoeff_);
@@ -738,25 +756,31 @@ void CloudGreyVerb::processGranular(float inL, float inR, float lfoDrift, float&
         // multiplier only varies scan speed, never the base tap/pitch.
         float scanOffset = p * grainFrames * grainRateMult_[i];
         float anchorScanCompleto = grainAnchorPos_[i] + scanOffset;
+        // Reverse head mirrors the scanned forward span around the grain
+        // anchor.  It shares the grain's length and runs at nominal -1x.
         float readPosReverse = grainAnchorPos_[i] - scanOffset;
-        
+
+        // Forward head preserves the historical grainScan semantics.  Both of
+        // its endpoints advance at nominal +1x, so grainScan never changes
+        // pitch: 0 = fixed neutral tap, 1 = full forward scan.
         float readPosForward = cgv_dsp::lerp(tapFixoOriginal, anchorScanCompleto, params_.grainScan);
-        float readPos = cgv_dsp::lerp(readPosForward, readPosReverse, params_.reverseMix);
 
-        if (readPos != readPos) readPos = 0.0f; // NaN check evasion
+        // Read both heads independently.  Each one always moves at its own
+        // nominal speed (+1x / -1x); reverseMix only decides how the two
+        // consistent signals blend, so it cannot bend the read speed and can
+        // therefore never shift the nominal pitch (or stall the read head).
+        float forwardSampleL = 0.0f, forwardSampleR = 0.0f;
+        float reverseSampleL = 0.0f, reverseSampleR = 0.0f;
+        readGrainHead(readPosForward, forwardSampleL, forwardSampleR);
+        readGrainHead(readPosReverse, reverseSampleL, reverseSampleR);
 
-        if (readPos < 0.0f || readPos >= fGranSize) {
-            readPos = fmodf(readPos, fGranSize);
-            if (readPos < 0.0f) readPos += fGranSize;
-        }
-
-        // Interpolação fracionária (Hermite/Linear mix)
-        size_t idx1 = static_cast<size_t>(readPos);
-        size_t idx2 = (idx1 + 1) % grainMemorySize_;
-        float frac = readPos - static_cast<float>(idx1);
-
-        float sampleL = cgv_dsp::lerp(grainMemoryL_[idx1], grainMemoryL_[idx2], frac);
-        float sampleR = cgv_dsp::lerp(grainMemoryR_[idx1], grainMemoryR_[idx2], frac);
+        // Equal-power direction crossfade in the audio domain.  Endpoints are
+        // exact, so reverseMix=0 and reverseMix=1 stay bit-identical to the
+        // previous single-head behavior and existing presets are preserved.
+        const float gForward = sqrtf(1.0f - params_.reverseMix);
+        const float gReverse = sqrtf(params_.reverseMix);
+        float sampleL = forwardSampleL * gForward + reverseSampleL * gReverse;
+        float sampleR = forwardSampleR * gForward + reverseSampleR * gReverse;
         
         // Espalhamento L/R variável (orgânico)
         float pan = grainPan_[i];
