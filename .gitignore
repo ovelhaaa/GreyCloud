@@ -13,6 +13,7 @@ coverage/
 **/.ninja_*
 m2_analysis_*/
 m3_analysis_*/
+audit_output/
 .DS_Store
 *.log
 .env*

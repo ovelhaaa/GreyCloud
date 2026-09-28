@@ -41,4 +41,12 @@ if(BUILD_TESTING)
     add_executable(CloudGreyVerbOfflineMetricsTest offline_metrics.cpp offline_metrics_test.cpp)
     target_compile_features(CloudGreyVerbOfflineMetricsTest PRIVATE cxx_std_17)
     add_test(NAME CloudGreyVerbOfflineMetricsTest COMMAND CloudGreyVerbOfflineMetricsTest)
+
+    add_executable(onset_audit cloud_grey_verb.cpp onset_audit.cpp)
+    target_compile_features(onset_audit PRIVATE cxx_std_17)
+    target_compile_definitions(onset_audit PRIVATE CLOUD_GREY_PROFILE_DESKTOP_STUDIO=1)
+
+    add_executable(long_tail_test cloud_grey_verb.cpp long_tail_test.cpp)
+    target_compile_features(long_tail_test PRIVATE cxx_std_17)
+    target_compile_definitions(long_tail_test PRIVATE CLOUD_GREY_PROFILE_DESKTOP_STUDIO=1)
 endif()

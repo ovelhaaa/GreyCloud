@@ -6,6 +6,7 @@
 // Test-only adapters.  They are deliberately not part of the production API.
 struct CloudGreyVerbEarlyTestAccess;
 struct CloudGreyVerbGranularTestAccess;
+struct CloudGreyVerbComponentTestAccess;
 
 /**
  * CloudGreyVerb DSP Core
@@ -136,6 +137,27 @@ public:
         Count
     };
 
+    enum class ComponentIsolation {
+        None,
+        EarlyOnly,
+        GranularOnly,
+        DiffuserOnly,
+        FdnLateOnly
+    };
+
+    struct ComponentProbe {
+        float earlyL = 0.0f;
+        float earlyR = 0.0f;
+        float granL = 0.0f;
+        float granR = 0.0f;
+        float diffL = 0.0f;
+        float diffR = 0.0f;
+        float tailL = 0.0f;
+        float tailR = 0.0f;
+        float duckingEnv = 0.0f;
+        float dynamicLpFreq = 0.0f;
+    };
+
     struct Params {
         float mix = 0.5f;          // 0.0 a 1.0 -> Dry/Wet mix igual potência
         float texture = 0.5f;      // 0.0 a 1.0 -> Janela/Densidade granular (Curto/Mecânico -> Longo/Smear)
@@ -253,6 +275,11 @@ private:
 
     friend struct CloudGreyVerbEarlyTestAccess;
     friend struct CloudGreyVerbGranularTestAccess;
+    friend struct CloudGreyVerbComponentTestAccess;
+
+    ComponentIsolation isolationMode_ = ComponentIsolation::None;
+    int dynamicDampingMode_ = 0;
+    ComponentProbe* activeProbe_ = nullptr;
 
     bool initialized_ = false;
     float sampleRate_ = 48000.0f;
@@ -295,6 +322,19 @@ private:
     // Núcleo Diffuser (Smear Allpasses pré-delay)
     cgv_dsp::Allpass diffuserApL_[CGV_NUM_ALLPASS];
     cgv_dsp::Allpass diffuserApR_[CGV_NUM_ALLPASS];
+
+    // Fast diffuser seed path (Requirement 3: post-predelay -> fast diffuser seed -> FDN)
+    cgv_dsp::Allpass seedApL_[2];
+    cgv_dsp::Allpass seedApR_[2];
+
+    static constexpr float earlyLateSeedGain = 0.28f;
+    static constexpr float granularLateGain = 0.72f;
+
+    float earlyLateSeedGain_ = earlyLateSeedGain;
+    float granularLateGain_ = granularLateGain;
+
+    bool modulationEnabled_ = true;
+    bool nonlinearitiesEnabled_ = true;
 
     // Feedback Delay Network: Hadamard 4x4 nos perfis principais e
     // fallback cross-feedback 2x2 no perfil H5_LOW_CPU.
@@ -376,4 +416,44 @@ private:
     void processGranular(float inL, float inR, float lfoDrift, float& outL, float& outR);
     void processEarly(float inL, float inR, float diffusion, float size,
                       float& outL, float& outR);
+};
+
+struct CloudGreyVerbComponentTestAccess {
+    using Components = CloudGreyVerb::ComponentProbe;
+    using ComponentIsolation = CloudGreyVerb::ComponentIsolation;
+
+    static void processSampleProbe(CloudGreyVerb& verb, float inL, float inR,
+                                   float& outL, float& outR, Components* probe = nullptr) {
+        verb.activeProbe_ = probe;
+        verb.processSample(inL, inR, outL, outR);
+        verb.activeProbe_ = nullptr;
+    }
+    static void setIsolation(CloudGreyVerb& verb, ComponentIsolation mode) {
+        verb.isolationMode_ = mode;
+    }
+    static ComponentIsolation getIsolation(const CloudGreyVerb& verb) {
+        return verb.isolationMode_;
+    }
+    static void setDynamicDampingMode(CloudGreyVerb& verb, int mode) {
+        verb.dynamicDampingMode_ = mode;
+    }
+    static int getDynamicDampingMode(const CloudGreyVerb& verb) {
+        return verb.dynamicDampingMode_;
+    }
+    static void setModulationEnabled(CloudGreyVerb& verb, bool enabled) {
+        verb.modulationEnabled_ = enabled;
+    }
+    static bool getModulationEnabled(const CloudGreyVerb& verb) {
+        return verb.modulationEnabled_;
+    }
+    static void setNonlinearitiesEnabled(CloudGreyVerb& verb, bool enabled) {
+        verb.nonlinearitiesEnabled_ = enabled;
+    }
+    static bool getNonlinearitiesEnabled(const CloudGreyVerb& verb) {
+        return verb.nonlinearitiesEnabled_;
+    }
+    static void setSeedGains(CloudGreyVerb& verb, float seedGain, float granGain) {
+        verb.earlyLateSeedGain_ = seedGain;
+        verb.granularLateGain_ = granGain;
+    }
 };

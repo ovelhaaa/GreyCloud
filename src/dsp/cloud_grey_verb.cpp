@@ -130,6 +130,14 @@ size_t CloudGreyVerb::requiredMemoryFloats(float sampleRate) {
                   + 2 * earlyDelayCapacityFrames(sampleRate);
     for (int i = 0; i < CGV_NUM_ALLPASS; ++i)
         result += diffuserL[i] + cgv_dsp::nextPrime(diffuserL[i] + 5);
+
+    constexpr float kSeedSecondsL[2] = {0.0032f, 0.0079f};
+    constexpr float kSeedSecondsR[2] = {0.0043f, 0.0107f};
+    for (int i = 0; i < 2; ++i) {
+        result += cgv_dsp::nextPrime(frames(kSeedSecondsL[i])) + 1;
+        result += cgv_dsp::nextPrime(frames(kSeedSecondsR[i])) + 1;
+    }
+
 #if CGV_NUM_LOOP_ALLPASS > 0
     constexpr float loopSeconds[4] = {0.0047f, 0.0059f, 0.0073f, 0.0091f};
     for (int i = 0; i < CGV_FDN_ORDER; ++i)
@@ -347,6 +355,17 @@ void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferS
     fixedSize += 2 * earlyDelaySize;
     for (int i = 0; i < CGV_NUM_ALLPASS; ++i)
         fixedSize += diffuserLSizes[i] + diffuserRSizes[i];
+
+    size_t seedLSizes[2] = {0};
+    size_t seedRSizes[2] = {0};
+    constexpr float kSeedSecondsL[2] = {0.0032f, 0.0079f};
+    constexpr float kSeedSecondsR[2] = {0.0043f, 0.0107f};
+    for (int i = 0; i < 2; ++i) {
+        seedLSizes[i] = cgv_dsp::nextPrime(frames(kSeedSecondsL[i])) + 1;
+        seedRSizes[i] = cgv_dsp::nextPrime(frames(kSeedSecondsR[i])) + 1;
+        fixedSize += seedLSizes[i] + seedRSizes[i];
+    }
+
 #if CGV_NUM_LOOP_ALLPASS > 0
     for (int i = 0; i < CGV_FDN_ORDER; ++i)
         fixedSize += fdnAllpassSizes[i];
@@ -374,6 +393,11 @@ void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferS
     for (int i = 0; i < CGV_NUM_ALLPASS; ++i) {
         diffuserApL_[i].init(ptr, diffuserLSizes[i]); ptr += diffuserLSizes[i];
         diffuserApR_[i].init(ptr, diffuserRSizes[i]); ptr += diffuserRSizes[i];
+    }
+
+    for (int i = 0; i < 2; ++i) {
+        seedApL_[i].init(ptr, seedLSizes[i]); ptr += seedLSizes[i];
+        seedApR_[i].init(ptr, seedRSizes[i]); ptr += seedRSizes[i];
     }
     
 #if CGV_NUM_LOOP_ALLPASS > 0
@@ -422,10 +446,17 @@ void CloudGreyVerb::reset() {
     modTargetL_ = modTargetR_ = 0.0f;
     modRandomPhase_ = 0.0f;
     
+    // Deterministic initial multipliers: desynchronizes the grains immediately
+    // from sample 0 without burning extra PRNG calls, avoiding the synchronized wave.
+    constexpr float kInitialLenMult[6] = {0.88f, 1.08f, 0.94f, 1.12f, 0.92f, 1.04f};
+    constexpr float kInitialDensityMult[6] = {0.96f, 1.04f, 0.98f, 1.02f, 0.95f, 1.05f};
+    constexpr float kInitialAmp[6] = {0.90f, 0.85f, 0.95f, 0.82f, 0.92f, 0.88f};
+
     for (int i=0; i<CGV_NUM_GRAINS; ++i) {
         grainJitter_[i] = 0.0f;
         grainPan_[i] = prng_.randFloat();
-        grainOffsetMs_[i] = 5.0f + prng_.randFloat() * 35.0f;
+        // Staggered close offsets: eliminates the initial gap and avoids clustering
+        grainOffsetMs_[i] = 3.5f + static_cast<float>(i) * 1.8f + prng_.randFloat() * 1.5f;
         grainAnchorPos_[i] = 0.0f;
         // Start slightly off the perfect i/N quadrature so a fresh reset (or
         // unfreeze) does not briefly re-introduce the even, mechanical grid
@@ -435,9 +466,9 @@ void CloudGreyVerb::reset() {
         startPhase = fmodf(startPhase, 1.0f);
         if (startPhase < 0.0f) startPhase += 1.0f;
         grainPhaseLocal_[i] = startPhase;
-        grainLenMult_[i] = 1.0f;
-        grainDensityMult_[i] = 1.0f;
-        grainAmpJitter_[i] = 1.0f;
+        grainLenMult_[i] = kInitialLenMult[i % 6];
+        grainDensityMult_[i] = kInitialDensityMult[i % 6];
+        grainAmpJitter_[i] = kInitialAmp[i % 6];
         grainRateMult_[i] = 1.0f;
     }
     
@@ -452,6 +483,11 @@ void CloudGreyVerb::reset() {
     for (int i = 0; i < CGV_NUM_ALLPASS; ++i) {
         diffuserApL_[i].clear();
         diffuserApR_[i].clear();
+    }
+
+    for (int i = 0; i < 2; ++i) {
+        seedApL_[i].clear();
+        seedApR_[i].clear();
     }
     
     preDelayL_.clear();
@@ -640,13 +676,13 @@ void CloudGreyVerb::processGranular(float inL, float inR, float lfoDrift, float&
 
         // Atualiza Jitter de forma limpa apenas no recomeço individual do grão
         if (restart) {
-            grainJitter_[i] = prng_.randFloat() * params_.texture * 45.0f; // Jitter máx 45ms
+            grainJitter_[i] = prng_.randFloat() * params_.texture * 30.0f; // Jitter máx 30ms
             grainPan_[i] = cgv_dsp::lerp(grainPan_[i], prng_.randFloat(), 0.25f);
-            grainOffsetMs_[i] = cgv_dsp::lerp(grainOffsetMs_[i], 5.0f + prng_.randFloat() * 45.0f, 0.25f);
-            grainLenMult_[i] = 0.7f + prng_.randFloat() * 0.6f;      // 0.7x..1.3x duração
-            grainDensityMult_[i] = 0.9f + prng_.randFloat() * 0.2f;  // 0.9x..1.1x dessincronia
-            grainAmpJitter_[i] = 0.85f + prng_.randFloat() * 0.15f;  // 0.85x..1.0x
-            grainRateMult_[i] = 0.99f + prng_.randFloat() * 0.02f;   // 0.99x..1.01x scan speed
+            grainOffsetMs_[i] = cgv_dsp::lerp(grainOffsetMs_[i], 3.0f + prng_.randFloat() * 25.0f, 0.25f);
+            grainLenMult_[i] = 0.75f + prng_.randFloat() * 0.5f;      // 0.75x..1.25x duração
+            grainDensityMult_[i] = 0.92f + prng_.randFloat() * 0.16f;  // 0.92x..1.08x dessincronia
+            grainAmpJitter_[i] = 0.88f + prng_.randFloat() * 0.12f;  // 0.88x..1.0x
+            grainRateMult_[i] = 1.0f;                                 // 1.0x neutral scan speed
 
             float snapReadMs = grainOffsetMs_[i] + grainJitter_[i] + driftMs;
             float snapReadFrames = snapReadMs * (sampleRate_ / 1000.0f);
@@ -870,7 +906,7 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
 
     // 3. Diffuser / Allpass Series
     float diffCoef = cgv_dsp::lerp(0.1f, 0.75f, sDiff);
-    const float diffuserSpinDepth = params_.modDepth * 2.5f;
+    const float diffuserSpinDepth = modulationEnabled_ ? (params_.modDepth * 2.5f) : 0.0f;
     float spin1 = spinLfo_.getValue(0.0f) * diffuserSpinDepth;
     float spin2 = spinLfo_.getValue(0.25f) * diffuserSpinDepth;
     float spin3 = spinLfo_.getValue(0.5f) * diffuserSpinDepth;
@@ -917,7 +953,7 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     };
 
     const float baseDelayTime = sizeToSeconds(sSize, params_.sizeScale) * sampleRate_;
-    const float modFrames = params_.modDepth * 0.015f * sampleRate_;
+    const float modFrames = modulationEnabled_ ? (params_.modDepth * 0.015f * sampleRate_) : 0.0f;
     const float maxDelayAllowed = static_cast<float>(mainDelaySize_) - 2.0f;
 
     float fdnRead[CGV_FDN_ORDER] = {0.0f};
@@ -932,12 +968,19 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     // Damping independente por linha evita estados de filtro compartilhados e
     // mantém a decorrelação criada pelos comprimentos não proporcionais.
     float baseLpFreq = cgv_dsp::lerp(800.0f, 15000.0f, sDamp);
-    // Dynamic damping is a gentle bloom: loud attacks are kept clean/darker,
-    // then the existing 104 ms release lets the tail open without an audible
-    // post-note brightness jump.  The former 1/(1+8*env) curve could remove
-    // more than 80% of the cutoff on normal musical peaks.
-    const float bloomFactor = 0.58f + 0.42f / (1.0f + duckingEnvState_ * 3.0f);
-    float dynamicLpFreq = baseLpFreq * bloomFactor;
+    float dynamicLpFreq = baseLpFreq;
+    if (dynamicDampingMode_ == 0) {
+        // Mode C (Default): Subtle transient protection, preserves static damping without bloom
+        const float bloomFactor = 0.92f + 0.08f / (1.0f + duckingEnvState_ * 2.0f);
+        dynamicLpFreq = baseLpFreq * bloomFactor;
+    } else if (dynamicDampingMode_ == 1) {
+        // Mode B: Dynamic damping disabled
+        dynamicLpFreq = baseLpFreq;
+    } else if (dynamicDampingMode_ == 2) {
+        // Mode A (Legacy / Audit): Former 0.58 + 0.42 bloom curve
+        const float bloomFactor = 0.58f + 0.42f / (1.0f + duckingEnvState_ * 3.0f);
+        dynamicLpFreq = baseLpFreq * bloomFactor;
+    }
     if (dynamicLpFreq < 300.0f) dynamicLpFreq = 300.0f;
 
     for (int i = 0; i < CGV_FDN_ORDER; ++i) {
@@ -946,7 +989,7 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
         fdnRead[i] -= fdnHighPassState_[i].process(fdnRead[i]);
 #if CGV_NUM_LOOP_ALLPASS > 0
         fdnRead[i] = fdnLoopAp_[i].processModulated(fdnRead[i], 0.5f,
-                                                    spinVals[i] * 0.5f);
+                                                    modulationEnabled_ ? (spinVals[i] * 0.5f) : 0.0f);
 #endif
         cgv_dsp::sanitize(fdnRead[i]);
     }
@@ -966,8 +1009,16 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     // e o ganho se aproxima de unidade sem cruzar o limite de estabilidade.
     effectiveFeedback = cgv_dsp::lerp(effectiveFeedback, 0.98f, freezeSmoothed_);
 
+    // Fast diffuser seed path (Requirement 3: post-predelay -> fast diffuser seed -> FDN)
+    constexpr float kSeedApGain = 0.55f;
+    float seedL = seedApL_[1].process(seedApL_[0].process(pdL, kSeedApGain), kSeedApGain);
+    float seedR = seedApR_[1].process(seedApR_[0].process(pdR, kSeedApGain), kSeedApGain);
+
+    const float lateInL = diffInL * granularLateGain_ + seedL * earlyLateSeedGain_;
+    const float lateInR = diffInR * granularLateGain_ + seedR * earlyLateSeedGain_;
+
     float encodedInput[CGV_FDN_ORDER] = {0.0f};
-    encodeStereoForFdn(diffInL, diffInR, encodedInput);
+    encodeStereoForFdn(lateInL, lateInR, encodedInput);
 
     float feedLoop[CGV_FDN_ORDER] = {0.0f};
     for (int i = 0; i < CGV_FDN_ORDER; ++i)
@@ -1021,9 +1072,11 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     constexpr float kLoopWriteHeadroom = 0.88f;
     for (int i = 0; i < CGV_FDN_ORDER; ++i) {
         feedLoop[i] *= kLoopWriteHeadroom;
-        // tapeClip normaliza o pico com ganho de 1.5. A compensação abaixo
-        // devolve ganho unitário em sinais pequenos, essencial numa FDN.
-        feedLoop[i] = cgv_dsp::tapeClip(feedLoop[i]) * (2.0f / 3.0f);
+        if (nonlinearitiesEnabled_) {
+            // tapeClip normaliza o pico com ganho de 1.5. A compensação abaixo
+            // devolve ganho unitário em sinais pequenos, essencial numa FDN.
+            feedLoop[i] = cgv_dsp::tapeClip(feedLoop[i]) * (2.0f / 3.0f);
+        }
     }
 
     // --- Safety Energy Guard (v2) ---
@@ -1068,8 +1121,44 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     const float earlyLevel = cgv_dsp::lerp(0.56f, 0.30f, sSize);
     const float cloudGlue = cgv_dsp::lerp(0.10f, 0.16f, sDiff);
     #endif
-    float wetL = tailL + earlyL * earlyLevel + diffInL * cloudGlue;
-    float wetR = tailR + earlyR * earlyLevel + diffInR * cloudGlue;
+    float wetL = 0.0f;
+    float wetR = 0.0f;
+    switch (isolationMode_) {
+        case ComponentIsolation::EarlyOnly:
+            wetL = earlyL * earlyLevel;
+            wetR = earlyR * earlyLevel;
+            break;
+        case ComponentIsolation::GranularOnly:
+            wetL = granOutL;
+            wetR = granOutR;
+            break;
+        case ComponentIsolation::DiffuserOnly:
+            wetL = diffInL * cloudGlue;
+            wetR = diffInR * cloudGlue;
+            break;
+        case ComponentIsolation::FdnLateOnly:
+            wetL = tailL;
+            wetR = tailR;
+            break;
+        case ComponentIsolation::None:
+        default:
+            wetL = tailL + earlyL * earlyLevel + diffInL * cloudGlue;
+            wetR = tailR + earlyR * earlyLevel + diffInR * cloudGlue;
+            break;
+    }
+
+    if (activeProbe_) {
+        activeProbe_->earlyL = earlyL;
+        activeProbe_->earlyR = earlyR;
+        activeProbe_->granL = granOutL;
+        activeProbe_->granR = granOutR;
+        activeProbe_->diffL = diffInL;
+        activeProbe_->diffR = diffInR;
+        activeProbe_->tailL = tailL;
+        activeProbe_->tailR = tailR;
+        activeProbe_->duckingEnv = duckingEnvState_;
+        activeProbe_->dynamicLpFreq = dynamicLpFreq;
+    }
 
     wetL += shimmerWetL;
     wetR += shimmerWetR;
