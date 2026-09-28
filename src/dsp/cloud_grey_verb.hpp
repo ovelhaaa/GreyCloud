@@ -196,6 +196,34 @@ public:
 
     class SpectralFeedbackGuard {
     public:
+        struct Metrics {
+            float minGain[3] = {1.0f, 1.0f, 1.0f};
+            float maxEnergy[3] = {0.0f, 0.0f, 0.0f};
+            uint64_t totalSamples = 0;
+            uint64_t samplesBelow99[3] = {0, 0, 0};
+            uint64_t samplesBelow95[3] = {0, 0, 0};
+
+            void reset() {
+                minGain[0] = minGain[1] = minGain[2] = 1.0f;
+                maxEnergy[0] = maxEnergy[1] = maxEnergy[2] = 0.0f;
+                totalSamples = 0;
+                for (int b = 0; b < 3; ++b) {
+                    samplesBelow99[b] = 0;
+                    samplesBelow95[b] = 0;
+                }
+            }
+
+            float pctBelow99(size_t band) const {
+                if (band >= 3 || totalSamples == 0) return 0.0f;
+                return 100.0f * static_cast<float>(samplesBelow99[band]) / static_cast<float>(totalSamples);
+            }
+
+            float pctBelow95(size_t band) const {
+                if (band >= 3 || totalSamples == 0) return 0.0f;
+                return 100.0f * static_cast<float>(samplesBelow95[band]) / static_cast<float>(totalSamples);
+            }
+        };
+
         void init(float sampleRate) {
             sampleRate_ = sampleRate > 0.0f ? sampleRate : 48000.0f;
             alpha1_ = 1.0f - std::exp(-2.0f * cgv_dsp::PI * 250.0f / sampleRate_);
@@ -205,6 +233,7 @@ public:
             gainAttackCoeff_ = 1.0f - std::exp(-1.0f / (0.050f * sampleRate_));
             gainReleaseCoeff_ = 1.0f - std::exp(-1.0f / (0.500f * sampleRate_));
             reset();
+            resetMetrics();
         }
 
         void reset() {
@@ -216,6 +245,26 @@ public:
                 bandEnergy_[b] = 0.0f;
                 bandGainSmoothed_[b] = 1.0f;
             }
+        }
+
+        void resetMetrics() {
+            metrics_.reset();
+        }
+
+        void enableMetricTracking(bool enable) {
+            trackMetrics_ = enable;
+        }
+
+        bool isMetricTrackingEnabled() const {
+            return trackMetrics_;
+        }
+
+        const Metrics& getMetrics() const {
+            return metrics_;
+        }
+
+        float getMinBandGain(size_t band) const {
+            return band < 3 ? metrics_.minGain[band] : 1.0f;
         }
 
         void process(float* feedLoop, size_t numChannels) {
@@ -248,13 +297,22 @@ public:
                 instEnergy[2] += xHigh * xHigh;
             }
 
+            // Normalizar energia por numChannels (independente de FDN order 2 vs 4)
+            if (numChannels > 0) {
+                const float invChannels = 1.0f / static_cast<float>(numChannels);
+                instEnergy[0] *= invChannels;
+                instEnergy[1] *= invChannels;
+                instEnergy[2] *= invChannels;
+            }
+
             for (int b = 0; b < 3; ++b) {
                 float coeff = (instEnergy[b] > bandEnergy_[b]) ? envAttackCoeff_ : envReleaseCoeff_;
                 bandEnergy_[b] += coeff * (instEnergy[b] - bandEnergy_[b]);
                 cgv_dsp::sanitize(bandEnergy_[b]);
             }
 
-            constexpr float kThresholds[3] = { 0.030f, 0.035f, 0.025f };
+            // Limiares normalizados por canal (equivalente a 0.030f, 0.035f, 0.025f para 4 canais)
+            constexpr float kThresholds[3] = { 0.0075f, 0.00875f, 0.00625f };
             float targetGains[3] = {1.0f, 1.0f, 1.0f};
             for (int b = 0; b < 3; ++b) {
                 float r = bandEnergy_[b] / kThresholds[b];
@@ -268,6 +326,26 @@ public:
                 float gCoeff = (targetGains[b] < bandGainSmoothed_[b]) ? gainAttackCoeff_ : gainReleaseCoeff_;
                 bandGainSmoothed_[b] += gCoeff * (targetGains[b] - bandGainSmoothed_[b]);
                 cgv_dsp::sanitize(bandGainSmoothed_[b]);
+            }
+
+            if (trackMetrics_) {
+                metrics_.totalSamples++;
+                for (int b = 0; b < 3; ++b) {
+                    float g = bandGainSmoothed_[b];
+                    float e = bandEnergy_[b];
+                    if (g < metrics_.minGain[b]) {
+                        metrics_.minGain[b] = g;
+                    }
+                    if (e > metrics_.maxEnergy[b]) {
+                        metrics_.maxEnergy[b] = e;
+                    }
+                    if (g < 0.99f) {
+                        metrics_.samplesBelow99[b]++;
+                    }
+                    if (g < 0.95f) {
+                        metrics_.samplesBelow95[b]++;
+                    }
+                }
             }
 
             for (size_t i = 0; i < numChannels; ++i) {
@@ -290,6 +368,8 @@ public:
     private:
         float sampleRate_ = 48000.0f;
         bool enabled_ = true;
+        bool trackMetrics_ = false;
+        Metrics metrics_;
         float lp1State_[CGV_FDN_ORDER] = {0.0f};
         float lp2State_[CGV_FDN_ORDER] = {0.0f};
         float alpha1_ = 0.0322f;
@@ -577,6 +657,18 @@ struct CloudGreyVerbComponentTestAccess {
     }
     static const CloudGreyVerb::SpectralFeedbackGuard& getSpectralGuard(const CloudGreyVerb& verb) {
         return verb.spectralGuard_;
+    }
+    static CloudGreyVerb::SpectralFeedbackGuard& getSpectralGuard(CloudGreyVerb& verb) {
+        return verb.spectralGuard_;
+    }
+    static void enableGuardMetrics(CloudGreyVerb& verb, bool enable) {
+        verb.spectralGuard_.enableMetricTracking(enable);
+    }
+    static void resetGuardMetrics(CloudGreyVerb& verb) {
+        verb.spectralGuard_.resetMetrics();
+    }
+    static const CloudGreyVerb::SpectralFeedbackGuard::Metrics& getGuardMetrics(const CloudGreyVerb& verb) {
+        return verb.spectralGuard_.getMetrics();
     }
 
     static void setSeedGains(CloudGreyVerb& verb, float seedGain, float granGain) {

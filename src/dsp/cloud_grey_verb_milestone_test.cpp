@@ -244,6 +244,71 @@ int main() {
         check(minimumSafety > 0.995f, "Safety Guard must stay transparent on nominal sustained material");
     }
 
+    // Unit tests for gentleSaturate():
+    // 1. Gain close to 1 for small signals & zero DC offset
+    {
+        bool smallSignalOk = true;
+        for (float x = -0.01f; x <= 0.01f; x += 0.0005f) {
+            float y = cgv_dsp::gentleSaturate(x);
+            if (std::abs(x) > 1e-6f) {
+                float gain = y / x;
+                if (std::abs(gain - 1.0f) > 1e-4f) smallSignalOk = false;
+            } else {
+                if (std::abs(y) > 1e-6f) smallSignalOk = false;
+            }
+        }
+        check(smallSignalOk, "gentleSaturate must have gain ~ 1 near zero and no DC offset");
+    }
+
+    // 2. Odd symmetry: f(-x) == -f(x)
+    {
+        bool oddSymmetryOk = true;
+        for (float x = 0.0f; x <= 100.0f; x += 0.05f) {
+            float pos = cgv_dsp::gentleSaturate(x);
+            float neg = cgv_dsp::gentleSaturate(-x);
+            if (std::abs(pos + neg) > 1e-6f) oddSymmetryOk = false;
+        }
+        check(oddSymmetryOk, "gentleSaturate must be strictly odd symmetric: f(-x) == -f(x)");
+    }
+
+    // 3. Monotonicity for x >= 0:
+    // Operational range [0, 8] with dense steps: strictly increasing
+    // Large amplitude range [8, 10000] with geometric steps: non-decreasing (no foldback)
+    {
+        bool monotonicOk = true;
+        float prevY = -1.0f;
+        for (float x = 0.0f; x <= 8.0f; x += 0.005f) {
+            float y = cgv_dsp::gentleSaturate(x);
+            if (x > 0.0f && y <= prevY) {
+                monotonicOk = false;
+                break;
+            }
+            prevY = y;
+        }
+        for (float x = 8.0f; x <= 10000.0f; x *= 1.25f) {
+            float y = cgv_dsp::gentleSaturate(x);
+            if (y < prevY) {
+                monotonicOk = false;
+                break;
+            }
+            prevY = y;
+        }
+        check(monotonicOk, "gentleSaturate must be monotonic for x >= 0 (no foldback)");
+    }
+
+    // 4. Finite output and boundedness
+    {
+        bool finiteOk = true;
+        const float extremeInputs[] = { 0.0f, 1.0f, 10.0f, 100.0f, 1000.0f, 1e6f, 1e12f, -1e12f };
+        for (float x : extremeInputs) {
+            float y = cgv_dsp::gentleSaturate(x);
+            if (!std::isfinite(y) || std::abs(y) > (1.0f / std::sqrt(0.15f) + 1e-4f)) {
+                finiteOk = false;
+            }
+        }
+        check(finiteOk, "gentleSaturate output must remain finite and bounded");
+    }
+
     if (failures != 0) return 1;
     std::cout << "SUCCESS: Milestone 1 temporal and safety tests passed.\n";
     return 0;

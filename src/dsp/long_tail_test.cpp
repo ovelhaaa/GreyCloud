@@ -184,6 +184,20 @@ struct LongTailMetrics {
 
     double rt60Seconds = 0.0;
     bool stable = true;
+
+    // Spectral Guard Activity (Test-only instrumentation)
+    float minGainLow = 1.0f;
+    float minGainMid = 1.0f;
+    float minGainHigh = 1.0f;
+    float maxEnergyLow = 0.0f;
+    float maxEnergyMid = 0.0f;
+    float maxEnergyHigh = 0.0f;
+    float pctBelow99Low = 0.0f;
+    float pctBelow99Mid = 0.0f;
+    float pctBelow99High = 0.0f;
+    float pctBelow95Low = 0.0f;
+    float pctBelow95Mid = 0.0f;
+    float pctBelow95High = 0.0f;
 };
 
 LongTailMetrics analyzeLongTail(CloudGreyVerb::Preset preset, bool mod, bool nonlin,
@@ -220,6 +234,8 @@ LongTailMetrics analyzeLongTail(CloudGreyVerb::Preset preset, bool mod, bool non
     CloudGreyVerbComponentTestAccess::setModulationEnabled(verb, mod);
     CloudGreyVerbComponentTestAccess::setNonlinearitiesEnabled(verb, nonlin);
     verb.reset();
+    CloudGreyVerbComponentTestAccess::enableGuardMetrics(verb, true);
+    CloudGreyVerbComponentTestAccess::resetGuardMetrics(verb);
 
     const size_t count = static_cast<size_t>(durationSeconds * sampleRate);
     std::vector<float> l(count, 0.0f);
@@ -287,6 +303,20 @@ LongTailMetrics analyzeLongTail(CloudGreyVerb::Preset preset, bool mod, bool non
         sumMidEnergy += static_cast<double>(bMidL) * bMidL + static_cast<double>(bMidR) * bMidR;
         sumHighEnergy += static_cast<double>(bHighL) * bHighL + static_cast<double>(bHighR) * bHighR;
     }
+
+    const auto& gm = CloudGreyVerbComponentTestAccess::getGuardMetrics(verb);
+    m.minGainLow = gm.minGain[0];
+    m.minGainMid = gm.minGain[1];
+    m.minGainHigh = gm.minGain[2];
+    m.maxEnergyLow = gm.maxEnergy[0];
+    m.maxEnergyMid = gm.maxEnergy[1];
+    m.maxEnergyHigh = gm.maxEnergy[2];
+    m.pctBelow99Low = gm.pctBelow99(0);
+    m.pctBelow99Mid = gm.pctBelow99(1);
+    m.pctBelow99High = gm.pctBelow99(2);
+    m.pctBelow95Low = gm.pctBelow95(0);
+    m.pctBelow95Mid = gm.pctBelow95(1);
+    m.pctBelow95High = gm.pctBelow95(2);
 
     m.rmsOverall = std::sqrt(sumEnergy / (2.0 * count));
     m.crestFactor = (m.rmsOverall > 1e-12) ? (m.peak / m.rmsOverall) : 0.0;
@@ -609,6 +639,31 @@ int main() {
                   << " | " << std::setprecision(4) << r.meanSpectralDrift
                   << " | " << std::fixed << std::setprecision(2) << r.rt60Seconds << " s |\n";
     }
+    std::cout << "### TABELA 6b: ATIVIDADE DO SPECTRAL GUARD - USO NORMAL (20s Impulse)\n\n";
+    std::cout << "| Preset | Arquitetura | Min Gain (L / M / H) | Max Energy (L / M / H) | Samples < 0.99 (L / M / H) | Samples < 0.95 (L / M / H) |\n";
+    std::cout << "|:-------|:------------|:---------------------|:-----------------------|:---------------------------|:---------------------------|\n";
+    for (const auto& r : archResults) {
+        std::string archName = "";
+        if (r.condition.find("Arch A") != std::string::npos) archName = "A: Current TapeClip";
+        else if (r.condition.find("Arch B") != std::string::npos) archName = "B: SpectralGuard Only";
+        else if (r.condition.find("Arch C") != std::string::npos) archName = "C: WeakSat + SpecGuard";
+
+        char minGainBuf[64];
+        std::snprintf(minGainBuf, sizeof(minGainBuf), "%.4f / %.4f / %.4f", r.minGainLow, r.minGainMid, r.minGainHigh);
+        char maxEnergyBuf[64];
+        std::snprintf(maxEnergyBuf, sizeof(maxEnergyBuf), "%.5f / %.5f / %.5f", r.maxEnergyLow, r.maxEnergyMid, r.maxEnergyHigh);
+        char s99Buf[64];
+        std::snprintf(s99Buf, sizeof(s99Buf), "%.2f%% / %.2f%% / %.2f%%", r.pctBelow99Low, r.pctBelow99Mid, r.pctBelow99High);
+        char s95Buf[64];
+        std::snprintf(s95Buf, sizeof(s95Buf), "%.2f%% / %.2f%% / %.2f%%", r.pctBelow95Low, r.pctBelow95Mid, r.pctBelow95High);
+
+        std::cout << "| " << std::left << std::setw(18) << r.presetName
+                  << " | " << std::setw(23) << archName
+                  << " | " << std::setw(20) << minGainBuf
+                  << " | " << std::setw(22) << maxEnergyBuf
+                  << " | " << std::setw(26) << s99Buf
+                  << " | " << std::setw(26) << s95Buf << " |\n";
+    }
     std::cout << "\n";
 
     std::cout << "### TABELA 7: COMPARAÇÃO A/B/C - EVOLUÇÃO ESPECTRAL (Centroide Hz)\n\n";
@@ -664,6 +719,33 @@ int main() {
                   << " | " << std::fixed << std::setprecision(0) << r.centroid_18s << " Hz"
                   << " | " << std::setprecision(4) << r.meanSpectralDrift
                   << " | " << std::setw(12) << r.unexpectedGrowths << " |\n";
+    }
+    std::cout << "\n";
+
+    std::cout << "### TABELA 8b: ATIVIDADE DO SPECTRAL GUARD - FREEZE SUSTAIN (20s)\n\n";
+    std::cout << "| Preset | Arquitetura | Min Gain (L / M / H) | Max Energy (L / M / H) | Samples < 0.99 (L / M / H) | Samples < 0.95 (L / M / H) |\n";
+    std::cout << "|:-------|:------------|:---------------------|:-----------------------|:---------------------------|:---------------------------|\n";
+    for (const auto& r : archFreezeResults) {
+        std::string archName = "";
+        if (r.condition.find("Arch A") != std::string::npos) archName = "A: Current TapeClip";
+        else if (r.condition.find("Arch B") != std::string::npos) archName = "B: SpectralGuard Only";
+        else if (r.condition.find("Arch C") != std::string::npos) archName = "C: WeakSat + SpecGuard";
+
+        char minGainBuf[64];
+        std::snprintf(minGainBuf, sizeof(minGainBuf), "%.4f / %.4f / %.4f", r.minGainLow, r.minGainMid, r.minGainHigh);
+        char maxEnergyBuf[64];
+        std::snprintf(maxEnergyBuf, sizeof(maxEnergyBuf), "%.5f / %.5f / %.5f", r.maxEnergyLow, r.maxEnergyMid, r.maxEnergyHigh);
+        char s99Buf[64];
+        std::snprintf(s99Buf, sizeof(s99Buf), "%.2f%% / %.2f%% / %.2f%%", r.pctBelow99Low, r.pctBelow99Mid, r.pctBelow99High);
+        char s95Buf[64];
+        std::snprintf(s95Buf, sizeof(s95Buf), "%.2f%% / %.2f%% / %.2f%%", r.pctBelow95Low, r.pctBelow95Mid, r.pctBelow95High);
+
+        std::cout << "| " << std::left << std::setw(18) << r.presetName
+                  << " | " << std::setw(23) << archName
+                  << " | " << std::setw(20) << minGainBuf
+                  << " | " << std::setw(22) << maxEnergyBuf
+                  << " | " << std::setw(26) << s99Buf
+                  << " | " << std::setw(26) << s95Buf << " |\n";
     }
     std::cout << "\n";
 

@@ -40,11 +40,12 @@ inline float tapeClip(float x) {
 }
 
 // Saturação suave de alta fidelidade para malha FDN (Architecture C)
-// Totalmente ímpar/simétrica (sem offset DC), C^inf suave, ganho unitário na origem
+// Totalmente ímpar/simétrica (sem offset DC), estritamente monotônica, C^inf suave, ganho unitário na origem
 inline float gentleSaturate(float x) {
-    float x2 = x * x;
-    return x / (1.0f + 0.15f * x2);
+    constexpr float k = 0.15f;
+    return x / std::sqrt(1.0f + k * x * x);
 }
+
 
 inline float hardClip(float x) {
     if (x > 1.0f) return 1.0f;
