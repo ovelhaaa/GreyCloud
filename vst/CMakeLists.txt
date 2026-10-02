@@ -35,6 +35,9 @@ juce_generate_juce_header(NimbusReverbPlugin)
 juce_add_binary_data(NimbusAssets
     SOURCES
         nimbus_logo_custom.svg
+        fonts/Montserrat-Light.ttf
+        fonts/Montserrat-Regular.ttf
+        fonts/Montserrat-Bold.ttf
 )
 
 target_sources(NimbusReverbPlugin

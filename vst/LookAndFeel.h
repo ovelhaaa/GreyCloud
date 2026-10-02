@@ -2,6 +2,20 @@
 
 #include <JuceHeader.h>
 
+// Shared semantic colours and type sizes for the native editor.
+namespace NimbusStyle
+{
+inline const juce::Colour background { 0xff18181c }, raised { 0xff1e1e23 }, deep { 0xff111111 };
+inline const juce::Colour border { 0xff2a2a30 }, strongBorder { 0xff45454d };
+inline const juce::Colour text { 0xfff4f2ea }, secondary { 0xffaaa7a0 };
+inline const juce::Colour gold { 0xffddbf72 }, mutedGold { 0xff93825a };
+constexpr float caption = 8.0f, label = 10.5f, status = 10.0f;
+juce::Font controlFont(float height);
+juce::Font regularFont(float height);
+juce::Font captionFont(float height);
+
+}
+
 class GreyCloudLookAndFeel : public juce::LookAndFeel_V4
 {
 public:

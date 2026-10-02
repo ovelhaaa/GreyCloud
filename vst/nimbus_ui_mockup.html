@@ -1,506 +1,75 @@
 <!doctype html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>NIMBUS VST UI Mockup</title>
-  <style>
-    :root {
-      --bg: #18181c;
-      --header: #111111;
-      --panel: #1e1e23;
-      --line: #3c3c41;
-      --line-soft: #2a2a2f;
-      --text: #f4f2ea;
-      --muted: #aaa59a;
-      --accent: #ddbf72;
-      --accent-dim: rgba(221, 191, 114, 0.22);
-      --control: #151519;
-    }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      margin: 0;
-      min-height: 100vh;
-      display: grid;
-      place-items: center;
-      background: #0e0e11;
-      color: var(--text);
-      font-family: Inter, "Segoe UI", Arial, sans-serif;
-    }
-
-    .plugin {
-      width: 720px;
-      height: 560px;
-      overflow: hidden;
-      background:
-        radial-gradient(circle at 20% 0%, rgba(221, 191, 114, 0.055), transparent 30%),
-        linear-gradient(180deg, #1a1a1f 0%, var(--bg) 100%);
-      border: 1px solid #2b2b31;
-      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
-    }
-
-    header {
-      height: 48px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 0 20px;
-      background: var(--header);
-      border-bottom: 1px solid var(--line-soft);
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      min-width: 260px;
-      height: 100%;
-    }
-
-    .logo {
-      width: 30px;
-      height: 30px;
-      border-radius: 5px;
-      background: #111;
-      object-fit: cover;
-      box-shadow: 0 0 0 1px rgba(221, 191, 114, 0.18), 0 0 18px rgba(221, 191, 114, 0.08);
-    }
-
-    .brand-title {
-      font-size: 20px;
-      line-height: 1;
-      font-weight: 740;
-      letter-spacing: 0.08em;
-    }
-
-    .brand-subtitle {
-      margin-left: 1px;
-      margin-top: 4px;
-      color: var(--muted);
-      font-size: 9px;
-      font-weight: 650;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-    }
-
-    .header-spacer {
-      flex: 1;
-    }
-
-    .select,
-    .button,
-    .toggle,
-    .small-select {
-      height: 24px;
-      display: grid;
-      place-items: center;
-      border: 1px solid var(--line);
-      border-radius: 4px;
-      background: var(--control);
-      color: var(--text);
-      font-size: 12px;
-      font-weight: 560;
-    }
-
-    .select {
-      width: 200px;
-      justify-content: start;
-      padding: 0 24px 0 10px;
-      position: relative;
-    }
-
-    .select::after,
-    .small-select::after {
-      content: "";
-      width: 7px;
-      height: 7px;
-      border-right: 2px solid var(--accent);
-      border-bottom: 2px solid var(--accent);
-      transform: rotate(45deg);
-      position: absolute;
-      right: 10px;
-      top: 6px;
-    }
-
-    .button {
-      width: 60px;
-      height: 22px;
-    }
-
-    main {
-      height: 442px;
-      padding: 0 10px 10px;
-    }
-
-    .macro-row {
-      height: 120px;
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      border-bottom: 1px solid rgba(60, 60, 65, 0.35);
-    }
-
-    .macro {
-      position: relative;
-      display: grid;
-      place-items: center;
-      padding-top: 7px;
-    }
-
-    .macro + .macro {
-      border-left: 1px solid rgba(60, 60, 65, 0.28);
-    }
-
-    .control-stack {
-      width: 96px;
-      height: 98px;
-      display: grid;
-      grid-template-rows: 20px 76px;
-      justify-items: center;
-    }
-
-    .label {
-      color: var(--text);
-      font-size: 12px;
-      line-height: 16px;
-      text-align: center;
-      white-space: nowrap;
-    }
-
-    .knob {
-      width: 70px;
-      height: 70px;
-      border-radius: 50%;
-      position: relative;
-      background:
-        radial-gradient(circle at 34% 28%, #35353b 0 18%, #27272d 52%, #17171b 76%),
-        conic-gradient(from 220deg, var(--accent) 0deg 220deg, var(--line) 220deg 310deg, transparent 310deg);
-      box-shadow: inset 0 0 0 8px var(--bg), inset 0 0 0 12px #27272c;
-    }
-
-    .knob.small {
-      width: 36px;
-      height: 36px;
-      box-shadow: inset 0 0 0 5px var(--bg), inset 0 0 0 8px #27272c;
-    }
-
-    .knob::after {
-      content: "";
-      position: absolute;
-      width: 4px;
-      height: 22px;
-      left: calc(50% - 2px);
-      top: 8px;
-      border-radius: 3px;
-      background: var(--text);
-      transform: rotate(38deg);
-      transform-origin: 50% 27px;
-    }
-
-    .knob.small::after {
-      width: 3px;
-      height: 12px;
-      top: 5px;
-      transform-origin: 50% 13px;
-    }
-
-    .sync {
-      position: absolute;
-      bottom: 6px;
-      width: 50px;
-      height: 18px;
-      font-size: 11px;
-    }
-
-    .content {
-      height: 302px;
-      display: grid;
-      grid-template-columns: 32fr 10px 68fr;
-      padding-top: 10px;
-    }
-
-    .card {
-      border: 1px solid var(--line);
-      border-radius: 4px;
-      position: relative;
-      padding-top: 25px;
-    }
-
-    .card-title,
-    .subgroup-title {
-      position: absolute;
-      top: 4px;
-      left: 0;
-      right: 0;
-      text-align: center;
-      color: var(--text);
-      font-size: 12px;
-      text-transform: lowercase;
-    }
-
-    .left-card {
-      display: grid;
-      grid-template-rows: 1fr 1fr 1fr 80px;
-      gap: 0;
-      padding: 24px 5px 5px;
-    }
-
-    .mini-row,
-    .right-card-row {
-      display: grid;
-      place-items: center;
-    }
-
-    .mini-control {
-      width: 100px;
-      display: grid;
-      grid-template-rows: 16px 50px;
-      justify-items: center;
-      align-items: center;
-    }
-
-    .subgroup {
-      position: relative;
-      width: 100%;
-      border: 1px solid var(--accent);
-      border-radius: 4px;
-      display: grid;
-      grid-template-rows: 16px 1fr 1fr;
-      padding: 18px 5px 5px;
-    }
-
-    .subgroup-title {
-      top: 2px;
-      color: var(--accent);
-      font-size: 11px;
-      text-transform: uppercase;
-    }
-
-    .right-column {
-      display: grid;
-      grid-template-rows: 1fr 10px 1fr 10px 1fr;
-    }
-
-    .right-card {
-      display: grid;
-      padding: 24px 5px 5px;
-    }
-
-    .tone {
-      grid-template-columns: repeat(3, 1fr);
-    }
-
-    .mod,
-    .shimmer {
-      grid-template-columns: repeat(2, 1fr);
-    }
-
-    .small-select {
-      width: 90px;
-      height: 24px;
-      justify-content: start;
-      padding-left: 10px;
-      position: relative;
-    }
-
-    footer {
-      height: 70px;
-      display: flex;
-      align-items: stretch;
-      border-top: 1px solid rgba(60, 60, 65, 0.35);
-      padding: 5px;
-      gap: 0;
-    }
-
-    .file-buttons {
-      width: 125px;
-      display: grid;
-      grid-template-rows: 1fr 1fr;
-      gap: 4px;
-      padding-right: 5px;
-    }
-
-    .wide-button {
-      width: 118px;
-      height: auto;
-      font-size: 10px;
-    }
-
-    .pre-delay {
-      width: 140px;
-      display: grid;
-      grid-template-columns: 70px 70px;
-      align-items: center;
-    }
-
-    .footer-mini {
-      display: grid;
-      place-items: center;
-    }
-
-    .sync-stack {
-      display: grid;
-      grid-template-rows: 1fr 1fr;
-      align-items: center;
-      justify-items: center;
-    }
-
-    .width-block {
-      width: 80px;
-      display: grid;
-      place-items: center;
-    }
-
-    .core-block {
-      width: 100px;
-      display: grid;
-      place-items: center;
-    }
-
-    .io {
-      margin-left: auto;
-      width: 120px;
-      display: grid;
-      grid-template-rows: 1fr 1fr;
-      padding: 5px 0;
-    }
-
-    .fader {
-      display: grid;
-      grid-template-columns: 30px 1fr;
-      align-items: center;
-      gap: 5px;
-    }
-
-    .fader-label {
-      color: var(--text);
-      font-size: 12px;
-      text-align: right;
-    }
-
-    .track {
-      height: 5px;
-      border-radius: 999px;
-      background: linear-gradient(90deg, var(--accent) 0 62%, var(--line) 62% 100%);
-      position: relative;
-    }
-
-    .track::after {
-      content: "";
-      width: 3px;
-      height: 20px;
-      border-radius: 2px;
-      background: var(--text);
-      position: absolute;
-      left: 62%;
-      top: -8px;
-    }
-
-    .active {
-      background: var(--accent);
-      color: #14120d;
-      border-color: var(--accent);
-    }
-  </style>
-</head>
-<body>
-  <section class="plugin" aria-label="Mockup atualizado da interface NIMBUS">
-    <header>
-      <div class="brand">
-        <img class="logo" src="nimbus_logo_custom.svg" alt="">
-        <div>
-          <div class="brand-title">NIMBUS</div>
-          <div class="brand-subtitle">Reverb</div>
-        </div>
-      </div>
-      <div class="header-spacer"></div>
-      <div class="select">Default</div>
-      <div class="button">HQ</div>
-    </header>
-
-    <main>
-      <section class="macro-row">
-        <div class="macro">
-          <div class="control-stack"><div class="label">Mix</div><div class="knob"></div></div>
-        </div>
-        <div class="macro">
-          <div class="control-stack"><div class="label">Size</div><div class="knob"></div></div>
-          <div class="toggle sync">Sync</div>
-        </div>
-        <div class="macro">
-          <div class="control-stack"><div class="label">Feedback</div><div class="knob"></div></div>
-        </div>
-        <div class="macro">
-          <div class="control-stack"><div class="label">Texture</div><div class="knob"></div></div>
-        </div>
-      </section>
-
-      <section class="content">
-        <div class="card left-card">
-          <div class="card-title">grain / diffuser</div>
-          <div class="mini-row">
-            <div class="mini-control"><div class="label">Diffusion</div><div class="knob small"></div></div>
-          </div>
-          <div class="mini-row">
-            <div class="mini-control"><div class="label">Grain Scan</div><div class="knob small"></div></div>
-          </div>
-          <div class="mini-row">
-            <div class="mini-control"><div class="label">Rev Mix</div><div class="knob small"></div></div>
-          </div>
-          <div class="subgroup">
-            <div class="subgroup-title">Freeze</div>
-            <div class="toggle">Freeze</div>
-            <div class="toggle">Hard Frz</div>
-          </div>
-        </div>
-
-        <div></div>
-
-        <div class="right-column">
-          <div class="card right-card tone">
-            <div class="card-title">tone / decay</div>
-            <div class="right-card-row"><div class="mini-control"><div class="label">Damping</div><div class="knob small"></div></div></div>
-            <div class="right-card-row"><div class="mini-control"><div class="label">Low Damp</div><div class="knob small"></div></div></div>
-            <div class="right-card-row"><div class="mini-control"><div class="label">Tone</div><div class="knob small"></div></div></div>
-          </div>
-          <div></div>
-          <div class="card right-card mod">
-            <div class="card-title">modulation</div>
-            <div class="right-card-row"><div class="mini-control"><div class="label">Depth</div><div class="knob small"></div></div></div>
-            <div class="right-card-row"><div class="mini-control"><div class="label">Rate</div><div class="knob small"></div></div></div>
-          </div>
-          <div></div>
-          <div class="card right-card shimmer">
-            <div class="card-title">shimmer</div>
-            <div class="right-card-row"><div class="mini-control"><div class="label">Shimmer</div><div class="knob small"></div></div></div>
-            <div class="right-card-row"><div class="small-select">Octave</div></div>
-          </div>
-        </div>
-      </section>
-    </main>
-
-    <footer>
-      <div class="file-buttons">
-        <div class="button wide-button">Load WASM JSON Preset...</div>
-        <div class="button wide-button">Export to JSON...</div>
-      </div>
-      <div class="pre-delay">
-        <div class="footer-mini"><div class="mini-control"><div class="label">PreDelay</div><div class="knob small"></div></div></div>
-        <div class="sync-stack">
-          <div class="toggle">Sync</div>
-          <div class="small-select">1/4</div>
-        </div>
-      </div>
-      <div class="width-block"><div class="mini-control"><div class="label">Width</div><div class="knob small"></div></div></div>
-      <div class="core-block"><div class="toggle active">Stereo Core</div></div>
-      <div class="io">
-        <div class="fader"><div class="fader-label">In</div><div class="track"></div></div>
-        <div class="fader"><div class="fader-label">Out</div><div class="track"></div></div>
-      </div>
-    </footer>
-  </section>
-</body>
-</html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nimbus native editor visual reference</title><style>
+@font-face{font-family:Montserrat;src:url('fonts/Montserrat-Light.ttf') format('truetype');font-weight:300;font-style:normal}
+@font-face{font-family:Montserrat;src:url('fonts/Montserrat-Regular.ttf') format('truetype');font-weight:400;font-style:normal}
+@font-face{font-family:Montserrat;src:url('fonts/Montserrat-Bold.ttf') format('truetype');font-weight:700;font-style:normal}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0e0e11;color:#f4f2ea;font-family:Montserrat,sans-serif}#frame{position:relative;width:720px;height:560px}#plugin{position:absolute;width:720px;height:560px;background:#18181c;overflow:hidden;transform-origin:top left}#plugin>*{position:absolute}.header{background:#111;border-bottom:1px solid #2a2a30}.logo{background:radial-gradient(ellipse,rgba(221,191,114,.045),transparent 70%)}.logo img{width:100%;height:100%}.brand{font-size:23px;font-weight:400;letter-spacing:3px}.descriptor{font-size:8.5px;font-weight:700;letter-spacing:2.16px;color:rgba(221,191,114,.72)}.zone{background:#1e1e23;border:1px solid #2a2a30;border-radius:5px}.caption{display:grid;place-items:center;height:18px;font-weight:700;font-size:8px;color:#aaa7a0}.freeze{background:rgba(17,17,17,.15)}.freeze .caption{height:16px}.label,.gain-label{font-family:Montserrat,sans-serif;font-weight:300;font-size:10.5px;color:rgba(244,242,234,.86);display:grid;place-items:center;white-space:nowrap}.gain-label{justify-items:end}.status,.feedback{display:grid;place-items:center;font-size:10px;color:#aaa7a0}.feedback{font-size:9px}.button,.select{font:300 10px Montserrat,sans-serif;border:1px solid #2a2a30;border-radius:4px;background:#151517;color:#f4f2ea;padding:0 5px;cursor:pointer}.select{font-size:11.5px}.button:hover,.select:hover{border-color:#45454d;background:#252529}.button:active{background:rgba(221,191,114,.22)}.button.active{background:rgba(221,191,114,.16);border-color:rgba(221,191,114,.75);color:#ddbf72}.knob svg{width:100%;height:100%}.utility{background:rgba(17,17,17,.3)}.separator{background:#2a2a30}.utility-caption{font-size:8px;font-weight:700;color:#aaa7a0;display:grid;place-items:center}.fader:before{content:"";position:absolute;top:10px;height:3px;width:100%;border-radius:2px;background:linear-gradient(to right,#ddbf72 50%,#45454d 50%)}.fader span{position:absolute;left:50%;top:6px;width:5px;height:12px;background:#f4f2ea;border-radius:2px}</style></head><body><!-- Visual reference only: the native JUCE editor owns parameters and preset actions. -->
+<main id="frame"><div id="plugin">
+<div class="header" style="left:0px;top:0px;width:720px;height:84px"></div>
+<div class="logo" style="left:9px;top:2px;width:80px;height:80px"><img src="nimbus_logo_custom.svg" alt="Nimbus particle cloud"></div>
+<div class="brand" style="left:100px;top:22px;width:250px;height:28px">NIMBUS</div>
+<div class="descriptor" style="left:100px;top:52px;width:200px;height:12px">REVERB</div>
+<button class="button" style="left:415px;top:31px;width:22px;height:22px">◀</button>
+<button class="button" style="left:631px;top:31px;width:22px;height:22px">▶</button>
+<select class="select" style="left:440px;top:18px;width:188px;height:24px"><option>Default</option><option>Atmospheric Cloud</option></select>
+<div class="status" style="left:438px;top:42px;width:192px;height:24px">Default</div>
+<button class="button" style="left:666px;top:31px;width:42px;height:22px">hq</button>
+<div class="label" style="left:0px;top:167px;width:180px;height:18px">mix</div>
+<div class="knob" style="left:55.0px;top:97px;width:70px;height:70px"><svg viewBox="0 0 70 70"><defs><linearGradient id="b084" x2="0" y2="1"><stop stop-color="#242429"/><stop offset="1" stop-color="#111"/></linearGradient></defs><circle cx="35.0" cy="35.0" r="23.87" fill="url(#b084)" stroke="#36363d" stroke-width=".8"/><path d="M13.08,56.92 A31.0,31.0 0 1 1 56.92,56.92" fill="none" stroke="#45454d" stroke-width="4" stroke-linecap="round"/><path d="M13.08,56.92 A31.0,31.0 0 0 1 35.00,4.00" fill="none" stroke="#ddbf72" stroke-width="4" stroke-linecap="round"/><path d="M35.0,24.4972 L35.0,13.994399999999999" stroke="#f4f2ea" stroke-width="2" stroke-linecap="round"/></svg></div>
+<div class="label" style="left:231px;top:167px;width:30px;height:18px">size</div>
+<div class="knob" style="left:235.0px;top:97px;width:70px;height:70px"><svg viewBox="0 0 70 70"><defs><linearGradient id="b18084" x2="0" y2="1"><stop stop-color="#242429"/><stop offset="1" stop-color="#111"/></linearGradient></defs><circle cx="35.0" cy="35.0" r="23.87" fill="url(#b18084)" stroke="#36363d" stroke-width=".8"/><path d="M13.08,56.92 A31.0,31.0 0 1 1 56.92,56.92" fill="none" stroke="#45454d" stroke-width="4" stroke-linecap="round"/><path d="M13.08,56.92 A31.0,31.0 0 0 1 35.00,4.00" fill="none" stroke="#ddbf72" stroke-width="4" stroke-linecap="round"/><path d="M35.0,24.4972 L35.0,13.994399999999999" stroke="#f4f2ea" stroke-width="2" stroke-linecap="round"/></svg></div>
+<div class="label" style="left:360px;top:167px;width:180px;height:18px">feedback</div>
+<div class="knob" style="left:415.0px;top:97px;width:70px;height:70px"><svg viewBox="0 0 70 70"><defs><linearGradient id="b36084" x2="0" y2="1"><stop stop-color="#242429"/><stop offset="1" stop-color="#111"/></linearGradient></defs><circle cx="35.0" cy="35.0" r="23.87" fill="url(#b36084)" stroke="#36363d" stroke-width=".8"/><path d="M13.08,56.92 A31.0,31.0 0 1 1 56.92,56.92" fill="none" stroke="#45454d" stroke-width="4" stroke-linecap="round"/><path d="M13.08,56.92 A31.0,31.0 0 0 1 35.00,4.00" fill="none" stroke="#ddbf72" stroke-width="4" stroke-linecap="round"/><path d="M35.0,24.4972 L35.0,13.994399999999999" stroke="#f4f2ea" stroke-width="2" stroke-linecap="round"/></svg></div>
+<div class="label" style="left:540px;top:167px;width:180px;height:18px">texture</div>
+<div class="knob" style="left:595.0px;top:97px;width:70px;height:70px"><svg viewBox="0 0 70 70"><defs><linearGradient id="b54084" x2="0" y2="1"><stop stop-color="#242429"/><stop offset="1" stop-color="#111"/></linearGradient></defs><circle cx="35.0" cy="35.0" r="23.87" fill="url(#b54084)" stroke="#36363d" stroke-width=".8"/><path d="M13.08,56.92 A31.0,31.0 0 1 1 56.92,56.92" fill="none" stroke="#45454d" stroke-width="4" stroke-linecap="round"/><path d="M13.08,56.92 A31.0,31.0 0 0 1 35.00,4.00" fill="none" stroke="#ddbf72" stroke-width="4" stroke-linecap="round"/><path d="M35.0,24.4972 L35.0,13.994399999999999" stroke="#f4f2ea" stroke-width="2" stroke-linecap="round"/></svg></div>
+<button class="button" style="left:267px;top:167px;width:42px;height:18px">sync</button>
+<div class="zone" style="left:10px;top:208px;width:224px;height:244px"><span class="caption">GRAIN / DIFFUSION</span></div>
+<div class="zone" style="left:244px;top:208px;width:466px;height:78px"><span class="caption">TONE / DECAY</span></div>
+<div class="zone" style="left:244px;top:296px;width:228px;height:156px"><span class="caption">MODULATION</span></div>
+<div class="zone" style="left:482px;top:296px;width:228px;height:156px"><span class="caption">SHIFT</span></div>
+<div class="label" style="left:15px;top:270.5px;width:214px;height:16px">diffusion</div>
+<div class="knob" style="left:104.0px;top:234.5px;width:36px;height:36px"><svg viewBox="0 0 36 36"><defs><linearGradient id="b15233" x2="0" y2="1"><stop stop-color="#242429"/><stop offset="1" stop-color="#111"/></linearGradient></defs><circle cx="18.0" cy="18.0" r="10.780000000000001" fill="url(#b15233)" stroke="#36363d" stroke-width=".8"/><path d="M8.10,27.90 A14.0,14.0 0 1 1 27.90,27.90" fill="none" stroke="#45454d" stroke-width="2" stroke-linecap="round"/><path d="M8.10,27.90 A14.0,14.0 0 0 1 18.00,4.00" fill="none" stroke="#ddbf72" stroke-width="2" stroke-linecap="round"/><path d="M18.0,13.256799999999998 L18.0,8.513599999999999" stroke="#f4f2ea" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+<div class="label" style="left:15px;top:325.5px;width:214px;height:16px">grain scan</div>
+<div class="knob" style="left:104.0px;top:289.5px;width:36px;height:36px"><svg viewBox="0 0 36 36"><defs><linearGradient id="b15292" x2="0" y2="1"><stop stop-color="#242429"/><stop offset="1" stop-color="#111"/></linearGradient></defs><circle cx="18.0" cy="18.0" r="10.780000000000001" fill="url(#b15292)" stroke="#36363d" stroke-width=".8"/><path d="M8.10,27.90 A14.0,14.0 0 1 1 27.90,27.90" fill="none" stroke="#45454d" stroke-width="2" stroke-linecap="round"/><path d="M8.10,27.90 A14.0,14.0 0 0 1 18.00,4.00" fill="none" stroke="#ddbf72" stroke-width="2" stroke-linecap="round"/><path d="M18.0,13.256799999999998 L18.0,8.513599999999999" stroke="#f4f2ea" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+<div class="label" style="left:15px;top:381px;width:214px;height:16px">reverse</div>
+<div class="knob" style="left:104.0px;top:345px;width:36px;height:36px"><svg viewBox="0 0 36 36"><defs><linearGradient id="b15351" x2="0" y2="1"><stop stop-color="#242429"/><stop offset="1" stop-color="#111"/></linearGradient></defs><circle cx="18.0" cy="18.0" r="10.780000000000001" fill="url(#b15351)" stroke="#36363d" stroke-width=".8"/><path d="M8.10,27.90 A14.0,14.0 0 1 1 27.90,27.90" fill="none" stroke="#45454d" stroke-width="2" stroke-linecap="round"/><path d="M8.10,27.90 A14.0,14.0 0 0 1 18.00,4.00" fill="none" stroke="#ddbf72" stroke-width="2" stroke-linecap="round"/><path d="M18.0,13.256799999999998 L18.0,8.513599999999999" stroke="#f4f2ea" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+<div class="zone freeze" style="left:15px;top:399px;width:214px;height:48px"></div>
+<button class="button" style="left:23px;top:412px;width:88px;height:22px">freeze</button>
+<button class="button" style="left:129px;top:412px;width:88px;height:22px">hard freeze</button>
+<div class="label" style="left:249px;top:267px;width:152px;height:16px">damping</div>
+<div class="knob" style="left:307.0px;top:231px;width:36px;height:36px"><svg viewBox="0 0 36 36"><defs><linearGradient id="b249233" x2="0" y2="1"><stop stop-color="#242429"/><stop offset="1" stop-color="#111"/></linearGradient></defs><circle cx="18.0" cy="18.0" r="10.780000000000001" fill="url(#b249233)" stroke="#36363d" stroke-width=".8"/><path d="M8.10,27.90 A14.0,14.0 0 1 1 27.90,27.90" fill="none" stroke="#45454d" stroke-width="2" stroke-linecap="round"/><path d="M8.10,27.90 A14.0,14.0 0 0 1 18.00,4.00" fill="none" stroke="#ddbf72" stroke-width="2" stroke-linecap="round"/><path d="M18.0,13.256799999999998 L18.0,8.513599999999999" stroke="#f4f2ea" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+<div class="label" style="left:401px;top:267px;width:152px;height:16px">low cut</div>
+<div class="knob" style="left:459.0px;top:231px;width:36px;height:36px"><svg viewBox="0 0 36 36"><defs><linearGradient id="b401233" x2="0" y2="1"><stop stop-color="#242429"/><stop offset="1" stop-color="#111"/></linearGradient></defs><circle cx="18.0" cy="18.0" r="10.780000000000001" fill="url(#b401233)" stroke="#36363d" stroke-width=".8"/><path d="M8.10,27.90 A14.0,14.0 0 1 1 27.90,27.90" fill="none" stroke="#45454d" stroke-width="2" stroke-linecap="round"/><path d="M8.10,27.90 A14.0,14.0 0 0 1 18.00,4.00" fill="none" stroke="#ddbf72" stroke-width="2" stroke-linecap="round"/><path d="M18.0,13.256799999999998 L18.0,8.513599999999999" stroke="#f4f2ea" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+<div class="label" style="left:553px;top:267px;width:152px;height:16px">tone</div>
+<div class="knob" style="left:611.0px;top:231px;width:36px;height:36px"><svg viewBox="0 0 36 36"><defs><linearGradient id="b553233" x2="0" y2="1"><stop stop-color="#242429"/><stop offset="1" stop-color="#111"/></linearGradient></defs><circle cx="18.0" cy="18.0" r="10.780000000000001" fill="url(#b553233)" stroke="#36363d" stroke-width=".8"/><path d="M8.10,27.90 A14.0,14.0 0 1 1 27.90,27.90" fill="none" stroke="#45454d" stroke-width="2" stroke-linecap="round"/><path d="M8.10,27.90 A14.0,14.0 0 0 1 18.00,4.00" fill="none" stroke="#ddbf72" stroke-width="2" stroke-linecap="round"/><path d="M18.0,13.256799999999998 L18.0,8.513599999999999" stroke="#f4f2ea" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+<div class="label" style="left:249px;top:362.5px;width:218px;height:16px">depth</div>
+<div class="knob" style="left:340px;top:326.5px;width:36px;height:36px"><svg viewBox="0 0 36 36"><defs><linearGradient id="b249321" x2="0" y2="1"><stop stop-color="#242429"/><stop offset="1" stop-color="#111"/></linearGradient></defs><circle cx="18.0" cy="18.0" r="10.780000000000001" fill="url(#b249321)" stroke="#36363d" stroke-width=".8"/><path d="M8.10,27.90 A14.0,14.0 0 1 1 27.90,27.90" fill="none" stroke="#45454d" stroke-width="2" stroke-linecap="round"/><path d="M8.10,27.90 A14.0,14.0 0 0 1 18.00,4.00" fill="none" stroke="#ddbf72" stroke-width="2" stroke-linecap="round"/><path d="M18.0,13.256799999999998 L18.0,8.513599999999999" stroke="#f4f2ea" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+<div class="label" style="left:249px;top:425.5px;width:218px;height:16px">rate</div>
+<div class="knob" style="left:340px;top:389.5px;width:36px;height:36px"><svg viewBox="0 0 36 36"><defs><linearGradient id="b477321" x2="0" y2="1"><stop stop-color="#242429"/><stop offset="1" stop-color="#111"/></linearGradient></defs><circle cx="18.0" cy="18.0" r="10.780000000000001" fill="url(#b477321)" stroke="#36363d" stroke-width=".8"/><path d="M8.10,27.90 A14.0,14.0 0 1 1 27.90,27.90" fill="none" stroke="#45454d" stroke-width="2" stroke-linecap="round"/><path d="M8.10,27.90 A14.0,14.0 0 0 1 18.00,4.00" fill="none" stroke="#ddbf72" stroke-width="2" stroke-linecap="round"/><path d="M18.0,13.256799999999998 L18.0,8.513599999999999" stroke="#f4f2ea" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+<div class="label" style="left:487px;top:362.5px;width:218px;height:16px">shimmer</div>
+<div class="knob" style="left:578px;top:326.5px;width:36px;height:36px"><svg viewBox="0 0 36 36"><defs><linearGradient id="b249409" x2="0" y2="1"><stop stop-color="#242429"/><stop offset="1" stop-color="#111"/></linearGradient></defs><circle cx="18.0" cy="18.0" r="10.780000000000001" fill="url(#b249409)" stroke="#36363d" stroke-width=".8"/><path d="M8.10,27.90 A14.0,14.0 0 1 1 27.90,27.90" fill="none" stroke="#45454d" stroke-width="2" stroke-linecap="round"/><path d="M8.10,27.90 A14.0,14.0 0 0 1 18.00,4.00" fill="none" stroke="#ddbf72" stroke-width="2" stroke-linecap="round"/><path d="M18.0,13.256799999999998 L18.0,8.513599999999999" stroke="#f4f2ea" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+<select class="select" style="left:551px;top:403.5px;width:90px;height:24px"><option>+1 Oct</option></select>
+<div class="utility" style="left:0px;top:472px;width:720px;height:88px"></div>
+<div class="separator" style="left:10px;top:472px;width:700px;height:1px"></div>
+<div class="separator" style="left:124px;top:485px;width:1px;height:65px"></div>
+<div class="separator" style="left:334px;top:485px;width:1px;height:65px"></div>
+<div class="separator" style="left:520px;top:485px;width:1px;height:65px"></div>
+<div class="utility-caption" style="left:10px;top:478px;width:114px;height:14px">PRESETS</div>
+<div class="utility-caption" style="left:124px;top:478px;width:210px;height:14px">TEMPO / PRE-DELAY</div>
+<div class="utility-caption" style="left:334px;top:478px;width:186px;height:14px">STEREO FIELD</div>
+<div class="utility-caption" style="left:520px;top:478px;width:190px;height:14px">GAIN</div>
+<button class="button" style="left:14px;top:498px;width:102px;height:22px">import</button>
+<button class="button" style="left:14px;top:526px;width:102px;height:22px">export</button>
+<div class="label" style="left:134px;top:533.5px;width:70px;height:14px">pre-delay</div>
+<div class="knob" style="left:152.0px;top:499.5px;width:34px;height:34px"><svg viewBox="0 0 34 34"><defs><linearGradient id="b134495" x2="0" y2="1"><stop stop-color="#242429"/><stop offset="1" stop-color="#111"/></linearGradient></defs><circle cx="17.0" cy="17.0" r="10.01" fill="url(#b134495)" stroke="#36363d" stroke-width=".8"/><path d="M7.81,26.19 A13.0,13.0 0 1 1 26.19,26.19" fill="none" stroke="#45454d" stroke-width="2" stroke-linecap="round"/><path d="M7.81,26.19 A13.0,13.0 0 0 1 17.00,4.00" fill="none" stroke="#ddbf72" stroke-width="2" stroke-linecap="round"/><path d="M17.0,12.595600000000001 L17.0,8.1912" stroke="#f4f2ea" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+<button class="button" style="left:214px;top:496px;width:52px;height:20px">sync</button>
+<select class="select" style="left:272px;top:496px;width:52px;height:20px"><option>1/4</option><option>1/8</option></select>
+<div class="feedback" style="left:205px;top:529px;width:123px;height:16px">120 BPM • 1/4 = 500 ms</div>
+<div class="label" style="left:344px;top:533.5px;width:68px;height:14px">width</div>
+<div class="knob" style="left:361.0px;top:499.5px;width:34px;height:34px"><svg viewBox="0 0 34 34"><defs><linearGradient id="b344495" x2="0" y2="1"><stop stop-color="#242429"/><stop offset="1" stop-color="#111"/></linearGradient></defs><circle cx="17.0" cy="17.0" r="10.01" fill="url(#b344495)" stroke="#36363d" stroke-width=".8"/><path d="M7.81,26.19 A13.0,13.0 0 1 1 26.19,26.19" fill="none" stroke="#45454d" stroke-width="2" stroke-linecap="round"/><path d="M7.81,26.19 A13.0,13.0 0 0 1 17.00,4.00" fill="none" stroke="#ddbf72" stroke-width="2" stroke-linecap="round"/><path d="M17.0,12.595600000000001 L17.0,8.1912" stroke="#f4f2ea" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+<button class="button" style="left:419px;top:514px;width:91px;height:22px">stereo core</button>
+<div class="gain-label" style="left:530px;top:496px;width:43px;height:23px">input</div>
+<div class="fader" style="left:581px;top:496px;width:125px;height:23px"><span></span></div>
+<div class="gain-label" style="left:530px;top:525px;width:43px;height:23px">output</div>
+<div class="fader" style="left:581px;top:525px;width:125px;height:23px"><span></span></div>
+</div></main><script>function resize(){const s=Math.min(1.6,(innerWidth-24)/720,(innerHeight-24)/560);document.querySelector('#plugin').style.transform=`scale(${s})`;const f=document.querySelector('#frame');f.style.width=720*s+'px';f.style.height=560*s+'px'}onresize=resize;resize();document.querySelectorAll('button').forEach(b=>b.onclick=()=>b.classList.toggle('active'));</script></body></html>

@@ -9,42 +9,42 @@
 class CardComponent : public juce::Component
 {
 public:
-    CardComponent(const juce::String& title) : name(title) {}
+    CardComponent(const juce::String& title, float width) : name(title), referenceWidth(width) {}
     void paint(juce::Graphics& g) override {
         auto bounds = getLocalBounds().toFloat();
-        auto titleArea = bounds.withHeight(20.0f).reduced(1.0f, 1.0f);
-
-        g.setColour(juce::Colour(60, 60, 65));
-        g.drawRoundedRectangle(bounds, 4.0f, 1.0f);
-        g.setColour(juce::Colour(34, 34, 39));
-        g.fillRoundedRectangle(titleArea, 3.0f);
-        g.setColour(juce::Colour(221, 191, 114));
-        g.drawHorizontalLine(20, bounds.getX() + 7.0f, bounds.getRight() - 7.0f);
-        g.setFont(juce::Font(11.0f, juce::Font::bold));
-        g.drawText(name.toUpperCase(), titleArea.toNearestInt(), juce::Justification::centred, false);
+        g.setColour(NimbusStyle::raised);
+        g.fillRoundedRectangle(bounds, 5.0f);
+        g.setColour(NimbusStyle::border);
+        g.drawRoundedRectangle(bounds.reduced(0.5f), 5.0f, 1.0f);
+        g.setColour(NimbusStyle::secondary);
+        g.setFont(NimbusStyle::captionFont(NimbusStyle::caption * getWidth() / referenceWidth));
+        g.drawText(name.toUpperCase(), bounds.withHeight(18.0f * getWidth() / referenceWidth).toNearestInt(),
+                   juce::Justification::centred, false);
     }
 private:
     juce::String name;
+    float referenceWidth;
 };
 
 class SubgroupComponent : public juce::Component
 {
 public:
-    SubgroupComponent(const juce::String& title) : name(title) {}
-    void paint(juce::Graphics& g) override {
-        auto bounds = getLocalBounds().toFloat();
-        auto titleArea = bounds.withHeight(18.0f).reduced(1.0f, 1.0f);
-
-        g.setColour(juce::Colour(221, 191, 114));
-        g.drawRoundedRectangle(bounds, 4.0f, 1.0f);
-        g.setColour(juce::Colour(34, 34, 39));
-        g.fillRoundedRectangle(titleArea, 3.0f);
-        g.setColour(juce::Colour(221, 191, 114));
-        g.setFont(juce::Font(10.5f, juce::Font::bold));
-        g.drawText(name.toUpperCase(), titleArea.toNearestInt(), juce::Justification::centred, false);
+    SubgroupComponent() = default;
+    void setActivity(bool freeze, bool hard) {
+        const int next = hard ? 2 : freeze ? 1 : 0;
+        if (next != activity) { activity = next; repaint(); }
     }
+    void paint(juce::Graphics& g) override {
+        const auto bounds = getLocalBounds().toFloat().reduced(0.5f);
+        g.setColour(activity ? NimbusStyle::gold.withAlpha(0.04f) : NimbusStyle::deep.withAlpha(0.15f));
+        g.fillRoundedRectangle(bounds, 4.0f);
+        g.setColour(activity ? NimbusStyle::gold.withAlpha(activity == 2 ? 0.65f : 0.35f) : NimbusStyle::border);
+        g.drawRoundedRectangle(bounds, 4.0f, 1.0f);
+
+    }
+
 private:
-    juce::String name;
+    int activity = 0;
 };
 
 class CloudGreyVerbEditor  : public juce::AudioProcessorEditor, private juce::AudioProcessorParameter::Listener, private juce::Timer
@@ -87,6 +87,7 @@ private:
     std::unique_ptr<SubgroupComponent> freezeSubgroup;
     std::unique_ptr<juce::Component> nimbusLogo;
 
+    juce::GlyphArrangement brandTitle, brandDescriptor;
     juce::ComboBox presetSelector;
     juce::Label presetStatus;
     juce::Label syncFeedback;

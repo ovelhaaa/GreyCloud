@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc" shape-rendering="geometricPrecision">
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="95 117 820 820" role="img" aria-labelledby="title desc" shape-rendering="geometricPrecision">
   <defs>
     <style>
       @keyframes organic-pulse {
         0%, 100% { opacity: 1; transform: scale(1); }
-        50% { opacity: 0.5; transform: scale(0.8); }
+        50% { opacity: 0.88; transform: scale(0.975); }
       }
       .particle-organic {
-        animation: organic-pulse 3s ease-in-out infinite;
+        animation: organic-pulse var(--period, 7s) ease-in-out infinite;
+        animation-delay: var(--phase, 0s) !important;
         transform-origin: center;
         transform-box: fill-box;
       }
@@ -15,96 +16,95 @@
   </defs>
   <title id="title">NIMBUS procedural particle-cloud logo</title>
   <desc id="desc">Cloud generated from a smooth-union circular SDF and filled with golden-angle Vogel spiral particles. Every particle is an exact SVG circle.</desc>
-  <rect width="1024" height="1024" fill="#111111"/>
   <g id="particle-cloud" fill="#DDBF72">
-    <circle cx="567.29" cy="447.634" r="15.424" class="particle-organic" style="animation-delay: 0s" />
-    <circle cx="514.874" cy="601.954" r="11.836" class="particle-organic" style="animation-delay: 0.15s" />
-    <circle cx="445.716" cy="444.129" r="15.502" class="particle-organic" style="animation-delay: 0.3s" />
-    <circle cx="611.345" cy="517.529" r="14.773" class="particle-organic" style="animation-delay: 0.44999999999999996s" />
-    <circle cx="431.588" cy="577.832" r="14.526" class="particle-organic" style="animation-delay: 0.6s" />
-    <circle cx="527.429" cy="404.94" r="15.499" class="particle-organic" style="animation-delay: 0.75s" />
-    <circle cx="575.242" cy="604.739" r="15.021" class="particle-organic" style="animation-delay: 0.8999999999999999s" />
-    <circle cx="398.888" cy="485.436" r="14.827" class="particle-organic" style="animation-delay: 1.05s" />
-    <circle cx="616.673" cy="453.318" r="13.1" class="particle-organic" style="animation-delay: 1.2s" />
-    <circle cx="473.301" cy="629.483" r="13.445" class="particle-organic" style="animation-delay: 1.3499999999999999s" />
-    <circle cx="459.703" cy="395.961" r="14.634" class="particle-organic" style="animation-delay: 1.5s" />
-    <circle cx="632.15" cy="563.614" r="14.543" class="particle-organic" style="animation-delay: 1.65s" />
-    <circle cx="385.333" cy="556.221" r="13.627" class="particle-organic" style="animation-delay: 1.7999999999999998s" />
-    <circle cx="577.098" cy="390.912" r="13.459" class="particle-organic" style="animation-delay: 1.95s" />
-    <circle cx="546.587" cy="648.395" r="13.22" class="particle-organic" style="animation-delay: 2.1s" />
-    <circle cx="391.719" cy="433.054" r="14.401" class="particle-organic" style="animation-delay: 2.25s" />
-    <circle cx="657.073" cy="488.468" r="14.938" class="particle-organic" style="animation-delay: 2.4s" />
-    <circle cx="419.045" cy="629.726" r="15.412" class="particle-organic" style="animation-delay: 2.55s" />
-    <circle cx="500.802" cy="359.44" r="13.375" class="particle-organic" style="animation-delay: 2.6999999999999997s" />
-    <circle cx="625.431" cy="618.928" r="15.422" class="particle-organic" style="animation-delay: 2.85s" />
-    <circle cx="353.271" cy="509.735" r="14.517" class="particle-organic" style="animation-delay: 0s" />
-    <circle cx="632.67" cy="404.582" r="10.224" class="particle-organic" style="animation-delay: 0.15s" />
-    <circle cx="495.301" cy="675.466" r="10.486" class="particle-organic" style="animation-delay: 0.3s" />
-    <circle cx="412.272" cy="378.006" r="11.776" class="particle-organic" style="animation-delay: 0.44999999999999996s" />
-    <circle cx="678.673" cy="543.941" r="14.565" class="particle-organic" style="animation-delay: 0.6s" />
-    <circle cx="365.285" cy="602.414" r="14.476" class="particle-organic" style="animation-delay: 0.75s" />
-    <circle cx="559.818" cy="343.734" r="11.308" class="particle-organic" style="animation-delay: 0.8999999999999999s" />
-    <circle cx="591.548" cy="670.657" r="13.792" class="particle-organic" style="animation-delay: 1.05s" />
-    <circle cx="343.82" cy="447.847" r="14.915" class="particle-organic" style="animation-delay: 1.2s" />
-    <circle cx="681.653" cy="444.786" r="12.335" class="particle-organic" style="animation-delay: 1.3499999999999999s" />
-    <circle cx="431.236" cy="678.364" r="13.35" class="particle-organic" style="animation-delay: 1.5s" />
-    <circle cx="458.485" cy="332.456" r="10.641" class="particle-organic" style="animation-delay: 1.65s" />
-    <circle cx="674.788" cy="609.468" r="13.887" class="particle-organic" style="animation-delay: 1.7999999999999998s" />
-    <circle cx="323.817" cy="550.566" r="11.736" class="particle-organic" style="animation-delay: 1.95s" />
-    <circle cx="626.076" cy="354.562" r="6.76" class="particle-organic" style="animation-delay: 2.1s" />
-    <circle cx="534.495" cy="707.433" r="8.921" class="particle-organic" style="animation-delay: 2.25s" />
-    <circle cx="361.682" cy="381.599" r="11.853" class="particle-organic" style="animation-delay: 2.4s" />
-    <circle cx="713.172" cy="506.554" r="13.199" class="particle-organic" style="animation-delay: 2.55s" />
-    <circle cx="365.742" cy="653.452" r="13.907" class="particle-organic" style="animation-delay: 2.6999999999999997s" />
-    <circle cx="524.43" cy="306.706" r="8.188" class="particle-organic" style="animation-delay: 2.85s" />
-    <circle cx="642.879" cy="673.464" r="13.432" class="particle-organic" style="animation-delay: 0s" />
-    <circle cx="304.296" cy="481.031" r="13.391" class="particle-organic" style="animation-delay: 0.15s" />
-    <circle cx="687.841" cy="393.341" r="6.084" class="particle-organic" style="animation-delay: 0.3s" />
-    <circle cx="462.001" cy="720.327" r="9.249" class="particle-organic" style="animation-delay: 0.44999999999999996s" />
-    <circle cx="407.132" cy="322.784" r="4.851" class="particle-organic" style="animation-delay: 0.6s" />
-    <circle cx="719.103" cy="581.342" r="11.434" class="particle-organic" style="animation-delay: 0.75s" />
-    <circle cx="310.575" cy="601.599" r="11.293" class="particle-organic" style="animation-delay: 0.8999999999999999s" />
-    <circle cx="584.961" cy="724.313" r="9.933" class="particle-organic" style="animation-delay: 1.05s" />
-    <circle cx="313.033" cy="403.778" r="12.017" class="particle-organic" style="animation-delay: 1.2s" />
-    <circle cx="733.735" cy="456.922" r="10.275" class="particle-organic" style="animation-delay: 1.3499999999999999s" />
-    <circle cx="384.62" cy="704.027" r="11.784" class="particle-organic" style="animation-delay: 1.5s" />
-    <circle cx="695.183" cy="658.095" r="11.839" class="particle-organic" style="animation-delay: 1.65s" />
-    <circle cx="276.332" cy="528.143" r="10.308" class="particle-organic" style="animation-delay: 1.7999999999999998s" />
-    <circle cx="352.065" cy="330.559" r="4.378" class="particle-organic" style="animation-delay: 1.95s" />
-    <circle cx="754.336" cy="537.951" r="11.165" class="particle-organic" style="animation-delay: 2.1s" />
-    <circle cx="314.298" cy="657.651" r="10.929" class="particle-organic" style="animation-delay: 2.25s" />
-    <circle cx="641.702" cy="724.785" r="9.89" class="particle-organic" style="animation-delay: 2.4s" />
-    <circle cx="270.899" cy="442.212" r="10.895" class="particle-organic" style="animation-delay: 2.55s" />
-    <circle cx="420.115" cy="749.397" r="6.952" class="particle-organic" style="animation-delay: 2.6999999999999997s" />
-    <circle cx="743.606" cy="625.836" r="11.652" class="particle-organic" style="animation-delay: 2.85s" />
-    <circle cx="262.658" cy="584.996" r="12.137" class="particle-organic" style="animation-delay: 0s" />
-    <circle cx="298.209" cy="355.496" r="6.751" class="particle-organic" style="animation-delay: 0.15s" />
-    <circle cx="777.042" cy="482.802" r="6.459" class="particle-organic" style="animation-delay: 0.3s" />
-    <circle cx="335.181" cy="713.829" r="8.983" class="particle-organic" style="animation-delay: 0.44999999999999996s" />
-    <circle cx="699.903" cy="708.195" r="8.423" class="particle-organic" style="animation-delay: 0.6s" />
-    <circle cx="239.27" cy="494.151" r="7.924" class="particle-organic" style="animation-delay: 0.75s" />
-    <circle cx="783.773" cy="578.63" r="12.987" class="particle-organic" style="animation-delay: 0.8999999999999999s" />
-    <circle cx="265.189" cy="647.219" r="10.469" class="particle-organic" style="animation-delay: 1.05s" />
-    <circle cx="250.168" cy="396.483" r="6.104" class="particle-organic" style="animation-delay: 1.2s" />
-    <circle cx="754.876" cy="674.822" r="8.604" class="particle-organic" style="animation-delay: 1.3499999999999999s" />
-    <circle cx="221.408" cy="556.231" r="11.97" class="particle-organic" style="animation-delay: 1.5s" />
-    <circle cx="811.913" cy="519.206" r="9.159" class="particle-organic" style="animation-delay: 1.65s" />
-    <circle cx="802.198" cy="625.952" r="11.529" class="particle-organic" style="animation-delay: 1.7999999999999998s" />
-    <circle cx="219.699" cy="624.518" r="12.024" class="particle-organic" style="animation-delay: 1.95s" />
-    <circle cx="187.549" cy="517.616" r="8.86" class="particle-organic" style="animation-delay: 2.1s" />
-    <circle cx="837.902" cy="563.848" r="9.867" class="particle-organic" style="animation-delay: 2.25s" />
-    <circle cx="235.532" cy="694.663" r="6.941" class="particle-organic" style="animation-delay: 2.4s" />
-    <circle cx="809.72" cy="677.719" r="7.592" class="particle-organic" style="animation-delay: 2.55s" />
-    <circle cx="179.247" cy="591.216" r="11.026" class="particle-organic" style="animation-delay: 2.6999999999999997s" />
-    <circle cx="854.409" cy="614.744" r="8.376" class="particle-organic" style="animation-delay: 2.85s" />
-    <circle cx="188.985" cy="668.08" r="8.393" class="particle-organic" style="animation-delay: 0s" />
-    <circle cx="145.194" cy="548.791" r="7.555" class="particle-organic" style="animation-delay: 0.15s" />
-    <circle cx="884.444" cy="540.027" r="3.243" class="particle-organic" style="animation-delay: 0.3s" />
-    <circle cx="860.9" cy="670.015" r="4.051" class="particle-organic" style="animation-delay: 0.44999999999999996s" />
-    <circle cx="146.879" cy="631.528" r="7.422" class="particle-organic" style="animation-delay: 0.6s" />
-    <circle cx="901.346" cy="594.52" r="2.075" class="particle-organic" style="animation-delay: 0.75s" />
-    <circle cx="110.742" cy="586.106" r="4.023" class="particle-organic" style="animation-delay: 0.8999999999999999s" />
-    <circle cx="123.026" cy="676.011" r="1.442" class="particle-organic" style="animation-delay: 1.05s" />
+    <circle cx="567.29" cy="447.634" r="15.424" class="particle-organic" style="animation-delay: 0s; --period: 7.6221s; --phase: -7.3748s" />
+    <circle cx="514.874" cy="601.954" r="11.836" class="particle-organic" style="animation-delay: 0.15s; --period: 7.0121s; --phase: -6.5434s" />
+    <circle cx="445.716" cy="444.129" r="15.502" class="particle-organic" style="animation-delay: 0.3s; --period: 7.6353s; --phase: -5.4943s" />
+    <circle cx="611.345" cy="517.529" r="14.773" class="particle-organic" style="animation-delay: 0.44999999999999996s; --period: 7.5114s; --phase: -7.4975s" />
+    <circle cx="431.588" cy="577.832" r="14.526" class="particle-organic" style="animation-delay: 0.6s; --period: 7.4694s; --phase: -5.0106s" />
+    <circle cx="527.429" cy="404.94" r="15.499" class="particle-organic" style="animation-delay: 0.75s; --period: 7.6348s; --phase: -6.1066s" />
+    <circle cx="575.242" cy="604.739" r="15.021" class="particle-organic" style="animation-delay: 0.8999999999999999s; --period: 7.5536s; --phase: -6.5781s" />
+    <circle cx="398.888" cy="485.436" r="14.827" class="particle-organic" style="animation-delay: 1.05s; --period: 7.5206s; --phase: -4.1355s" />
+    <circle cx="616.673" cy="453.318" r="13.1" class="particle-organic" style="animation-delay: 1.2s; --period: 7.227s; --phase: -6.8167s" />
+    <circle cx="473.301" cy="629.483" r="13.445" class="particle-organic" style="animation-delay: 1.3499999999999999s; --period: 7.2857s; --phase: -4.8029s" />
+    <circle cx="459.703" cy="395.961" r="14.634" class="particle-organic" style="animation-delay: 1.5s; --period: 7.4878s; --phase: -4.4761s" />
+    <circle cx="632.15" cy="563.614" r="14.543" class="particle-organic" style="animation-delay: 1.65s; --period: 7.4723s; --phase: -6.5679s" />
+    <circle cx="385.333" cy="556.221" r="13.627" class="particle-organic" style="animation-delay: 1.7999999999999998s; --period: 7.3166s; --phase: -3.2093s" />
+    <circle cx="577.098" cy="390.912" r="13.459" class="particle-organic" style="animation-delay: 1.95s; --period: 7.288s; --phase: -5.5523s" />
+    <circle cx="546.587" cy="648.395" r="13.22" class="particle-organic" style="animation-delay: 2.1s; --period: 7.2474s; --phase: -5.0056s" />
+    <circle cx="391.719" cy="433.054" r="14.401" class="particle-organic" style="animation-delay: 2.25s; --period: 7.4482s; --phase: -2.8423s" />
+    <circle cx="657.073" cy="488.468" r="14.938" class="particle-organic" style="animation-delay: 2.4s; --period: 7.5395s; --phase: -6.1419s" />
+    <circle cx="419.045" cy="629.726" r="15.412" class="particle-organic" style="animation-delay: 2.55s; --period: 7.62s; --phase: -2.8976s" />
+    <circle cx="500.802" cy="359.44" r="13.375" class="particle-organic" style="animation-delay: 2.6999999999999997s; --period: 7.2737s; --phase: -3.8104s" />
+    <circle cx="625.431" cy="618.928" r="15.422" class="particle-organic" style="animation-delay: 2.85s; --period: 7.6217s; --phase: -5.2806s" />
+    <circle cx="353.271" cy="509.735" r="14.517" class="particle-organic" style="animation-delay: 0s; --period: 7.4679s; --phase: -4.5925s" />
+    <circle cx="632.67" cy="404.582" r="10.224" class="particle-organic" style="animation-delay: 0.15s; --period: 6.7381s; --phase: -8.0747s" />
+    <circle cx="495.301" cy="675.466" r="10.486" class="particle-organic" style="animation-delay: 0.3s; --period: 6.7826s; --phase: -6.1389s" />
+    <circle cx="412.272" cy="378.006" r="11.776" class="particle-organic" style="animation-delay: 0.44999999999999996s; --period: 7.0019s; --phase: -4.9095s" />
+    <circle cx="678.673" cy="543.941" r="14.565" class="particle-organic" style="animation-delay: 0.6s; --period: 7.4761s; --phase: -8.2227s" />
+    <circle cx="365.285" cy="602.414" r="14.476" class="particle-organic" style="animation-delay: 0.75s; --period: 7.4609s; --phase: -3.9987s" />
+    <circle cx="559.818" cy="343.734" r="11.308" class="particle-organic" style="animation-delay: 0.8999999999999999s; --period: 6.9224s; --phase: -6.3776s" />
+    <circle cx="591.548" cy="670.657" r="13.792" class="particle-organic" style="animation-delay: 1.05s; --period: 7.3446s; --phase: -6.6401s" />
+    <circle cx="343.82" cy="447.847" r="14.915" class="particle-organic" style="animation-delay: 1.2s; --period: 7.5356s; --phase: -3.2697s" />
+    <circle cx="681.653" cy="444.786" r="12.335" class="particle-organic" style="animation-delay: 1.3499999999999999s; --period: 7.0969s; --phase: -7.5115s" />
+    <circle cx="431.236" cy="678.364" r="13.35" class="particle-organic" style="animation-delay: 1.5s; --period: 7.2695s; --phase: -4.1061s" />
+    <circle cx="458.485" cy="332.456" r="10.641" class="particle-organic" style="animation-delay: 1.65s; --period: 6.809s; --phase: -4.3103s" />
+    <circle cx="674.788" cy="609.468" r="13.887" class="particle-organic" style="animation-delay: 1.7999999999999998s; --period: 7.3608s; --phase: -6.9722s" />
+    <circle cx="323.817" cy="550.566" r="11.736" class="particle-organic" style="animation-delay: 1.95s; --period: 6.9951s; --phase: -2.2596s" />
+    <circle cx="626.076" cy="354.562" r="6.76" class="particle-organic" style="animation-delay: 2.1s; --period: 6.1492s; --phase: -6.039s" />
+    <circle cx="534.495" cy="707.433" r="8.921" class="particle-organic" style="animation-delay: 2.25s; --period: 6.5166s; --phase: -4.6984s" />
+    <circle cx="361.682" cy="381.599" r="11.853" class="particle-organic" style="animation-delay: 2.4s; --period: 7.015s; --phase: -2.3019s" />
+    <circle cx="713.172" cy="506.554" r="13.199" class="particle-organic" style="animation-delay: 2.55s; --period: 7.2438s; --phase: -6.7212s" />
+    <circle cx="365.742" cy="653.452" r="13.907" class="particle-organic" style="animation-delay: 2.6999999999999997s; --period: 7.3642s; --phase: -2.0546s" />
+    <circle cx="524.43" cy="306.706" r="8.188" class="particle-organic" style="animation-delay: 2.85s; --period: 6.392s; --phase: -3.9676s" />
+    <circle cx="642.879" cy="673.464" r="13.432" class="particle-organic" style="animation-delay: 0s; --period: 7.2834s; --phase: -8.3574s" />
+    <circle cx="304.296" cy="481.031" r="13.391" class="particle-organic" style="animation-delay: 0.15s; --period: 7.2765s; --phase: -3.8058s" />
+    <circle cx="687.841" cy="393.341" r="6.084" class="particle-organic" style="animation-delay: 0.3s; --period: 6.0343s; --phase: -8.6419s" />
+    <circle cx="462.001" cy="720.327" r="9.249" class="particle-organic" style="animation-delay: 0.44999999999999996s; --period: 6.5723s; --phase: -5.556s" />
+    <circle cx="407.132" cy="322.784" r="4.851" class="particle-organic" style="animation-delay: 0.6s; --period: 5.8247s; --phase: -4.6927s" />
+    <circle cx="719.103" cy="581.342" r="11.434" class="particle-organic" style="animation-delay: 0.75s; --period: 6.9438s; --phase: -8.5983s" />
+    <circle cx="310.575" cy="601.599" r="11.293" class="particle-organic" style="animation-delay: 0.8999999999999999s; --period: 6.9198s; --phase: -3.1375s" />
+    <circle cx="584.961" cy="724.313" r="9.933" class="particle-organic" style="animation-delay: 1.05s; --period: 6.6886s; --phase: -6.5545s" />
+    <circle cx="313.033" cy="403.778" r="12.017" class="particle-organic" style="animation-delay: 1.2s; --period: 7.0429s; --phase: -2.8694s" />
+    <circle cx="733.735" cy="456.922" r="10.275" class="particle-organic" style="animation-delay: 1.3499999999999999s; --period: 6.7468s; --phase: -8.1886s" />
+    <circle cx="384.62" cy="704.027" r="11.784" class="particle-organic" style="animation-delay: 1.5s; --period: 7.0033s; --phase: -3.5001s" />
+    <circle cx="695.183" cy="658.095" r="11.839" class="particle-organic" style="animation-delay: 1.65s; --period: 7.0126s; --phase: -7.3874s" />
+    <circle cx="276.332" cy="528.143" r="10.308" class="particle-organic" style="animation-delay: 1.7999999999999998s; --period: 6.7524s; --phase: -1.7923s" />
+    <circle cx="352.065" cy="330.559" r="4.378" class="particle-organic" style="animation-delay: 1.95s; --period: 5.7443s; --phase: -2.6268s" />
+    <circle cx="754.336" cy="537.951" r="11.165" class="particle-organic" style="animation-delay: 2.1s; --period: 6.898s; --phase: -7.7064s" />
+    <circle cx="314.298" cy="657.651" r="10.929" class="particle-organic" style="animation-delay: 2.25s; --period: 6.8579s; --phase: -1.8359s" />
+    <circle cx="641.702" cy="724.785" r="9.89" class="particle-organic" style="animation-delay: 2.4s; --period: 6.6813s; --phase: -5.9421s" />
+    <circle cx="270.899" cy="442.212" r="10.895" class="particle-organic" style="animation-delay: 2.55s; --period: 6.8521s; --phase: -0.9717s" />
+    <circle cx="420.115" cy="749.397" r="6.952" class="particle-organic" style="animation-delay: 2.6999999999999997s; --period: 6.1818s; --phase: -2.7615s" />
+    <circle cx="743.606" cy="625.836" r="11.652" class="particle-organic" style="animation-delay: 2.85s; --period: 6.9808s; --phase: -6.8169s" />
+    <circle cx="262.658" cy="584.996" r="12.137" class="particle-organic" style="animation-delay: 0s; --period: 7.0633s; --phase: -3.4146s" />
+    <circle cx="298.209" cy="355.496" r="6.751" class="particle-organic" style="animation-delay: 0.15s; --period: 6.1477s; --phase: -3.7267s" />
+    <circle cx="777.042" cy="482.802" r="6.459" class="particle-organic" style="animation-delay: 0.3s; --period: 6.098s; --phase: -9.8015s" />
+    <circle cx="335.181" cy="713.829" r="8.983" class="particle-organic" style="animation-delay: 0.44999999999999996s; --period: 6.5271s; --phase: -3.9074s" />
+    <circle cx="699.903" cy="708.195" r="8.423" class="particle-organic" style="animation-delay: 0.6s; --period: 6.4319s; --phase: -8.4987s" />
+    <circle cx="239.27" cy="494.151" r="7.924" class="particle-organic" style="animation-delay: 0.75s; --period: 6.3471s; --phase: -2.3605s" />
+    <circle cx="783.773" cy="578.63" r="12.987" class="particle-organic" style="animation-delay: 0.8999999999999999s; --period: 7.2078s; --phase: -9.289s" />
+    <circle cx="265.189" cy="647.219" r="10.469" class="particle-organic" style="animation-delay: 1.05s; --period: 6.7797s; --phase: -2.3975s" />
+    <circle cx="250.168" cy="396.483" r="6.104" class="particle-organic" style="animation-delay: 1.2s; --period: 6.0377s; --phase: -2.0522s" />
+    <circle cx="754.876" cy="674.822" r="8.604" class="particle-organic" style="animation-delay: 1.3499999999999999s; --period: 6.4627s; --phase: -8.4634s" />
+    <circle cx="221.408" cy="556.231" r="11.97" class="particle-organic" style="animation-delay: 1.5s; --period: 7.0349s; --phase: -1.3783s" />
+    <circle cx="811.913" cy="519.206" r="9.159" class="particle-organic" style="animation-delay: 1.65s; --period: 6.557s; --phase: -8.9049s" />
+    <circle cx="802.198" cy="625.952" r="11.529" class="particle-organic" style="animation-delay: 1.7999999999999998s; --period: 6.9599s; --phase: -8.6286s" />
+    <circle cx="219.699" cy="624.518" r="12.024" class="particle-organic" style="animation-delay: 1.95s; --period: 7.0441s; --phase: -0.9061s" />
+    <circle cx="187.549" cy="517.616" r="8.86" class="particle-organic" style="animation-delay: 2.1s; --period: 6.5062s; --phase: -0.3381s" />
+    <circle cx="837.902" cy="563.848" r="9.867" class="particle-organic" style="animation-delay: 2.25s; --period: 6.6774s; --phase: -8.6427s" />
+    <circle cx="235.532" cy="694.663" r="6.941" class="particle-organic" style="animation-delay: 2.4s; --period: 6.18s; --phase: -0.6619s" />
+    <circle cx="809.72" cy="677.719" r="7.592" class="particle-organic" style="animation-delay: 2.55s; --period: 6.2906s; --phase: -7.9764s" />
+    <circle cx="179.247" cy="591.216" r="11.026" class="particle-organic" style="animation-delay: 2.6999999999999997s; --period: 6.8744s; --phase: 0.3698s" />
+    <circle cx="854.409" cy="614.744" r="8.376" class="particle-organic" style="animation-delay: 2.85s; --period: 6.4239s; --phase: -8.2573s" />
+    <circle cx="188.985" cy="668.08" r="8.393" class="particle-organic" style="animation-delay: 0s; --period: 6.4268s; --phase: -2.4568s" />
+    <circle cx="145.194" cy="548.791" r="7.555" class="particle-organic" style="animation-delay: 0.15s; --period: 6.2843s; --phase: -1.7375s" />
+    <circle cx="884.444" cy="540.027" r="3.243" class="particle-organic" style="animation-delay: 0.3s; --period: 5.5513s; --phase: -11.1978s" />
+    <circle cx="860.9" cy="670.015" r="4.051" class="particle-organic" style="animation-delay: 0.44999999999999996s; --period: 5.6887s; --phase: -10.7417s" />
+    <circle cx="146.879" cy="631.528" r="7.422" class="particle-organic" style="animation-delay: 0.6s; --period: 6.2617s; --phase: -1.3094s" />
+    <circle cx="901.346" cy="594.52" r="2.075" class="particle-organic" style="animation-delay: 0.75s; --period: 5.3528s; --phase: -10.9675s" />
+    <circle cx="110.742" cy="586.106" r="4.023" class="particle-organic" style="animation-delay: 0.8999999999999999s; --period: 5.6839s; --phase: -0.5396s" />
+    <circle cx="123.026" cy="676.011" r="1.442" class="particle-organic" style="animation-delay: 1.05s; --period: 5.2451s; --phase: -0.5493s" />
   </g>
   <circle id="nucleus" cx="512" cy="512" r="49" fill="#DDBF72"/>
   <metadata>golden-angle=137.507764; particles=88; smoothing=12</metadata>
