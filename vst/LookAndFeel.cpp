@@ -87,6 +87,22 @@ void GreyCloudLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int
         g.strokePath(valueArc, juce::PathStrokeType(arcThickness, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
 
+    if (id == "shimmerRatio")
+    {
+        const int positions = juce::roundToInt(slider.getMaximum() - slider.getMinimum()) + 1;
+        g.setColour(NimbusStyle::secondary.withAlpha(slider.isEnabled() ? 0.55f : 0.25f));
+        for (int i = 0; i < positions; ++i)
+        {
+            const auto detent = rotaryStartAngle + (rotaryEndAngle - rotaryStartAngle)
+                                                   * (float) i / (float) juce::jmax(1, positions - 1);
+            const auto inner = radius + 1.8f * scale;
+            const auto outer = radius + 3.3f * scale;
+            g.drawLine(centreX + std::sin(detent) * inner, centreY - std::cos(detent) * inner,
+                       centreX + std::sin(detent) * outer, centreY - std::cos(detent) * outer,
+                       0.8f * scale);
+        }
+    }
+
     // Thumb (indicator)
     juce::Path thumb;
     auto thumbWidth = (isMacro ? 2.0f : 1.5f) * scale;
@@ -133,7 +149,7 @@ void GreyCloudLookAndFeel::drawComboBox (juce::Graphics& g, int width, int heigh
     g.setColour(box.isMouseOver() || isButtonDown ? NimbusStyle::strongBorder : NimbusStyle::border);
     g.drawRoundedRectangle(boxBounds.toFloat().reduced(0.5f, 0.5f), cornerSize, 1.0f);
     
-    const auto scale = (float) height / (box.getName() == "syncDivision" ? 20.0f : 24.0f);
+    const auto scale = (float) height / (box.getName() == "syncDivision" ? 20.0f : box.getName() == "shimmerRatio" ? 24.0f : 22.0f);
     const auto arrowWidth = juce::roundToInt(20.0f * scale);
     juce::Rectangle<int> arrowZone(width - arrowWidth, 0, arrowWidth, height);
     juce::Path path;
@@ -147,12 +163,12 @@ void GreyCloudLookAndFeel::drawComboBox (juce::Graphics& g, int width, int heigh
 
 juce::Font GreyCloudLookAndFeel::getComboBoxFont(juce::ComboBox& box)
 {
-    return NimbusStyle::regularFont(11.5f * box.getHeight() / (box.getName() == "syncDivision" ? 20.0f : 24.0f));
+    return NimbusStyle::regularFont(11.5f * box.getHeight() / (box.getName() == "syncDivision" ? 20.0f : box.getName() == "shimmerRatio" ? 24.0f : 22.0f));
 }
 
 void GreyCloudLookAndFeel::positionComboBoxText(juce::ComboBox& box, juce::Label& label)
 {
-    const auto scale = (float) box.getHeight() / (box.getName() == "syncDivision" ? 20.0f : 24.0f);
+    const auto scale = (float) box.getHeight() / (box.getName() == "syncDivision" ? 20.0f : box.getName() == "shimmerRatio" ? 24.0f : 22.0f);
     label.setBounds(juce::Rectangle<int>(juce::roundToInt(6 * scale), 1, box.getWidth() - juce::roundToInt(26 * scale), box.getHeight() - 2));
     label.setFont(getComboBoxFont(box));
     label.setJustificationType(juce::Justification::centredLeft);

@@ -131,9 +131,6 @@ CloudGreyVerbEditor::CloudGreyVerbEditor (CloudGreyVerbProcessor& p)
     }
     presetSelector.setSelectedId(p.getCurrentProgram() + 1, juce::dontSendNotification);
     presetSelector.onChange = [this, &p] { p.setCurrentProgram(presetSelector.getSelectedId() - 1); };
-    presetStatus.setJustificationType(juce::Justification::centred);
-    presetStatus.setFont(12.0f);
-    addAndMakeVisible(presetStatus);
     syncFeedback.setJustificationType(juce::Justification::centred);
     syncFeedback.setFont(9.0f);
     syncFeedback.setTooltip("Shared by Pre-Delay Sync and Size Sync.");
@@ -170,10 +167,10 @@ CloudGreyVerbEditor::CloudGreyVerbEditor (CloudGreyVerbProcessor& p)
     addRotaryControl("modDepth", "Depth");
     addRotaryControl("modRate", "Rate");
 
-    cards.push_back(std::make_unique<CardComponent>("Shift", 228.0f));
+    cards.push_back(std::make_unique<CardComponent>("Shimmer", 228.0f));
     addAndMakeVisible(cards.back().get());
-    addRotaryControl("shimmer", "Shimmer");
-    addChoiceControl("shimmerRatio", "Ratio", true);
+    addRotaryControl("shimmer", "Amount");
+    addRotaryControl("shimmerRatio", "Ratio");
 
     addRotaryControl("preDelay", "Pre-Delay");
     addToggleControl("preDelaySync", "Sync");
@@ -195,7 +192,6 @@ CloudGreyVerbEditor::CloudGreyVerbEditor (CloudGreyVerbProcessor& p)
     exportButton.setTooltip("Export presets as a JSON file.");
     previousPreset.setTooltip("Previous preset");
     nextPreset.setTooltip("Next preset");
-    presetStatus.setColour(juce::Label::textColourId, NimbusStyle::secondary);
     syncFeedback.setColour(juce::Label::textColourId, NimbusStyle::secondary);
     tooltipWindow = std::make_unique<juce::TooltipWindow>(this, 700);
     startTimerHz(5);
@@ -290,6 +286,22 @@ void CloudGreyVerbEditor::addRotaryControl(const juce::String& paramID, const ju
     wrapper->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getVTS(), paramID, wrapper->slider);
 
+    if (paramID == "shimmerRatio")
+        if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(audioProcessor.getVTS().getParameter(paramID)))
+        {
+            // The existing choice parameter remains authoritative; the UI snaps to its indices.
+            wrapper->slider.setRange(0.0, (double) choice->choices.size() - 1.0, 1.0);
+            auto* slider = &wrapper->slider;
+            auto* label = &wrapper->label;
+            slider->onValueChange = [slider, label, choice] {
+                const auto text = choice->choices[juce::jlimit(0, choice->choices.size() - 1,
+                                                              juce::roundToInt(slider->getValue()))];
+                slider->setTooltip(text);
+                label->setText(text.toLowerCase(), juce::dontSendNotification);
+            };
+            slider->onValueChange();
+        }
+
     rotaryControls.push_back(std::move(wrapper));
 }
 
@@ -321,7 +333,7 @@ void CloudGreyVerbEditor::addFaderControl(const juce::String& paramID, const juc
 void CloudGreyVerbEditor::addToggleControl(const juce::String& paramID, const juce::String& name) {
     auto wrapper = std::make_unique<ToggleControl>();
     wrapper->button.setName(paramID);
-    wrapper->button.setButtonText(name.toLowerCase());
+    wrapper->button.setButtonText(paramID == "hqMode" ? "HQ" : name.toLowerCase());
     if (paramID == "freeze") wrapper->button.setTooltip("Holds the current cloud while dry input continues normally.");
     if (paramID == "hardFreeze") wrapper->button.setTooltip("Stops new material entering the frozen reverb state.");
     if (paramID == "hqMode") wrapper->button.setTooltip("Processes at 2x internal sample rate for higher quality at a higher CPU cost.");
@@ -371,12 +383,13 @@ void CloudGreyVerbEditor::paint (juce::Graphics& g)
     g.fillRect(0.0f, 472.0f * scale, (float) getWidth(), 88.0f * scale);
     g.setColour(NimbusStyle::border);
     g.drawLine(10.0f * scale, 472.0f * scale, 710.0f * scale, 472.0f * scale);
-    for (float x : { 124.0f, 334.0f, 520.0f })
+    // Shared offset aligns the first utility separator with the Hard Freeze button.
+    for (float x : { 129.0f, 316.0f, 524.0f })
         g.drawLine(x * scale, 485.0f * scale, x * scale, 550.0f * scale);
     g.setColour(NimbusStyle::secondary);
     g.setFont(NimbusStyle::captionFont(NimbusStyle::caption * scale));
-    static const juce::String titles[] { "PRESETS", "TEMPO / PRE-DELAY", "STEREO FIELD", "GAIN" };
-    constexpr float edges[] { 10.0f, 124.0f, 334.0f, 520.0f, 710.0f };
+    static const juce::String titles[] { "PRESETS", "STEREO FIELD", "TEMPO / PRE-DELAY", "GAIN" };
+    constexpr float edges[] { 10.0f, 129.0f, 316.0f, 524.0f, 710.0f };
     for (int i = 0; i < 4; ++i)
         g.drawText(titles[i], juce::Rectangle<float>(edges[i] * scale, 478.0f * scale,
                                                    (edges[i + 1] - edges[i]) * scale, 14.0f * scale),
@@ -390,7 +403,6 @@ void CloudGreyVerbEditor::timerCallback()
     if (freezeSubgroup)
         freezeSubgroup->setActivity(getToggle("freeze")->button.getToggleState(),
                                     getToggle("hardFreeze")->button.getToggleState());
-    presetStatus.setText(audioProcessor.getCurrentPresetDisplayName(), juce::dontSendNotification);
     presetSelector.setSelectedId(audioProcessor.getCurrentProgram() + 1, juce::dontSendNotification);
     const auto* division = audioProcessor.getVTS().getRawParameterValue("syncDivision");
     const int index = juce::jlimit (0, static_cast<int> (TempoSyncUtils::kDivisionNames.size()) - 1,
@@ -421,13 +433,13 @@ void CloudGreyVerbEditor::resized()
                               scaled(80),
                               scaled(80));
 
+    const auto headerControlHeight = scaled(22);
     if (auto* hq = getToggle("hqMode"))
-        hq->button.setBounds(header.removeFromRight(scaled(66)).withSizeKeepingCentre(scaled(42), scaled(22)));
-    auto presetArea = header.removeFromRight(scaled(240)).withSizeKeepingCentre(scaled(240), scaled(48));
-    previousPreset.setBounds(presetArea.removeFromLeft(scaled(24)).withSizeKeepingCentre(scaled(22), scaled(22)));
-    nextPreset.setBounds(presetArea.removeFromRight(scaled(24)).withSizeKeepingCentre(scaled(22), scaled(22)));
-    presetSelector.setBounds(presetArea.removeFromTop(scaled(24)).reduced(scaled(2), 0));
-    presetStatus.setBounds(presetArea);
+        hq->button.setBounds(header.removeFromRight(scaled(66)).withSizeKeepingCentre(scaled(42), headerControlHeight));
+    auto presetArea = header.removeFromRight(scaled(240)).withSizeKeepingCentre(scaled(240), headerControlHeight);
+    previousPreset.setBounds(presetArea.removeFromLeft(scaled(24)).withSizeKeepingCentre(scaled(22), headerControlHeight));
+    nextPreset.setBounds(presetArea.removeFromRight(scaled(24)).withSizeKeepingCentre(scaled(22), headerControlHeight));
+    presetSelector.setBounds(presetArea.reduced(scaled(2), 0));
 
     bounds.removeFromBottom(scaled(88));
 
@@ -447,12 +459,14 @@ void CloudGreyVerbEditor::resized()
     auto rect = [scaled](int x, int y, int w, int h) { return juce::Rectangle<int>(scaled(x), scaled(y), scaled(w), scaled(h)); };
     importButton.setBounds(rect(14, 498, 102, 22));
     exportButton.setBounds(rect(14, 526, 102, 22));
-    placeRotary(getRotary("preDelay"), rect(134, 495, 70, 57), 34, 14);
-    getToggle("preDelaySync")->button.setBounds(rect(214, 496, 52, 20));
-    getChoice("syncDivision")->comboBox.setBounds(rect(272, 496, 52, 20));
-    syncFeedback.setBounds(rect(205, 529, 123, 16));
-    placeRotary(getRotary("stereoWidth"), rect(344, 495, 68, 57), 34, 14);
-    getToggle("stereoCore")->button.setBounds(rect(419, 514, 91, 22));
+    placeRotary(getRotary("preDelay"), rect(323, 495, 70, 57), 34, 14);
+    const auto* preDelay = getRotary("preDelay");
+    const auto preDelayCentreY = preDelay->slider.getBounds().getCentreY();
+    getToggle("preDelaySync")->button.setBounds(scaled(402), preDelayCentreY - scaled(10), scaled(52), scaled(20));
+    getChoice("syncDivision")->comboBox.setBounds(scaled(460), preDelayCentreY - scaled(10), scaled(52), scaled(20));
+    syncFeedback.setBounds(scaled(393), preDelay->label.getY(), scaled(123), preDelay->label.getHeight());
+    placeRotary(getRotary("stereoWidth"), rect(134, 495, 68, 57), 34, 14);
+    getToggle("stereoCore")->button.setBounds(rect(209, 514, 91, 22));
     auto placeFader = [&](RotaryControl* c, int y) {
         c->label.setBounds(rect(530, y, 43, 23));
         c->slider.setBounds(rect(581, y, 125, 23));
@@ -460,7 +474,6 @@ void CloudGreyVerbEditor::resized()
     placeFader(getRotary("inputGain"), 496);
     placeFader(getRotary("outputGain"), 525);
     for (auto& c : rotaryControls) c->label.setFont(NimbusStyle::controlFont(NimbusStyle::label * scale));
-    presetStatus.setFont(NimbusStyle::regularFont(NimbusStyle::status * scale));
     syncFeedback.setFont(NimbusStyle::regularFont(9.0f * scale));
 
     auto macroRow = bounds.removeFromTop(scaled(114));
@@ -511,9 +524,16 @@ void CloudGreyVerbEditor::resized()
     cards[1]->setBounds(c2);
     auto c2Inner = c2.reduced(scaled(5));
     c2Inner.removeFromTop(scaled(20));
-    placeRotary(getRotary("damping"), c2Inner.removeFromLeft(c2Inner.getWidth() / 3), 36, 16);
-    placeRotary(getRotary("lowDamping"), c2Inner.removeFromLeft(c2Inner.getWidth() / 2), 36, 16);
-    placeRotary(getRotary("tone"), c2Inner, 36, 16);
+    // Align the outer tone controls with the centres of the two zones below.
+    const auto lowerColumnWidth = (c2.getWidth() - scaled(10)) / 2;
+    const auto leftCentre = c2.getX() + lowerColumnWidth / 2;
+    const auto rightCentre = c2.getRight() - lowerColumnWidth / 2;
+    auto toneSlot = [&](int centreX) {
+        return juce::Rectangle<int>(centreX - scaled(48), c2Inner.getY(), scaled(96), c2Inner.getHeight());
+    };
+    placeRotary(getRotary("tone"), toneSlot(leftCentre), 36, 16);
+    placeRotary(getRotary("lowDamping"), toneSlot(c2.getCentreX()), 36, 16);
+    placeRotary(getRotary("damping"), toneSlot(rightCentre), 36, 16);
 
     rightCol.removeFromTop(scaled(10));
     // Two vertical zones retain the existing controls and parameter attachments.
@@ -532,8 +552,9 @@ void CloudGreyVerbEditor::resized()
     auto c4Inner = c4.reduced(scaled(5));
     c4Inner.removeFromTop(scaled(20));
     placeRotary(getRotary("shimmer"), c4Inner.removeFromTop(c4Inner.getHeight() / 2), 36, 16);
-    if (auto* sRat = getChoice("shimmerRatio"))
-        sRat->comboBox.setBounds(c4Inner.withSizeKeepingCentre(scaled(90), scaled(24)));
+    placeRotary(getRotary("shimmerRatio"), c4Inner, 36, 16);
+    if (auto* ratio = getRotary("shimmerRatio"))
+        ratio->label.setBounds(ratio->label.getBounds().withX(c4Inner.getX()).withWidth(c4Inner.getWidth()));
 
 }
 

@@ -89,7 +89,6 @@ private:
 
     juce::GlyphArrangement brandTitle, brandDescriptor;
     juce::ComboBox presetSelector;
-    juce::Label presetStatus;
     juce::Label syncFeedback;
     juce::TextButton previousPreset { juce::String::fromUTF8 ("\xE2\x97\x80") }, nextPreset { juce::String::fromUTF8 ("\xE2\x96\xB6") };
     std::unique_ptr<juce::TooltipWindow> tooltipWindow;
