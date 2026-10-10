@@ -419,6 +419,11 @@ public:
     // Profile-owned history budget. Desktop supports 2/1 at 60 BPM (8 s);
     // embedded/WASM profiles deliberately clamp sync targets to their budget.
     static constexpr float kPreDelayCapacitySeconds = CGV_PREDELAY_CAPACITY_SECONDS;
+#if CLOUD_GREY_PROFILE_DESKTOP_STUDIO
+    static constexpr float kGranularCapacitySeconds = 1.2f;
+#else
+    static constexpr float kGranularCapacitySeconds = 0.5f;
+#endif
     static constexpr size_t kFdnOrder = CGV_FDN_ORDER;
 
     // Canonical factory preset catalogue. getPreset remains for source
@@ -511,27 +516,35 @@ private:
     float* grainMemoryR_ = nullptr;
     size_t grainMemorySize_ = 0;
     size_t grainWritePos_ = 0;
-    float grainPhase_ = 0.0f;
     
     // Controle Granular Estendido
     cgv_dsp::FastPRNG prng_;
     cgv_dsp::FastPRNG modulationPrng_;
-    // grainPhase_ is the shared nominal grain clock.  Individual grains own a
-    // local phase so each can advance at its own rate (organic length/rate
-    // variation) without disturbing the common backbone.
+    // Individual grains derive their local phase from elapsed frames and a
+    // latched duration; no accumulated phase error or mid-grain timing changes.
     float grainPhaseLocal_[CGV_NUM_GRAINS] = {0.0f};
     float grainJitter_[CGV_NUM_GRAINS] = {0.0f};
     float grainPan_[CGV_NUM_GRAINS] = {0.5f};
     float grainOffsetMs_[CGV_NUM_GRAINS] = {0.0f};
-    float grainAnchorPos_[CGV_NUM_GRAINS] = {0.0f};
     // Per-grain organic variation, all fixed-size members (no RT allocation).
     float grainLenMult_[CGV_NUM_GRAINS] = {1.0f};      // 0.7x..1.3x duration
     float grainDensityMult_[CGV_NUM_GRAINS] = {1.0f};  // 0.9x..1.1x phase rate
     float grainAmpJitter_[CGV_NUM_GRAINS] = {1.0f};    // 0.85x..1.0x gain
-    // Applied only to the scan sweep of the read pointer, never to the base
-    // tap/pitch of the material: it decorrelates the scan speed between
-    // simultaneous grains without detuning the source.
-    float grainRateMult_[CGV_NUM_GRAINS] = {1.0f};     // 0.99x..1.01x scan speed
+    // Temporal coordinates are ages relative to the next write, never wrapped
+    // ring indices. Timing and tap delay are latched at the zero-window boundary.
+    bool grainTimingReady_ = false;
+    float grainFrames_[CGV_NUM_GRAINS] = {};
+    float grainElapsedFrames_[CGV_NUM_GRAINS] = {};
+    float grainTapAge_[CGV_NUM_GRAINS] = {};
+    float grainAnchorAge_[CGV_NUM_GRAINS] = {};
+    float grainForwardAge_[CGV_NUM_GRAINS] = {};
+    float grainReverseAge_[CGV_NUM_GRAINS] = {};
+    // Two stable scan trajectories crossfade in audio; automation cannot bend
+    // either trajectory. A pending target starts after the current 20 ms fade.
+    float scanFrom_ = 0.0f, scanTo_ = 0.0f, scanFade_ = 1.0f;
+    float reverseForwardGain_ = 1.0f, reverseBackwardGain_ = 0.0f;
+    float reverseForwardTarget_ = 1.0f, reverseBackwardTarget_ = 0.0f;
+    float granularControlStep_ = 1.0f;
     float freezeSmoothed_ = 0.0f;
 
     // Núcleo Diffuser (Smear Allpasses pré-delay)
@@ -644,6 +657,7 @@ private:
 
     // Helpers
     void processGranular(float inL, float inR, float lfoDrift, float& outL, float& outR);
+    void latchGrainTiming(int grain, float driftMs);
     // Interpolated read of a single granular head.  Wraps into the circular
     // grain history and is NaN-safe.  Both the forward and reverse heads use
     // this exact routine so their interpolation stays bit-identical.

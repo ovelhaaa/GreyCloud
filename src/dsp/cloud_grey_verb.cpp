@@ -132,7 +132,7 @@ size_t CloudGreyVerb::requiredMemoryFloats(float sampleRate) {
     const auto frames = [sampleRate](float seconds) {
         return static_cast<size_t>(ceilf(seconds * sampleRate)) + 4u;
     };
-    const size_t granulSize = frames(0.500f);
+    const size_t granulSize = frames(kGranularCapacitySeconds);
     size_t diffuserL[4] = {};
     constexpr float diffuserSeconds[4] = {0.007f, 0.011f, 0.017f, 0.029f};
     diffuserL[0] = cgv_dsp::nextPrime(frames(diffuserSeconds[0])) + 1;
@@ -329,7 +329,7 @@ void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferS
     auto frames = [this](float seconds) -> size_t {
         return static_cast<size_t>(ceilf(seconds * sampleRate_)) + 4u;
     };
-    const size_t granulSize = frames(0.500f); // covers the 400 ms grain window + interpolation
+    const size_t granulSize = frames(kGranularCapacitySeconds); // profile-owned forward/reverse history
     size_t diffuserLSizes[4] = {0};
     size_t diffuserRSizes[4] = {0};
     constexpr float kDiffuserSeconds[4] = {0.007f, 0.011f, 0.017f, 0.029f};
@@ -454,6 +454,7 @@ void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferS
         lineDrift_[i].init(sampleRate_, kLineDriftHz[idx], kLineDriftSeeds[idx]);
     }
 
+    granularControlStep_ = 1.0f / std::max(1.0f, 0.020f * sampleRate_);
     spectralGuard_.init(sampleRate_);
     initialized_ = true;
     reset();
@@ -462,7 +463,11 @@ void CloudGreyVerb::init(float sampleRate, float* externalBuffer, size_t bufferS
 void CloudGreyVerb::reset() {
     spectralGuard_.reset();
     grainWritePos_ = 0;
-    grainPhase_ = 0.0f;
+    grainTimingReady_ = false;
+    scanFrom_ = scanTo_ = params_.grainScan;
+    scanFade_ = 1.0f;
+    reverseForwardGain_ = reverseForwardTarget_ = sqrtf(1.0f - params_.reverseMix);
+    reverseBackwardGain_ = reverseBackwardTarget_ = sqrtf(params_.reverseMix);
     freezeSmoothed_ = 0.0f;
     prng_.seed(1234567);
     modulationPrng_.seed(7654321);
@@ -481,7 +486,6 @@ void CloudGreyVerb::reset() {
         grainPan_[i] = prng_.randFloat();
         // Staggered close offsets: eliminates the initial gap and avoids clustering
         grainOffsetMs_[i] = 3.5f + static_cast<float>(i) * 1.8f + prng_.randFloat() * 1.5f;
-        grainAnchorPos_[i] = 0.0f;
         // Start slightly off the perfect i/N quadrature so a fresh reset (or
         // unfreeze) does not briefly re-introduce the even, mechanical grid
         // before the per-grain rate desync has time to diverge.
@@ -493,7 +497,6 @@ void CloudGreyVerb::reset() {
         grainLenMult_[i] = kInitialLenMult[i % 6];
         grainDensityMult_[i] = kInitialDensityMult[i % 6];
         grainAmpJitter_[i] = kInitialAmp[i % 6];
-        grainRateMult_[i] = 1.0f;
     }
     
     if (grainMemoryL_) {
@@ -593,6 +596,10 @@ void CloudGreyVerb::setParams(const Params& p) {
     // Clampar todos os parâmetros por segurança
     params_.mix = clampParam(params_.mix, 0.0f, 1.0f);
     params_.texture = clampParam(params_.texture, 0.0f, 1.0f);
+    params_.grainScan = clampParam(params_.grainScan, 0.0f, 1.0f);
+    params_.reverseMix = clampParam(params_.reverseMix, 0.0f, 1.0f);
+    reverseForwardTarget_ = sqrtf(1.0f - params_.reverseMix);
+    reverseBackwardTarget_ = sqrtf(params_.reverseMix);
     params_.freeze = clampParam(params_.freeze, 0.0f, 1.0f);
     params_.feedback = clampParam(params_.feedback, 0.0f, 0.94f); // Teto seguro
     params_.size = clampParam(params_.size, 0.0f, 1.0f);
@@ -655,6 +662,9 @@ void CloudGreyVerb::readGrainHead(float readPos, float& outL, float& outR) {
     if (readPos < 0.0f || readPos >= fGranSize) {
         readPos = fmodf(readPos, fGranSize);
         if (readPos < 0.0f) readPos += fGranSize;
+        // Adding a tiny negative remainder to a large float ring length can
+        // round up to exactly size. Keep the physical index inside the ring.
+        if (readPos >= fGranSize) readPos = 0.0f;
     }
 
     const size_t idx1 = static_cast<size_t>(readPos);
@@ -663,6 +673,29 @@ void CloudGreyVerb::readGrainHead(float readPos, float& outL, float& outR) {
 
     outL = cgv_dsp::lerp(grainMemoryL_[idx1], grainMemoryL_[idx2], frac);
     outR = cgv_dsp::lerp(grainMemoryR_[idx1], grainMemoryR_[idx2], frac);
+}
+
+void CloudGreyVerb::latchGrainTiming(int i, float driftMs) {
+    float frames = cgv_dsp::lerp(0.015f, 0.400f, params_.texture)
+                 * sampleRate_ * grainLenMult_[i];
+    float delay = std::max(2.0f, (grainOffsetMs_[i] + grainJitter_[i] + driftMs)
+                                  * sampleRate_ * 0.001f);
+    // Reverse age = anchor delay + elapsed wall time + scanned span.
+    // Reserve both interpolation neighbours. Embedded profiles keep their RAM
+    // budget by shortening the next grain, regardless of current reverse mix.
+    const float density = grainDensityMult_[i];
+    const float available = static_cast<float>(grainMemorySize_) - 4.0f - delay;
+    frames = std::min(frames, available / (1.0f + 1.0f / density));
+    frames = std::max(10.0f, frames);
+    // Full scan may advance slightly faster than the write clock because of
+    // the existing organic density. Reserve its entire forward excursion too.
+    delay = std::max(delay, 3.0f + frames * std::max(0.0f, 1.0f - 1.0f / density));
+    frames = std::min(frames, (static_cast<float>(grainMemorySize_) - 4.0f - delay)
+                                   / (1.0f + 1.0f / density));
+    grainFrames_[i] = frames;
+    grainTapAge_[i] = delay;
+    grainPhaseLocal_[i] = grainElapsedFrames_[i] * density / frames;
+    grainAnchorAge_[i] = delay + grainElapsedFrames_[i];
 }
 
 void CloudGreyVerb::processGranular(float inL, float inR, float lfoDrift, float& outL, float& outR) {
@@ -684,23 +717,32 @@ void CloudGreyVerb::processGranular(float inL, float inR, float lfoDrift, float&
     
     grainWritePos_ = (grainWritePos_ + 1) % grainMemorySize_;
 
-    // Texture: Varredura de tamanho e densidade de 15ms a 400ms
-    float grainLenMs = cgv_dsp::lerp(15.0f, 400.0f, params_.texture);
-    float phaseFramesTotal = (grainLenMs / 1000.0f) * sampleRate_;
-    float fGrainMem = static_cast<float>(grainMemorySize_);
-    if (phaseFramesTotal > fGrainMem - 100.0f) phaseFramesTotal = fGrainMem - 100.0f;
-    if (phaseFramesTotal < 10.0f) phaseFramesTotal = 10.0f;
-    
-    float increment = 1.0f / phaseFramesTotal;
-    
-    // Freeze drift: move a base de leitura levemente para dar vida à nuvem congelada
-    float driftMs = lfoDrift * params_.texture * 150.0f * freezeSmoothed_;
-    
-    // Shared nominal backbone phase.  Each grain owns a local phase advanced at
-    // its own rate, so durations/rates can diverge organically while the cloud
-    // keeps a common clock.
-    grainPhase_ += increment;
-    if (grainPhase_ >= 1.0f) grainPhase_ -= 1.0f;
+    const float driftMs = lfoDrift * params_.texture * 150.0f * freezeSmoothed_;
+    if (!grainTimingReady_) {
+        for (int i = 0; i < CGV_NUM_GRAINS; ++i) {
+            // Start with the reset's staggered windows, treating pre-reset
+            // history as the initialized zero extension of the input.
+            const float initialPhase = grainPhaseLocal_[i];
+            grainElapsedFrames_[i] = 0.0f;
+            latchGrainTiming(i, driftMs);
+            grainElapsedFrames_[i] = initialPhase * grainFrames_[i] / grainDensityMult_[i];
+            grainPhaseLocal_[i] = initialPhase;
+            grainAnchorAge_[i] = grainTapAge_[i] + grainElapsedFrames_[i];
+        }
+        grainTimingReady_ = true;
+    }
+    auto approach = [this](float value, float target) {
+        return value + std::max(-granularControlStep_,
+                               std::min(granularControlStep_, target - value));
+    };
+    reverseForwardGain_ = approach(reverseForwardGain_, reverseForwardTarget_);
+    reverseBackwardGain_ = approach(reverseBackwardGain_, reverseBackwardTarget_);
+    if (scanFade_ >= 1.0f && scanTo_ != params_.grainScan) {
+        scanFrom_ = scanTo_;
+        scanTo_ = params_.grainScan;
+        scanFade_ = 0.0f;
+    }
+    scanFade_ = std::min(1.0f, scanFade_ + granularControlStep_);
 
     float accL = 0.0f;
     float accR = 0.0f;
@@ -708,20 +750,12 @@ void CloudGreyVerb::processGranular(float inL, float inR, float lfoDrift, float&
 
     // Grãos estéreo interpolados para uma nuvem difusa densa
     for(int i = 0; i < CGV_NUM_GRAINS; ++i) {
-        float fGranSize = static_cast<float>(grainMemorySize_);
-
-        // Per-grain duration and phase rate.  The rate carries a small extra
-        // variation so the perfectly even retrigger grid slowly desyncs.
-        float grainFrames = phaseFramesTotal * grainLenMult_[i];
-        if (grainFrames > fGranSize - 100.0f) grainFrames = fGranSize - 100.0f;
-        if (grainFrames < 10.0f) grainFrames = 10.0f;
-        float grainIncrement = grainDensityMult_[i] / grainFrames;
-
-        float oldP = grainPhaseLocal_[i];
-        float advancedP = oldP + grainIncrement;
-        bool restart = advancedP >= 1.0f;
-        float p = restart ? advancedP - 1.0f : advancedP;
-        grainPhaseLocal_[i] = p;
+        const float lifetime = grainFrames_[i] / grainDensityMult_[i];
+        grainElapsedFrames_[i] += 1.0f;
+        const bool restart = grainElapsedFrames_[i] >= lifetime;
+        if (restart) grainElapsedFrames_[i] -= lifetime;
+        grainPhaseLocal_[i] = grainElapsedFrames_[i] / lifetime;
+        grainAnchorAge_[i] = grainTapAge_[i] + grainElapsedFrames_[i];
 
         // Atualiza Jitter de forma limpa apenas no recomeço individual do grão
         if (restart) {
@@ -731,57 +765,41 @@ void CloudGreyVerb::processGranular(float inL, float inR, float lfoDrift, float&
             grainLenMult_[i] = 0.75f + prng_.randFloat() * 0.5f;      // 0.75x..1.25x duração
             grainDensityMult_[i] = 0.92f + prng_.randFloat() * 0.16f;  // 0.92x..1.08x dessincronia
             grainAmpJitter_[i] = 0.88f + prng_.randFloat() * 0.12f;  // 0.88x..1.0x
-            grainRateMult_[i] = 1.0f;                                 // 1.0x neutral scan speed
 
-            float snapReadMs = grainOffsetMs_[i] + grainJitter_[i] + driftMs;
-            float snapReadFrames = snapReadMs * (sampleRate_ / 1000.0f);
-            snapReadFrames = fmodf(snapReadFrames, fGranSize - 4.0f);
-            if (snapReadFrames < 2.0f) snapReadFrames = 2.0f;
-            grainAnchorPos_[i] = static_cast<float>(grainWritePos_) - snapReadFrames;
+            latchGrainTiming(i, driftMs);
         }
 
         // Janela Parabólica Otimizada (Cheap e suave como Cosine) -> 4 * p * (1 - p)
+        const float p = grainPhaseLocal_[i];
         float window = 4.0f * p * (1.0f - p) * grainAmpJitter_[i];
 
-        // Onde ler? Pitch neutro (1x) -> delayTap fixo por grão (alterado no jitter)
-        float readMs = grainOffsetMs_[i] + grainJitter_[i] + driftMs;
-        float readFrames = readMs * (sampleRate_ / 1000.0f);
-        
-        // Envolve o delay pacificamente para reutilizar o buffer circular sem empilhar grãos no limite
-        readFrames = fmodf(readFrames, fGranSize - 4.0f);
-        if (readFrames < 2.0f) readFrames = 2.0f;
-        
-        float tapFixoOriginal = static_cast<float>(grainWritePos_) - readFrames;
-        // The scan span follows the grain's own (variable) duration; the rate
-        // multiplier only varies scan speed, never the base tap/pitch.
-        float scanOffset = p * grainFrames * grainRateMult_[i];
-        float anchorScanCompleto = grainAnchorPos_[i] + scanOffset;
-        // Reverse head mirrors the scanned forward span around the grain
-        // anchor.  It shares the grain's length and runs at nominal -1x.
-        float readPosReverse = grainAnchorPos_[i] - scanOffset;
+        const float scanOffset = p * grainFrames_[i];
+        const float scannedAge = grainAnchorAge_[i] - scanOffset;
+        const float reverseAge = grainAnchorAge_[i] + scanOffset;
+        const float forwardAge = cgv_dsp::lerp(grainTapAge_[i], scannedAge, scanTo_);
+        grainForwardAge_[i] = forwardAge;
+        grainReverseAge_[i] = reverseAge;
 
-        // Forward head preserves the historical grainScan semantics.  Both of
-        // its endpoints advance at nominal +1x, so grainScan never changes
-        // pitch: 0 = fixed neutral tap, 1 = full forward scan.
-        float readPosForward = cgv_dsp::lerp(tapFixoOriginal, anchorScanCompleto, params_.grainScan);
+        // Wrap only when mapping valid temporal ages into physical addresses.
+        const float write = static_cast<float>(grainWritePos_);
+        float forwardSampleL, forwardSampleR, reverseSampleL, reverseSampleR;
+        readGrainHead(write - forwardAge, forwardSampleL, forwardSampleR);
+        if (scanFade_ < 1.0f) {
+            const float previousAge = cgv_dsp::lerp(grainTapAge_[i], scannedAge, scanFrom_);
+            float previousL, previousR;
+            readGrainHead(write - previousAge, previousL, previousR);
+            forwardSampleL = cgv_dsp::lerp(previousL, forwardSampleL, scanFade_);
+            forwardSampleR = cgv_dsp::lerp(previousR, forwardSampleR, scanFade_);
+        }
+        readGrainHead(write - reverseAge, reverseSampleL, reverseSampleR);
+        // Smooth gains rather than directions or positions. Equal-power target
+        // gains and exact endpoints are reached in at most 20 ms, without the
+        // square-root endpoint spike of smoothing the normalized mix itself.
+        const float sampleL = forwardSampleL * reverseForwardGain_
+                            + reverseSampleL * reverseBackwardGain_;
+        const float sampleR = forwardSampleR * reverseForwardGain_
+                            + reverseSampleR * reverseBackwardGain_;
 
-        // Read both heads independently.  Each one always moves at its own
-        // nominal speed (+1x / -1x); reverseMix only decides how the two
-        // consistent signals blend, so it cannot bend the read speed and can
-        // therefore never shift the nominal pitch (or stall the read head).
-        float forwardSampleL = 0.0f, forwardSampleR = 0.0f;
-        float reverseSampleL = 0.0f, reverseSampleR = 0.0f;
-        readGrainHead(readPosForward, forwardSampleL, forwardSampleR);
-        readGrainHead(readPosReverse, reverseSampleL, reverseSampleR);
-
-        // Equal-power direction crossfade in the audio domain.  Endpoints are
-        // exact, so reverseMix=0 and reverseMix=1 stay bit-identical to the
-        // previous single-head behavior and existing presets are preserved.
-        const float gForward = sqrtf(1.0f - params_.reverseMix);
-        const float gReverse = sqrtf(params_.reverseMix);
-        float sampleL = forwardSampleL * gForward + reverseSampleL * gReverse;
-        float sampleR = forwardSampleR * gForward + reverseSampleR * gReverse;
-        
         // Espalhamento L/R variável (orgânico)
         float pan = grainPan_[i];
         float panL = 0.25f + (1.0f - pan) * 0.75f;

@@ -1,0 +1,29 @@
+Test project C:/progs/vst/GreyCloud/.codex/build-granular-ninja
+      Start  1: CloudGreyVerbGranularContinuityTest
+      Start  4: CloudGreyVerbGranularContinuityTest_H7_HIGH_QUALITY
+      Start  3: CloudGreyVerbGranularContinuityTest_H5_BALANCED
+      Start  2: CloudGreyVerbGranularContinuityTest_H5_LOW_CPU
+ 1/12 Test  #2: CloudGreyVerbGranularContinuityTest_H5_LOW_CPU ........   Passed   34.53 sec
+      Start  5: CloudGreyVerbMilestoneTest
+ 2/12 Test  #3: CloudGreyVerbGranularContinuityTest_H5_BALANCED .......   Passed   47.82 sec
+      Start  7: CloudGreyVerbReverseMixTest
+ 3/12 Test  #4: CloudGreyVerbGranularContinuityTest_H7_HIGH_QUALITY ...   Passed   49.54 sec
+      Start 12: CloudGreyVerbOfflineMetricsTest
+ 4/12 Test #12: CloudGreyVerbOfflineMetricsTest .......................   Passed    0.54 sec
+      Start 11: CloudGreyVerbM2Test_Desktop
+ 5/12 Test #11: CloudGreyVerbM2Test_Desktop ...........................   Passed    0.07 sec
+      Start  6: CloudGreyVerbFactoryPresetParityTest
+ 6/12 Test  #6: CloudGreyVerbFactoryPresetParityTest ..................   Passed    0.05 sec
+      Start  9: CloudGreyVerbM2Test_Balanced
+ 7/12 Test  #9: CloudGreyVerbM2Test_Balanced ..........................   Passed    0.06 sec
+      Start 10: CloudGreyVerbM2Test_H7
+ 8/12 Test #10: CloudGreyVerbM2Test_H7 ................................   Passed    0.06 sec
+      Start  8: CloudGreyVerbM2Test_LowCPU
+ 9/12 Test  #8: CloudGreyVerbM2Test_LowCPU ............................   Passed    0.06 sec
+10/12 Test  #5: CloudGreyVerbMilestoneTest ............................   Passed   16.38 sec
+11/12 Test  #7: CloudGreyVerbReverseMixTest ...........................   Passed    6.81 sec
+12/12 Test  #1: CloudGreyVerbGranularContinuityTest ...................   Passed   54.74 sec
+
+100% tests passed, 0 tests failed out of 12
+
+Total Test time (real) =  54.75 sec

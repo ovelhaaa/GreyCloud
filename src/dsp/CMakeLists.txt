@@ -4,6 +4,21 @@ project(CloudGreyVerbDSP LANGUAGES CXX)
 include(CTest)
 
 if(BUILD_TESTING)
+    add_executable(CloudGreyVerbGranularBench cloud_grey_verb.cpp cloud_grey_verb_granular_bench.cpp)
+    target_compile_features(CloudGreyVerbGranularBench PRIVATE cxx_std_17)
+    target_compile_definitions(CloudGreyVerbGranularBench PRIVATE CLOUD_GREY_PROFILE_DESKTOP_STUDIO=1)
+    foreach(profile IN ITEMS DESKTOP_STUDIO H5_LOW_CPU H5_BALANCED H7_HIGH_QUALITY)
+        if(profile STREQUAL "DESKTOP_STUDIO")
+            set(continuity_target CloudGreyVerbGranularContinuityTest)
+        else()
+            set(continuity_target CloudGreyVerbGranularContinuityTest_${profile})
+        endif()
+        add_executable(${continuity_target} cloud_grey_verb.cpp cloud_grey_verb_granular_continuity_test.cpp)
+        target_compile_features(${continuity_target} PRIVATE cxx_std_17)
+        target_compile_definitions(${continuity_target} PRIVATE CLOUD_GREY_PROFILE_${profile}=1)
+        add_test(NAME ${continuity_target} COMMAND ${continuity_target} ${continuity_target}_after)
+        set_tests_properties(${continuity_target} PROPERTIES TIMEOUT 600)
+    endforeach()
     add_executable(CloudGreyVerbMilestoneTest
         cloud_grey_verb.cpp
         cloud_grey_verb_milestone_test.cpp
