@@ -1,0 +1,12 @@
+Starting CloudGreyVerb Test Suite...
+--- Null/Tiny Buffer Test ---
+Null Buffer Test Passed.
+--- FDN Hadamard Orthogonality Test ---
+FDN Hadamard Test Passed.
+--- FDN 4x4 Stereo Tail Test ---
+FDN Stereo Tail Test Passed. L=0.219502 R=0.262576
+--- Modulation Extremes Test ---
+Modulation Extremes Test Passed.
+--- Fuzzing Parameters ---
+Fuzz Test Passed.
+All Extreme & Fuzz tests completed successfully.

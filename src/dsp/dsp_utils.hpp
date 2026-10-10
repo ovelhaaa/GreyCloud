@@ -126,6 +126,43 @@ inline float hermite(float frac, float p0, float p1, float p2, float p3) {
     return ((((a * frac) - b) * frac + c) * frac + p1);
 }
 
+struct CircularPosition {
+    size_t index = 0;
+    float fraction = 0.0f;
+};
+
+// Normalize the position and interpolation fraction together. In particular,
+// a tiny negative remainder plus a float ring length can round to the length:
+// that is sample zero, never a one-past-end index or an extrapolation fraction.
+inline CircularPosition circularPosition(float position, size_t size) {
+    if (size == 0 || !std::isfinite(position)) return {};
+    // Above 2^24, float cannot represent every integer buffer length. This
+    // fallback is outside normal DSP capacities and avoids a rounded modulus.
+    if (size > 16777216u) {
+        double wrapped = std::fmod(static_cast<double>(position), static_cast<double>(size));
+        if (wrapped < 0.0) wrapped += static_cast<double>(size);
+        if (wrapped >= static_cast<double>(size)) return {};
+        size_t index = static_cast<size_t>(wrapped);
+        float fraction = static_cast<float>(wrapped - static_cast<double>(index));
+        if (fraction >= 1.0f) {
+            index = index + 1 == size ? 0 : index + 1;
+            fraction = 0.0f;
+        }
+        return {index, fraction};
+    }
+    const float length = static_cast<float>(size);
+    // Single wraps cover all clamped DelayLine reads and normal pitch heads.
+    if (position < 0.0f) position += length;
+    else if (position >= length) position -= length;
+    if (position < 0.0f || position >= length) {
+        position = std::fmod(position, length);
+        if (position < 0.0f) position += length;
+    }
+    if (position >= length) position = 0.0f;
+    const size_t index = static_cast<size_t>(position);
+    return {index, position - static_cast<float>(index)};
+}
+
 // Prevenção contra números denormais (evita picos extremos de CPU)
 inline void sanitize(float& val) {
     if (val != val) val = 0.0f;
@@ -239,6 +276,15 @@ private:
 };
 
 // Linha de atraso flexível baseada em buffer circular externo
+#if defined(CGV_DSP_SAFETY_TESTING)
+struct DelayReadProbe {
+    const float* buffer = nullptr;
+    size_t size = 0, index = 0;
+    float delay = 0, position = 0, fraction = 0;
+    uint64_t invalidReads = 0;
+};
+inline DelayReadProbe delayReadProbe;
+#endif
 class DelayLine {
 public:
     void init(float* memory, size_t size) {
@@ -275,17 +321,16 @@ public:
         // Máximo é o tamanho inteiro do buffer.
         float fDelayed = fmaxf(1.0f, fminf(static_cast<float>(size_), delayFrames));
 
-        float readPos = static_cast<float>(writePos_) - fDelayed;
-        float fSize = static_cast<float>(size_);
-        
-        // Wrap-around mais leve
-        if (readPos < 0.0f || readPos >= fSize) {
-            readPos = fmodf(readPos, fSize);
-            if (readPos < 0.0f) readPos += fSize;
+        const auto position = circularPosition(static_cast<float>(writePos_) - fDelayed, size_);
+        const size_t idx1 = position.index;
+        const float frac = position.fraction;
+#if defined(CGV_DSP_SAFETY_TESTING)
+        if (idx1 >= size_ || !(frac >= 0.0f && frac < 1.0f)) {
+            delayReadProbe = {buffer_, size_, idx1, fDelayed,
+                              static_cast<float>(idx1) + frac, frac,
+                              delayReadProbe.invalidReads + 1};
         }
-
-        size_t idx1 = static_cast<size_t>(readPos);
-        float frac = readPos - static_cast<float>(idx1);
+#endif
 
         size_t idx0 = (idx1 == 0) ? size_ - 1 : idx1 - 1;
         size_t idx2 = (idx1 + 1 >= size_) ? 0 : idx1 + 1;

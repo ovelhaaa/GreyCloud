@@ -1,6 +1,9 @@
 // Compile this same harness against the pristine core with
 // -DCGV_CONTINUITY_BASELINE=1 to reproduce the old failures and produce A/B WAVs.
 #include "cloud_grey_verb.hpp"
+#if defined(CGV_DSP_SAFETY_TESTING)
+#include "dsp_safety_probe.hpp"
+#endif
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -200,10 +203,12 @@ int main(int argc, char **argv) {
     csv << "sr,scan,reverse,texture,source,mode,stereo,freeze,automation,rms,peak,max_step,max_curvature,hf_"
            "energy,wrap_step,restart_step,isolated_spikes,invalid_ages,trajectory_jumps,max_age,max_motion,"
            "ns_per_sample,memory_floats\n";
+    const bool extreme = argc > 2 && std::string(argv[2]) == "--extreme";
+    const bool longSafety = argc > 2 && std::string(argv[2]) == "--safety-long";
     int failures = blockParity(), cases = 0;
     uint64_t invalid = 0, jumps = 0;
     auto run = [&](float sr, float scan, float reverse, float texture, int src, int mode, bool stereo,
-                   int freeze, int automation, bool capture = false, float seconds = 4.0f) {
+                   int freeze, int automation, bool capture = false, float seconds = 4.0f, float shimmer = 0.0f, int ratio = 2) {
         const int failuresBefore = failures;
         const size_t count = CloudGreyVerb::requiredMemoryFloats(sr);
         std::vector<float> memory(count + 16, 98765.0f);
@@ -221,7 +226,8 @@ int main(int argc, char **argv) {
         p.reverseMix = reverse;
         p.grainScan = scan;
         p.clipOutput = false;
-        p.shimmer = 0;
+        p.shimmer = shimmer;
+        p.shimmerRatioIndex = ratio;
         p.stereoCore = stereo;
         p.feedback = 0.6f;
         v.setParams(p);
@@ -230,6 +236,11 @@ int main(int argc, char **argv) {
                                                        static_cast<CloudGreyVerb::ComponentIsolation>(mode));
         CloudGreyVerbGranularTestAccess probe;
         Metrics m;
+        double tailEnergy = 0;
+        uint64_t tailFrames = 0;
+#if defined(CGV_DSP_SAFETY_TESTING)
+        DspSafetyProbe safetyProbe;
+#endif
         uint32_t rng = 1234567;
         std::vector<float> audio;
         const uint64_t frames = uint64_t(sr * (quick ? 1.4f : seconds));
@@ -252,7 +263,7 @@ int main(int argc, char **argv) {
                 p.hardFreeze = freeze == 2;
                 v.setParams(p);
             }
-            if (freeze && n == uint64_t(sr * 2.8f)) {
+            if (freeze && n == uint64_t(sr * (longSafety ? 20.0f : 2.8f))) {
                 p.freeze = 0;
                 p.hardFreeze = false;
                 v.setParams(p);
@@ -270,7 +281,15 @@ int main(int argc, char **argv) {
             if (mode == 2)
                 CloudGreyVerbGranularTestAccess::granular(v, x, y, l, r);
             else
+            {
+#if defined(CGV_DSP_SAFETY_TESTING)
+                CloudGreyVerb::ComponentProbe stages;
+                CloudGreyVerbComponentTestAccess::processSampleProbe(v,x,y,l,r,&stages);
+                safetyProbe.observe(n, p, stages);
+#else
                 v.processSample(x, y, l, r);
+#endif
+            }
             auto oldRestarts = probe.restarts, oldWraps = probe.wraps;
             probe.inspect(v, oldPhase, automation != 0);
             if (!std::isfinite(l) || !std::isfinite(r)) {
@@ -278,6 +297,10 @@ int main(int argc, char **argv) {
                 break;
             }
             m.add(l, r, probe.wraps != oldWraps, probe.restarts != oldRestarts, sr);
+            if (n >= uint64_t(sr * (longSafety ? 24.0f : 6.0f))) {
+                tailEnergy += (double(l) * l + double(r) * r) * 0.5;
+                ++tailFrames;
+            }
             if (capture) {
                 audio.push_back(l);
                 audio.push_back(r);
@@ -286,6 +309,22 @@ int main(int argc, char **argv) {
         const double ns =
             std::chrono::duration<double, std::nano>(std::chrono::steady_clock::now() - begin).count() /
             frames;
+        const double tailRms = tailFrames ? std::sqrt(tailEnergy / tailFrames) : 0;
+        if (extreme || longSafety) {
+            // The excitation is <=0.3. Allow twice that output amplitude,
+            // 1/3 of it as global RMS, and one input peak per sample step.
+            // These headroom bounds do not depend on the output rail guard.
+            if (m.peak > 0.6f || std::sqrt(m.energy / m.n) > 0.1 ||
+                m.step > 0.3f || m.curvature > 0.6f || m.hf / m.n > 0.002 ||
+                m.isolated || tailRms > 0.01) ++failures;
+#if defined(CGV_DSP_SAFETY_TESTING)
+            if (!safetyProbe.safe()) ++failures;
+            safetyProbe.report(prefix + "_" + std::to_string(cases) + "_stages.csv", sr);
+#endif
+            std::cout << "sr=" << sr << " shimmer=" << shimmer << " ratio=" << ratio
+                      << " rms=" << std::sqrt(m.energy/m.n) << " energy=" << m.energy
+                      << " step=" << m.step << " tail_rms=" << tailRms << '\n';
+        }
         invalid += probe.invalid;
         jumps += probe.jumps;
         if (probe.invalid || probe.jumps)
@@ -327,6 +366,16 @@ int main(int argc, char **argv) {
                       << " jumps=" << probe.jumps << " curvature=" << m.curvature << '\n';
         ++cases;
     };
+    if (longSafety) {
+        for (float sr : {44100.f, 48000.f, 96000.f, 192000.f})
+            for (int ratio = 0; ratio < 5; ++ratio)
+                run(sr, .75f, 1, 1, 3, 0, true, 1, 3, false, 60.0f, 1.0f, ratio);
+        return failures ? 1 : 0;
+    }
+    if (extreme) {
+        run(48000, .75f, 1, 1, 3, 0, true, 1, 3, false, 16.0f);
+        return failures ? 1 : 0;
+    }
     if (!quick) {
         for (float sr : {44100.f, 48000.f, 96000.f})
             for (float scan : {0.f, .25f, .5f, .75f, 1.f})

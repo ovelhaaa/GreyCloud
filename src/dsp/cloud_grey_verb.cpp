@@ -210,33 +210,12 @@ void ShimmerPitcher::reset() {
 }
 
 float ShimmerPitcher::readDelay(float delaySamples) const {
-    float readPos = static_cast<float>(writePos_) - delaySamples;
-    float fSize = static_cast<float>(size_);
-    
-    // Fast path & safe wrap without expensive while loops
-    if (readPos < 0.0f) {
-        if (readPos > -fSize) {
-            readPos += fSize;
-        } else {
-            readPos -= fSize * floorf(readPos / fSize);
-        }
-    } else if (readPos >= fSize) {
-        if (readPos < 2.0f * fSize) {
-            readPos -= fSize;
-        } else {
-            readPos -= fSize * floorf(readPos / fSize);
-        }
-    }
-    
-    uint32_t idx1 = static_cast<uint32_t>(readPos);
-    if (idx1 >= size_) idx1 = 0; // Safeguard
-    
-    uint32_t idx2 = idx1 + 1;
-    if (idx2 >= size_) idx2 = 0;
-    
-    float frac = readPos - static_cast<float>(idx1);
-    
-    return cgv_dsp::lerp(buffer_[idx1], buffer_[idx2], frac);
+    if (!buffer_ || size_ == 0 || !std::isfinite(delaySamples)) return 0.0f;
+    const auto position = cgv_dsp::circularPosition(
+        static_cast<float>(writePos_) - delaySamples, size_);
+    const size_t idx1 = position.index;
+    const size_t idx2 = idx1 + 1 == size_ ? 0 : idx1 + 1;
+    return cgv_dsp::lerp(buffer_[idx1], buffer_[idx2], position.fraction);
 }
 
 float ShimmerPitcher::process(float input) {
@@ -655,24 +634,11 @@ void CloudGreyVerb::setParams(const Params& p) {
 }
 
 void CloudGreyVerb::readGrainHead(float readPos, float& outL, float& outR) {
-    const float fGranSize = static_cast<float>(grainMemorySize_);
-
-    if (readPos != readPos) readPos = 0.0f; // NaN check evasion
-
-    if (readPos < 0.0f || readPos >= fGranSize) {
-        readPos = fmodf(readPos, fGranSize);
-        if (readPos < 0.0f) readPos += fGranSize;
-        // Adding a tiny negative remainder to a large float ring length can
-        // round up to exactly size. Keep the physical index inside the ring.
-        if (readPos >= fGranSize) readPos = 0.0f;
-    }
-
-    const size_t idx1 = static_cast<size_t>(readPos);
-    const size_t idx2 = (idx1 + 1) % grainMemorySize_;
-    const float frac = readPos - static_cast<float>(idx1);
-
-    outL = cgv_dsp::lerp(grainMemoryL_[idx1], grainMemoryL_[idx2], frac);
-    outR = cgv_dsp::lerp(grainMemoryR_[idx1], grainMemoryR_[idx2], frac);
+    const auto position = cgv_dsp::circularPosition(readPos, grainMemorySize_);
+    const size_t idx1 = position.index;
+    const size_t idx2 = idx1 + 1 == grainMemorySize_ ? 0 : idx1 + 1;
+    outL = cgv_dsp::lerp(grainMemoryL_[idx1], grainMemoryL_[idx2], position.fraction);
+    outR = cgv_dsp::lerp(grainMemoryR_[idx1], grainMemoryR_[idx2], position.fraction);
 }
 
 void CloudGreyVerb::latchGrainTiming(int i, float driftMs) {
@@ -940,6 +906,14 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     float pdMono = (pdL + pdR) * 0.5f;
 
     // Kill-Dry dinâmico na injeção da malha: permite solar por cima da nuvem travada
+#if defined(CGV_DSP_SAFETY_TESTING)
+    if (activeProbe_) {
+        activeProbe_->input[0] = inL;
+        activeProbe_->input[1] = inR;
+        activeProbe_->predelay[0] = pdL;
+        activeProbe_->predelay[1] = pdR;
+    }
+#endif
     float freezeKill = 1.0f - freezeSmoothed_;
     freezeKill *= freezeKill; // Curva quadrática para um fade rápido e suave
     
@@ -1072,6 +1046,14 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
 
     // Damping independente por linha evita estados de filtro compartilhados e
     // mantém a decorrelação criada pelos comprimentos não proporcionais.
+#if defined(CGV_DSP_SAFETY_TESTING)
+    if (activeProbe_) {
+        for (int i = 0; i < CGV_FDN_ORDER; ++i) {
+            activeProbe_->rawRead[i] = fdnRead[i];
+            activeProbe_->delays[i] = fdnDelayFrames[i];
+        }
+    }
+#endif
     float baseLpFreq = cgv_dsp::lerp(800.0f, 15000.0f, sDamp);
     float dynamicLpFreq = baseLpFreq;
     if (dynamicDampingMode_ == 0) {
@@ -1099,6 +1081,11 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
         cgv_dsp::sanitize(fdnRead[i]);
     }
 
+#if defined(CGV_DSP_SAFETY_TESTING)
+    if (activeProbe_)
+        for (int i = 0; i < CGV_FDN_ORDER; ++i)
+            activeProbe_->filteredRead[i] = fdnRead[i];
+#endif
     float tailL = 0.0f;
     float tailR = 0.0f;
     decodeStereoFromFdn(fdnRead, tailL, tailR);
@@ -1130,6 +1117,16 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
         feedLoop[i] = encodedInput[i] * inputInject
                     + feedbackVector[i] * effectiveFeedback;
 
+#if defined(CGV_DSP_SAFETY_TESTING)
+    if (activeProbe_) {
+        activeProbe_->freeze = freezeSmoothed_;
+        activeProbe_->feedback = effectiveFeedback;
+        for (int i = 0; i < CGV_FDN_ORDER; ++i) {
+            activeProbe_->injection[i] = encodedInput[i] * inputInject;
+            activeProbe_->matrix[i] = feedbackVector[i];
+        }
+    }
+#endif
     float shimmerWetL = 0.0f;
     float shimmerWetR = 0.0f;
 
@@ -1179,6 +1176,11 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
         feedLoop[i] *= kLoopWriteHeadroom;
     }
 
+#if defined(CGV_DSP_SAFETY_TESTING)
+    if (activeProbe_)
+        for (int i = 0; i < CGV_FDN_ORDER; ++i)
+            activeProbe_->beforeSaturation[i] = feedLoop[i];
+#endif
     switch (feedbackArchitecture_) {
         case FeedbackArchitecture::CurrentTapeClip: // A: feedback -> tapeClip -> loop
             if (nonlinearitiesEnabled_) {
@@ -1189,6 +1191,11 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
             break;
 
         case FeedbackArchitecture::SpectralGuardOnly: // B: feedback -> spectral guard -> loop
+#if defined(CGV_DSP_SAFETY_TESTING)
+            if (activeProbe_)
+                for (int i = 0; i < CGV_FDN_ORDER; ++i)
+                    activeProbe_->afterSaturation[i] = feedLoop[i];
+#endif
             spectralGuard_.process(feedLoop, CGV_FDN_ORDER);
             break;
 
@@ -1198,10 +1205,20 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
                     feedLoop[i] = cgv_dsp::gentleSaturate(feedLoop[i]);
                 }
             }
+#if defined(CGV_DSP_SAFETY_TESTING)
+            if (activeProbe_)
+                for (int i = 0; i < CGV_FDN_ORDER; ++i)
+                    activeProbe_->afterSaturation[i] = feedLoop[i];
+#endif
             spectralGuard_.process(feedLoop, CGV_FDN_ORDER);
             break;
     }
 
+#if defined(CGV_DSP_SAFETY_TESTING)
+    if (activeProbe_)
+        for (int i = 0; i < CGV_FDN_ORDER; ++i)
+            activeProbe_->afterGuard[i] = feedLoop[i];
+#endif
     // --- Safety Energy Guard (v2) ---
     float e = 0.0f;
     for (int i = 0; i < CGV_FDN_ORDER; ++i)
@@ -1231,6 +1248,13 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
         cgv_dsp::sanitize(feedLoop[i]);
         fdnDelay_[i].write(feedLoop[i]);
     }
+#if defined(CGV_DSP_SAFETY_TESTING)
+    if (activeProbe_) {
+        activeProbe_->loopEnergy = loopEnergy_;
+        for (int i = 0; i < CGV_FDN_ORDER; ++i)
+            activeProbe_->loopWrite[i] = feedLoop[i];
+    }
+#endif
     // --------------------------------
 
     // 5. Tonalidade Global (Tilt EQ)
@@ -1311,6 +1335,12 @@ void CloudGreyVerb::processSample(float inL, float inR, float& outL, float& outR
     float finalL = ((inL * gainDry_) + (wetL * gainWet_)) * params_.outputGain;
     float finalR = ((inR * gainDry_) + (wetR * gainWet_)) * params_.outputGain;
 
+#if defined(CGV_DSP_SAFETY_TESTING)
+    if (activeProbe_) {
+        activeProbe_->final[0] = finalL;
+        activeProbe_->final[1] = finalR;
+    }
+#endif
     // Embedded converters retain the final rail guard; float hosts may opt out.
     outL = params_.clipOutput ? cgv_dsp::hardClip(finalL) : finalL;
     outR = params_.clipOutput ? cgv_dsp::hardClip(finalR) : finalR;

@@ -8,6 +8,38 @@ on:
   workflow_dispatch: # Permite rodar o build manualmente na aba Actions
 
 jobs:
+  dsp-safety:
+    name: DSP circular safety and sanitizers
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [none, address-undefined]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure DSP tests
+        shell: bash
+        run: |
+          flags=""
+          if [ "${{ matrix.sanitizer }}" = address-undefined ]; then
+            flags="-fsanitize=address,undefined -fno-omit-frame-pointer"
+          fi
+          cmake -S src/dsp -B build/dsp -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_CXX_FLAGS="$flags"
+      - name: Build and test DSP
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          cmake --build build/dsp --parallel 4
+          ctest --test-dir build/dsp --output-on-failure --parallel 2
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSP-safety-${{ matrix.sanitizer }}
+          path: |
+            build/dsp/*.csv
+            build/dsp/Testing/Temporary/LastTest.log
   wasm-smoke:
     name: WASM build smoke test
     runs-on: ubuntu-latest

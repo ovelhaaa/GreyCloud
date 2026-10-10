@@ -1,0 +1,7 @@
+Test project C:/progs/vst/GreyCloud/build/m6
+    Start 1: CloudGreyVerbCircularSafetyTest
+1/1 Test #1: CloudGreyVerbCircularSafetyTest ...   Passed    1.00 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) =   1.01 sec
