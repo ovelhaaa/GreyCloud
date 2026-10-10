@@ -25,8 +25,8 @@
 namespace {
 
 constexpr float kSampleRate = 48000.0f;
-// Desktop profile keeps the 0.5 s granular history.  Reserve exactly what the
-// core reports so the guard test can detect any write past the boundary.
+// Reserve a generous pool for the desktop history. The dedicated continuity
+// test also verifies init against the exact reported capacity in every profile.
 constexpr size_t kGuardFloats = 32;
 constexpr float kGuardValue = 424242.25f;
 

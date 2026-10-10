@@ -188,6 +188,10 @@ void CloudGreyVerbProcessor::prepareToPlay (double sampleRate, int samplesPerBlo
     hasProcessedAudio.store (false, std::memory_order_release);
     const auto initialTarget = makeDspSnapshotFromParameters();
     currentDspParams = resolveRuntimeParams (initialTarget);
+    dspCoreNormal.setParams (currentDspParams);
+    dspCoreHQ.setParams (currentDspParams);
+    dspCoreNormal.reset();
+    dspCoreHQ.reset();
     currentDspHqMode = initialTarget.hqMode;
     currentPreDelaySync = initialTarget.preDelaySync;
     currentSizeSync = initialTarget.sizeSync;
@@ -503,8 +507,12 @@ void CloudGreyVerbProcessor::applyPresetTransition (juce::AudioBuffer<float>& bu
 
     if (shouldResetDsp)
     {
-        resetDspStateForTransition (transitionTarget.hqMode);
         currentDspParams = resolveRuntimeParams (transitionTarget);
+        // Seed granular ramps from the complete target while the wet path is
+        // faded out; the new preset/HQ core must not ramp from stale controls.
+        dspCoreNormal.setParams (currentDspParams);
+        dspCoreHQ.setParams (currentDspParams);
+        resetDspStateForTransition (transitionTarget.hqMode);
         currentDspHqMode = transitionTarget.hqMode;
         currentPreDelaySync = transitionTarget.preDelaySync;
         currentSizeSync = transitionTarget.sizeSync;
@@ -720,8 +728,10 @@ void CloudGreyVerbProcessor::setStateInformation (const void* data, int sizeInBy
         const auto target = makeDspSnapshotFromParameters();
         if (!hasProcessedAudio.load (std::memory_order_acquire))
         {
-            resetDspStateForTransition (target.hqMode);
             currentDspParams = resolveRuntimeParams (target);
+            dspCoreNormal.setParams (currentDspParams);
+            dspCoreHQ.setParams (currentDspParams);
+            resetDspStateForTransition (target.hqMode);
             currentDspHqMode = target.hqMode;
             currentPreDelaySync = target.preDelaySync;
             currentSizeSync = target.sizeSync;
