@@ -1,0 +1,3 @@
+mode=0 median_ns_per_sample=264.384 memory_floats=1517637 state_bytes=2040 checksum=35.1279
+mode=1 median_ns_per_sample=1630.04 memory_floats=1517637 state_bytes=2040 checksum=15.6076
+mode=2 median_ns_per_sample=192.543 memory_floats=1517637 state_bytes=2040 checksum=23.3365

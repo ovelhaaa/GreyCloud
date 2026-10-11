@@ -2,6 +2,19 @@ cmake_minimum_required(VERSION 3.20)
 project(NimbusReverbPlugin VERSION 1.0.0)
 enable_testing()
 
+add_executable(CloudGreyVerbCircularSafetyTest ../src/dsp/cloud_grey_verb.cpp ../src/dsp/circular_buffer_safety_test.cpp)
+target_compile_features(CloudGreyVerbCircularSafetyTest PRIVATE cxx_std_17)
+target_compile_definitions(CloudGreyVerbCircularSafetyTest PRIVATE CLOUD_GREY_PROFILE_DESKTOP_STUDIO=1)
+add_test(NAME CloudGreyVerbCircularSafetyTest COMMAND CloudGreyVerbCircularSafetyTest)
+set_tests_properties(CloudGreyVerbCircularSafetyTest PROPERTIES TIMEOUT 180)
+
+add_executable(CloudGreyVerbExtremePeakTest ../src/dsp/cloud_grey_verb.cpp ../src/dsp/cloud_grey_verb_granular_continuity_test.cpp)
+target_compile_features(CloudGreyVerbExtremePeakTest PRIVATE cxx_std_17)
+target_compile_definitions(CloudGreyVerbExtremePeakTest PRIVATE CLOUD_GREY_PROFILE_DESKTOP_STUDIO=1 CGV_DSP_SAFETY_TESTING=1)
+add_test(NAME CloudGreyVerbExtremePeakTest COMMAND CloudGreyVerbExtremePeakTest extreme_peak --extreme)
+add_test(NAME CloudGreyVerbSafetyLongTest COMMAND CloudGreyVerbExtremePeakTest safety_long --safety-long)
+set_tests_properties(CloudGreyVerbExtremePeakTest CloudGreyVerbSafetyLongTest PROPERTIES TIMEOUT 600)
+
 # ==============================================================================
 # Fetch JUCE Framework (this will download JUCE when CMake runs)
 # ==============================================================================

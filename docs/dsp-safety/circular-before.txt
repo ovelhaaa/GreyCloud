@@ -1,0 +1,37 @@
+pitch sr=44100 ratio=0.5 freq=238.095 concentration=1.00015 stereo=0.0149189
+pitch sr=44100 ratio=1.5 freq=714.286 concentration=0.999991 stereo=0.014925
+pitch sr=44100 ratio=2 freq=952.381 concentration=1.00011 stereo=0.0149229
+pitch sr=44100 ratio=3 freq=1428.57 concentration=1.00004 stereo=0.0149221
+pitch sr=44100 ratio=4 freq=1904.76 concentration=0.999947 stereo=0.0149227
+pitch sr=48000 ratio=0.5 freq=238.095 concentration=1.00015 stereo=0.0149203
+pitch sr=48000 ratio=1.5 freq=714.286 concentration=0.999984 stereo=0.0149264
+pitch sr=48000 ratio=2 freq=952.381 concentration=1.0001 stereo=0.0149236
+pitch sr=48000 ratio=3 freq=1428.57 concentration=1.00001 stereo=0.0149198
+pitch sr=48000 ratio=4 freq=1904.76 concentration=0.999712 stereo=0.0149245
+pitch sr=96000 ratio=0.5 freq=238.095 concentration=0.997783 stereo=0.0149308
+pitch sr=96000 ratio=1.5 freq=714.286 concentration=0.997574 stereo=0.0149341
+pitch sr=96000 ratio=2 freq=952.381 concentration=1.0001 stereo=0.0149308
+pitch sr=96000 ratio=3 freq=1428.57 concentration=1.00001 stereo=0.0149317
+pitch sr=96000 ratio=4 freq=1904.76 concentration=0.999867 stereo=0.0149316
+pitch sr=192000 ratio=0.5 freq=238.095 concentration=0.999301 stereo=0.0149277
+pitch sr=192000 ratio=1.5 freq=714.286 concentration=0.999155 stereo=0.0149346
+pitch sr=192000 ratio=2 freq=952.381 concentration=0.989982 stereo=0.0149321
+pitch sr=192000 ratio=3 freq=1428.57 concentration=1 stereo=0.0149329
+pitch sr=192000 ratio=4 freq=1904.76 concentration=0.99119 stereo=0.0149341
+circular safety failures=16
+FAIL DelayLine size=3 position=-1.19209e-07
+FAIL DelayLine size=3 position=-1.19209e-07
+FAIL DelayLine size=31 position=-1.19209e-07
+FAIL DelayLine size=31 position=-1.19209e-07
+FAIL DelayLine size=4096 position=-1.19209e-07
+FAIL DelayLine size=4096 position=-1.19209e-07
+FAIL DelayLine size=154564 position=-1.19209e-07
+FAIL DelayLine size=154564 position=-1.19209e-07
+FAIL DelayLine size=524287 position=-1.19209e-07
+FAIL DelayLine size=524287 position=-1.19209e-07
+FAIL Shimmer size=3072 position=-1e-05
+FAIL Shimmer size=3072 position=-1.19209e-07
+FAIL Shimmer size=154564 position=-1e-05
+FAIL Shimmer size=154564 position=-1.19209e-07
+FAIL Shimmer size=524287 position=-1e-05
+FAIL Shimmer size=524287 position=-1.19209e-07

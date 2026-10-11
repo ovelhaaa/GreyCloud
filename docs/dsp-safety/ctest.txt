@@ -1,0 +1,35 @@
+Test project C:/progs/vst/GreyCloud/build/m6
+      Start  1: CloudGreyVerbCircularSafetyTest
+      Start  3: CloudGreyVerbSafetyLongTest
+ 1/15 Test  #1: CloudGreyVerbCircularSafetyTest .......................   Passed    1.13 sec
+      Start  6: CloudGreyVerbGranularContinuityTest_H5_BALANCED
+ 2/15 Test  #6: CloudGreyVerbGranularContinuityTest_H5_BALANCED .......   Passed   40.71 sec
+      Start  4: CloudGreyVerbGranularContinuityTest
+ 3/15 Test  #4: CloudGreyVerbGranularContinuityTest ...................   Passed   48.01 sec
+      Start  7: CloudGreyVerbGranularContinuityTest_H7_HIGH_QUALITY
+ 4/15 Test  #7: CloudGreyVerbGranularContinuityTest_H7_HIGH_QUALITY ...   Passed   38.87 sec
+      Start  5: CloudGreyVerbGranularContinuityTest_H5_LOW_CPU
+ 5/15 Test  #3: CloudGreyVerbSafetyLongTest ...........................   Passed  147.07 sec
+      Start  8: CloudGreyVerbMilestoneTest
+ 6/15 Test  #5: CloudGreyVerbGranularContinuityTest_H5_LOW_CPU ........   Passed   35.01 sec
+      Start 10: CloudGreyVerbReverseMixTest
+ 7/15 Test  #8: CloudGreyVerbMilestoneTest ............................   Passed   29.07 sec
+      Start  2: CloudGreyVerbExtremePeakTest
+ 8/15 Test  #2: CloudGreyVerbExtremePeakTest ..........................   Passed    2.62 sec
+      Start 15: CloudGreyVerbOfflineMetricsTest
+ 9/15 Test #15: CloudGreyVerbOfflineMetricsTest .......................   Passed    0.06 sec
+      Start 11: CloudGreyVerbM2Test_LowCPU
+10/15 Test #11: CloudGreyVerbM2Test_LowCPU ............................   Passed    0.08 sec
+      Start 14: CloudGreyVerbM2Test_Desktop
+11/15 Test #14: CloudGreyVerbM2Test_Desktop ...........................   Passed    0.11 sec
+      Start 13: CloudGreyVerbM2Test_H7
+12/15 Test #13: CloudGreyVerbM2Test_H7 ................................   Passed    0.08 sec
+      Start 12: CloudGreyVerbM2Test_Balanced
+13/15 Test #12: CloudGreyVerbM2Test_Balanced ..........................   Passed    0.06 sec
+      Start  9: CloudGreyVerbFactoryPresetParityTest
+14/15 Test  #9: CloudGreyVerbFactoryPresetParityTest ..................   Passed    0.05 sec
+15/15 Test #10: CloudGreyVerbReverseMixTest ...........................   Passed   15.84 sec
+
+100% tests passed, 0 tests failed out of 15
+
+Total Test time (real) = 179.58 sec

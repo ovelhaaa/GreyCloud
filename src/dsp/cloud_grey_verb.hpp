@@ -97,6 +97,7 @@ public:
     void setRatio(float ratio);
 
 private:
+    friend struct ShimmerPitcherTestAccess;
     float readDelay(float delaySamples) const;
 
     float* buffer_ = nullptr;
@@ -164,6 +165,14 @@ public:
         float tailR = 0.0f;
         float duckingEnv = 0.0f;
         float dynamicLpFreq = 0.0f;
+#if defined(CGV_DSP_SAFETY_TESTING)
+        float input[2] = {}, predelay[2] = {}, injection[CGV_FDN_ORDER] = {};
+        float rawRead[CGV_FDN_ORDER] = {}, filteredRead[CGV_FDN_ORDER] = {};
+        float matrix[CGV_FDN_ORDER] = {}, beforeSaturation[CGV_FDN_ORDER] = {};
+        float afterSaturation[CGV_FDN_ORDER] = {}, afterGuard[CGV_FDN_ORDER] = {};
+        float loopWrite[CGV_FDN_ORDER] = {}, delays[CGV_FDN_ORDER] = {};
+        float final[2] = {}, freeze = 0, feedback = 0, loopEnergy = 0;
+#endif
     };
 
     struct Params {
